@@ -660,6 +660,13 @@ export function App() {
       if (payload.type === "preferences") { receivePreferencesRef.current(payload.preferences); return; }
       if (payload.type === "herdr-sidebar") { setAgentRowTokens(payload.agents); return; }
       if (payload.type === "seen") { receiveSeen(payload.finishes); return; }
+      // a pane this device asked for (a Touch Bar tap): opened as Back and Forward open one
+      if (payload.type === "open") {
+        const search = linkSearch({ ...readLink(""), machine: payload.machine_id, pane: payload.pane_id }, window.location.search);
+        window.history.pushState(null, "", `${window.location.pathname}${search}${window.location.hash}`);
+        window.dispatchEvent(new PopStateEvent("popstate", { state: null }));
+        return;
+      }
       // A poll started before this event can carry an older roster or pane status.
       snapshotRequests.current.invalidate();
       if (payload.type === "machines") {
@@ -1347,8 +1354,12 @@ export function App() {
     : null;
 
   useEffect(() => {
-    document.title = selectedTitle ? `${selectedTitle} · Ovis` : APP_TITLE;
-  }, [selectedTitle]);
+    // the PC's host and the pane close the title, for the desktop's scripts (zed-here, screen-here, a Touch Bar)
+    const host = selectedMachine?.kind === "local" ? selectedMachine.name : selectedMachine?.target?.destination;
+    document.title = selectedTitle
+      ? `${selectedTitle} · ${selectedMachine?.name ?? selectedMachineId} · Ovis${host && selectedPaneId ? ` [${host} ${selectedPaneId}]` : ""}`
+      : APP_TITLE;
+  }, [selectedTitle, selectedMachine, selectedMachineId, selectedPaneId]);
 
   // A new tab's workspace: the named one, else the selected pane's. Its folder is the workspace's:
   // a worktree's checkout, else where the pane in front (the selected one, else the one herdr has
