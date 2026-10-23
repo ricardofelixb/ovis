@@ -14,6 +14,9 @@ import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { worktreeRepoName } from "./lib/composerStrip.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
 import { AgentMark } from "./components/AgentMark.tsx";
+import { AgentFriend } from "./components/AgentFriend.tsx";
+import { useWorkspaceFriends } from "./lib/friends.ts";
+import { friendKey } from "../shared/friends.ts";
 import { NewSessionDialog, type NewTabTarget } from "./components/NewSessionDialog.tsx";
 import { SessionHistory } from "./components/SessionHistory.tsx";
 import { sessionHistoryAgent, sessionHistoryListAgent, sessionHistorySourcePane } from "./lib/sessionHistory.ts";
@@ -1035,7 +1038,10 @@ export function App() {
     && contentReady && paneContentPresented(contentKey),
   [locked, linkLanded, drawerOpen, settingsOpen, newSessionOpen, filesOpen, machineDialog, paletteOpen, diffViewing, viewing, fileDocked, dialogCover, contentReady, contentKey]);
   // one source for the sidebar's two lists: live counters per PC and finishes looked at here
+  // the friend the selected pane's workspace wears in the agents list, for the header (lib/friends.ts)
+  const friends = useWorkspaceFriends(machines);
   const activity = useSidebarActivityState(machines, selectedMachineId, presentedPaneId, paneInFront, shareSeen);
+  const selectedFriend = selectedPane ? friends[friendKey(selectedMachineId, selectedPane.workspace_id)] : undefined;
 
   const pickView = useCallback((machineId: string, paneId: string, next: PaneView) => {
     const key = paneStorageId(machineId, paneId);
@@ -1629,7 +1635,7 @@ export function App() {
         {note !== null ? null : selectedPane && crumb ? (
           <div className="context" title={crumb.tooltip}>
             <div className="context-title">
-              {selectedAgent && <AgentMark agent={selectedAgent} size={18} />}
+              {selectedAgent && (selectedFriend ? <AgentFriend friend={selectedFriend} agent={selectedAgent} status={activity.status(selectedMachineId, selectedPane)} /> : <AgentMark agent={selectedAgent} size={18} />)}
               <span className="context-title-text">{selectedTitle}</span>
             </div>
             <div className="context-sub">

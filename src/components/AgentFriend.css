@@ -1,6 +1,7 @@
 .agent-friend {
   position: relative;
   display: inline-block;
+  flex: 0 0 auto;
   width: 22px;
   height: 22px;
   transform-origin: 50% 100%;
