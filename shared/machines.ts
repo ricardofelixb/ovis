@@ -97,7 +97,14 @@ export type MachineEvent = { type: "machines"; machines: Machine[] } | { type: "
   /** the `$name` tokens herdr's `[ui.sidebar.agents]` rows draw on this server's PC, for every PC's agent rows (server/herdr-sidebar.ts) */
   | { type: "herdr-sidebar"; agents: AgentRowTokens | null }
   /** finishes a browser of this server presented (shared/seen.ts): every record when the stream opens, then each change */
-  | { type: "seen"; finishes: SeenFinish[] };
+  | { type: "seen"; finishes: SeenFinish[] }
+  /** POST /api/machines/open from the device this browser runs on (a Touch Bar, a script): show that pane */
+  | { type: "open"; machine_id: string; pane_id: string };
+/**
+ * POST /api/machines/open: `hosts` are names for the PC, any of which may match: its SSH destination
+ * or hostname (as the window title gives it), or an address of this server's own PC
+ */
+export interface OpenRequest { hosts: string[]; pane_id: string }
 export interface BridgeHealth { ok: true; auth: HealthAuth; bridge_protocol: number }
 export interface BridgeIdentity {
   pid: number;

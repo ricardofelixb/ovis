@@ -1,4 +1,6 @@
-import type { MachineEvent, MachineRoster, SetupAction, SetupRequest } from "../shared/machines.ts";
+import { networkInterfaces } from "node:os";
+
+import type { Machine, MachineEvent, MachineRoster, OpenRequest, SetupAction, SetupRequest } from "../shared/machines.ts";
 import type { AgentRowTokens } from "../shared/pane-tokens.ts";
 import type { SharedPreferences } from "../shared/preferences.ts";
 import type { PanePromptResponse } from "../shared/protocol.ts";
@@ -15,6 +17,19 @@ const fail = (code: string, message: string, status: number) => jsonResponse({ e
  * A PC route whose answer can take longer than the proxy's usual 75 s: a worktree's creation waits on
  * git and then an agent's start, and a resume on the agent's start and then the check of its store.
  */
+/**
+ * The event streams open now, by the device they came from (tailscale serve's X-Forwarded-For), so
+ * POST /api/machines/open reaches only the browsers on the device that asks: a phone keeps its pane
+ * when the laptop's Touch Bar opens one.
+ */
+const openListeners = new Set<{ device: string; send: (event: MachineEvent) => void }>();
+const deviceOf = (request: Request) => request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
+/** A host as the title and an SSH config name it: its first DNS label, lower-cased */
+const hostLabel = (host: string) => host.trim().toLowerCase().split(".")[0]!;
+const machineHosts = (machine: Machine): string[] => machine.kind === "local"
+  ? [machine.name, ...Object.values(networkInterfaces()).flatMap((addresses) => addresses?.map((address) => address.address) ?? [])]
+  : [machine.target?.destination ?? ""];
+
 export const slowMachinePath = (path: string): boolean => path === "worktree/create" || path === "sessions/resume";
 
 /**
@@ -89,11 +104,12 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       let stopPreferences: (() => void) | undefined;
       let stopSidebar: (() => void) | undefined;
       let stopSeen: (() => void) | undefined;
+      let stopOpen: (() => void) | undefined;
       let unwatchDevice: (() => void) | undefined;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       let close = () => {};
       const cleanup = () => {
-        stop?.(); stopPreferences?.(); stopSidebar?.(); stopSeen?.(); unwatchDevice?.(); clearInterval(heartbeat);
+        stop?.(); stopPreferences?.(); stopSidebar?.(); stopSeen?.(); stopOpen?.(); unwatchDevice?.(); clearInterval(heartbeat);
         request.signal.removeEventListener("abort", close);
       };
       const encoder = new TextEncoder();
@@ -118,6 +134,9 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
           const sendSeen = (finishes: SeenFinish[]) => send(`data: ${JSON.stringify({ type: "seen", finishes } satisfies MachineEvent)}\n\n`);
           if (seen) sendSeen(seen.list());
           stopSeen = seen?.subscribe((finish) => sendSeen([finish]));
+          const listener = { device: deviceOf(request), send: (event: MachineEvent) => send(`data: ${JSON.stringify(event)}\n\n`) };
+          openListeners.add(listener);
+          stopOpen = () => { openListeners.delete(listener); };
           if (closed) { cleanup(); return; }
           heartbeat = setInterval(() => send(": heartbeat\n\n"), 15_000);
           request.signal.addEventListener("abort", close, { once: true });
@@ -126,6 +145,19 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
         cancel() { close(); },
       });
       return new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-store", "x-accel-buffering": "no" } });
+    }
+    if (parts[0] === "open" && parts.length === 1 && request.method === "POST") {
+      setRequestRoute("/api/machines/open");
+      const body = await request.json() as OpenRequest;
+      if (!isJsonObject(body) || !Array.isArray(body.hosts) || !body.hosts.every((host) => typeof host === "string") || typeof body.pane_id !== "string") return fail("invalid_body", "Expected hosts and pane_id", 400);
+      const asked = new Set(body.hosts.map(hostLabel));
+      const machine = manager.list().find((candidate) => machineHosts(candidate).some((host) => asked.has(hostLabel(host))));
+      if (!machine) return fail("machine_not_found", "No PC here has that host", 404);
+      const device = deviceOf(request);
+      const event: MachineEvent = { type: "open", machine_id: machine.id, pane_id: body.pane_id };
+      let windows = 0;
+      for (const listener of openListeners) if (listener.device === device) { listener.send(event); windows++; }
+      return windows ? jsonResponse({ windows }) : fail("no_window", "No window of this app is open on that device", 404);
     }
     if (parts[0] === "setup") {
       if (parts.length === 1 && request.method === "POST") { setRequestRoute("/api/machines/setup"); return jsonResponse(manager.setup(await request.json() as SetupRequest), 202); }
