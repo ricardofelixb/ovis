@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Machine, MachineEvent } from "../shared/machines.ts";
-import { handleMachineRequest } from "./machine-api.ts";
+import { handleMachineRequest, readFinishes } from "./machine-api.ts";
 import type { MachineManager } from "./machines.ts";
 
 const machines = [
@@ -40,11 +40,30 @@ describe("POST /api/machines/open", () => {
       // this PC by one of its own addresses, as an SSH config may name it
       expect(await (await open("100.96.150.40", "orgo", "127.0.0.1")).json()).toEqual({ windows: 1 });
       expect((await open("100.1.2.3", "orgo-desktop")).status).toBe(404);
+      // an address matches whole, not by its first label: every tailnet address starts `100.`
+      expect((await open("100.96.150.40", "100.200.1.1")).status).toBe(404);
       expect((await open("100.96.150.40", "elsewhere")).status).toBe(404);
     } finally {
       abort.abort();
       await laptop.cancel().catch(() => undefined);
       await phone.cancel().catch(() => undefined);
     }
+  });
+});
+
+describe("readFinishes", () => {
+  test("lists a finished pane once its latest finish is read", () => {
+    const mini = { ...machines[1]!, snapshot: { finish_epoch: "e1", panes: [
+      { pane_id: "w1:p1", agent_status: "done", finish_id: 2 },
+      { pane_id: "w1:p2", agent_status: "done", finish_id: 3 },
+      { pane_id: "w1:p3", agent_status: "idle", finish_id: 1 },
+    ] } } as unknown as Machine;
+    const seen = [
+      { pc: "mini", epoch: "e1", pane: "w1:p1", id: 2 },
+      { pc: "mini", epoch: "e1", pane: "w1:p2", id: 2 }, // an earlier finish: the latest is unread
+      { pc: "mini", epoch: "e1", pane: "w1:p3", id: 1 },
+    ];
+    expect(readFinishes([mini], seen)).toEqual([{ hosts: ["ricardos-mac-mini"], pane_id: "w1:p1" }]);
+    expect(readFinishes([mini], seen.map((f) => ({ ...f, epoch: "e0" })))).toEqual([]);
   });
 });
