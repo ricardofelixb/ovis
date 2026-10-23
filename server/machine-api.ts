@@ -1,6 +1,7 @@
+import { isIP } from "node:net";
 import { networkInterfaces } from "node:os";
 
-import type { Machine, MachineEvent, MachineRoster, OpenRequest, SetupAction, SetupRequest } from "../shared/machines.ts";
+import type { Machine, MachineEvent, MachineRoster, OpenRequest, ReadFinish, SetupAction, SetupRequest } from "../shared/machines.ts";
 import type { AgentRowTokens } from "../shared/pane-tokens.ts";
 import type { SharedPreferences } from "../shared/preferences.ts";
 import type { PanePromptResponse } from "../shared/protocol.ts";
@@ -25,7 +26,8 @@ const fail = (code: string, message: string, status: number) => jsonResponse({ e
 const openListeners = new Set<{ device: string; send: (event: MachineEvent) => void }>();
 const deviceOf = (request: Request) => request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
 /** A host as the title and an SSH config name it: its first DNS label, lower-cased */
-const hostLabel = (host: string) => host.trim().toLowerCase().split(".")[0]!;
+// a name compares on its first label, an address whole: every tailnet address starts `100.`
+const hostLabel = (host: string) => isIP(host.trim()) ? host.trim() : host.trim().toLowerCase().split(".")[0]!;
 const machineHosts = (machine: Machine): string[] => machine.kind === "local"
   ? [machine.name, ...Object.values(networkInterfaces()).flatMap((addresses) => addresses?.map((address) => address.address) ?? [])]
   : [machine.target?.destination ?? ""];
@@ -159,6 +161,10 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       for (const listener of openListeners) if (listener.device === device) { listener.send(event); windows++; }
       return windows ? jsonResponse({ windows }) : fail("no_window", "No window of this app is open on that device", 404);
     }
+    if (parts[0] === "read" && parts.length === 1 && request.method === "GET") {
+      setRequestRoute("/api/machines/read");
+      return readFeed(request, manager, seen);
+    }
     if (parts[0] === "setup") {
       if (parts.length === 1 && request.method === "POST") { setRequestRoute("/api/machines/setup"); return jsonResponse(manager.setup(await request.json() as SetupRequest), 202); }
       if (parts.length === 2) {
@@ -264,4 +270,46 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
     }
     return fail("not_found", "Unknown PC endpoint", 404);
   } catch (e) { return fail("machine_request_failed", e instanceof Error ? e.message : String(e), 400); }
+}
+
+/**
+ * The finished agents some browser of this server has read, by the PC's hosts as POST
+ * /api/machines/open takes them: what a pane's status alone can't tell a client outside the
+ * browser (the Touch Bar), since the read lives here. Answers with the panes whose latest
+ * finish is read; the src/lib/sidebarActivity.tsx rule.
+ */
+export function readFinishes(machines: readonly Machine[], seen: readonly SeenFinish[]): ReadFinish[] {
+  const read = new Map(seen.map((finish) => [JSON.stringify([finish.pc, finish.epoch, finish.pane]), finish.id]));
+  return machines.flatMap((machine) => {
+    const epoch = machine.snapshot?.finish_epoch;
+    if (!epoch) return [];
+    return machine.snapshot!.panes.filter((pane) => pane.agent_status === "done" && !pane.background_wait
+      && pane.finish_id !== undefined && pane.finish_id > 0
+      && (read.get(JSON.stringify([machine.id, epoch, pane.pane_id])) ?? 0) >= pane.finish_id)
+      .map((pane) => ({ hosts: machineHosts(machine), pane_id: pane.pane_id }));
+  });
+}
+
+/** GET /api/machines/read: `readFinishes` as server-sent events, now and on each change. */
+function readFeed(request: Request, manager: MachineManager,
+  seen?: { list(): SeenFinish[]; subscribe(listener: (finish: SeenFinish) => void): () => void }): Response {
+  let stops: (() => void)[] = [];
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder();
+      let last = "";
+      const close = () => { for (const stop of stops) stop(); stops = []; try { controller.close(); } catch {} };
+      const send = (text: string) => { try { controller.enqueue(encoder.encode(text)); } catch { close(); } };
+      const tell = () => {
+        const read = JSON.stringify(readFinishes(manager.list(), seen?.list() ?? []));
+        if (read !== last) send(`data: ${last = read}\n\n`);
+      };
+      const heartbeat = setInterval(() => send(": heartbeat\n\n"), 15_000);
+      stops = [manager.subscribe(tell), seen?.subscribe(tell) ?? (() => {}), () => clearInterval(heartbeat)];
+      request.signal.addEventListener("abort", close, { once: true });
+      tell();
+    },
+    cancel() { for (const stop of stops) stop(); stops = []; },
+  });
+  return new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "no-store", "x-accel-buffering": "no" } });
 }

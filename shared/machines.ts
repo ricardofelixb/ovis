@@ -105,6 +105,8 @@ export type MachineEvent = { type: "machines"; machines: Machine[] } | { type: "
  * or hostname (as the window title gives it), or an address of this server's own PC
  */
 export interface OpenRequest { hosts: string[]; pane_id: string }
+/** GET /api/machines/read sends a list of these: a finished agent some browser has read */
+export interface ReadFinish { hosts: string[]; pane_id: string }
 export interface BridgeHealth { ok: true; auth: HealthAuth; bridge_protocol: number }
 export interface BridgeIdentity {
   pid: number;
