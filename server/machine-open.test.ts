@@ -16,11 +16,11 @@ async function stream(device: string, signal: AbortSignal) {
   return response.body!.getReader();
 }
 
-function open(device: string, host: string) {
+function open(device: string, ...hosts: string[]) {
   return handleMachineRequest(new Request(`${base}/open`, {
     method: "POST",
     headers: { "x-forwarded-for": device, "x-herdr-machine": "1", "content-type": "application/json" },
-    body: JSON.stringify({ host, pane_id: "w3:p2" }),
+    body: JSON.stringify({ hosts, pane_id: "w3:p2" }),
   }), manager);
 }
 
@@ -37,6 +37,8 @@ describe("POST /api/machines/open", () => {
       const event = JSON.parse(new TextDecoder().decode(value).replace(/^data: /, "")) as MachineEvent;
       expect(event).toEqual({ type: "open", machine_id: "mini", pane_id: "w3:p2" });
 
+      // this PC by one of its own addresses, as an SSH config may name it
+      expect(await (await open("100.96.150.40", "orgo", "127.0.0.1")).json()).toEqual({ windows: 1 });
       expect((await open("100.1.2.3", "orgo-desktop")).status).toBe(404);
       expect((await open("100.96.150.40", "elsewhere")).status).toBe(404);
     } finally {

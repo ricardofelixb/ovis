@@ -100,8 +100,11 @@ export type MachineEvent = { type: "machines"; machines: Machine[] } | { type: "
   | { type: "seen"; finishes: SeenFinish[] }
   /** POST /api/machines/open from the device this browser runs on (a Touch Bar, a script): show that pane */
   | { type: "open"; machine_id: string; pane_id: string };
-/** POST /api/machines/open: `host` is the PC's SSH destination or hostname, as the window title gives it */
-export interface OpenRequest { host: string; pane_id: string }
+/**
+ * POST /api/machines/open: `hosts` are names for the PC, any of which may match: its SSH destination
+ * or hostname (as the window title gives it), or an address of this server's own PC
+ */
+export interface OpenRequest { hosts: string[]; pane_id: string }
 export interface BridgeHealth { ok: true; auth: HealthAuth; bridge_protocol: number }
 export interface BridgeIdentity {
   pid: number;

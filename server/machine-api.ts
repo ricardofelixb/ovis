@@ -1,3 +1,5 @@
+import { networkInterfaces } from "node:os";
+
 import type { Machine, MachineEvent, MachineRoster, OpenRequest, SetupAction, SetupRequest } from "../shared/machines.ts";
 import type { AgentRowTokens } from "../shared/pane-tokens.ts";
 import type { SharedPreferences } from "../shared/preferences.ts";
@@ -24,7 +26,9 @@ const openListeners = new Set<{ device: string; send: (event: MachineEvent) => v
 const deviceOf = (request: Request) => request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
 /** A host as the title and an SSH config name it: its first DNS label, lower-cased */
 const hostLabel = (host: string) => host.trim().toLowerCase().split(".")[0]!;
-const machineHost = (machine: Machine) => machine.kind === "local" ? machine.name : machine.target?.destination ?? "";
+const machineHosts = (machine: Machine): string[] => machine.kind === "local"
+  ? [machine.name, ...Object.values(networkInterfaces()).flatMap((addresses) => addresses?.map((address) => address.address) ?? [])]
+  : [machine.target?.destination ?? ""];
 
 export const slowMachinePath = (path: string): boolean => path === "worktree/create" || path === "sessions/resume";
 
@@ -145,8 +149,9 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
     if (parts[0] === "open" && parts.length === 1 && request.method === "POST") {
       setRequestRoute("/api/machines/open");
       const body = await request.json() as OpenRequest;
-      if (!isJsonObject(body) || typeof body.host !== "string" || typeof body.pane_id !== "string") return fail("invalid_body", "Expected host and pane_id", 400);
-      const machine = manager.list().find((candidate) => hostLabel(machineHost(candidate)) === hostLabel(body.host));
+      if (!isJsonObject(body) || !Array.isArray(body.hosts) || !body.hosts.every((host) => typeof host === "string") || typeof body.pane_id !== "string") return fail("invalid_body", "Expected hosts and pane_id", 400);
+      const asked = new Set(body.hosts.map(hostLabel));
+      const machine = manager.list().find((candidate) => machineHosts(candidate).some((host) => asked.has(hostLabel(host))));
       if (!machine) return fail("machine_not_found", "No PC here has that host", 404);
       const device = deviceOf(request);
       const event: MachineEvent = { type: "open", machine_id: machine.id, pane_id: body.pane_id };
