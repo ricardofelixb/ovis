@@ -17,6 +17,7 @@ import { authClient, deviceCookieValue, bearerMatches, handleAuthRequest, isAuth
 import { cameThroughProxy, decideAccess, isLoopbackAddress, isLoopbackBind, isServeOwnerRequest, lanExposed } from "./access.ts";
 import { DeviceStore, handleDeviceRequest, type DeviceMatch } from "./devices.ts";
 import { handlePreferencesRequest, PreferenceStore } from "./preferences.ts";
+import { FriendStore, handleFriendsRequest } from "./friends.ts";
 import { handleSeenRequest, SeenStore } from "./seen.ts";
 import { remoteAccess, TailnetIdentitySource } from "./tailscale.ts";
 import { badRequest, errorResponse, jsonResponse, setRequestRoute } from "./http.ts";
@@ -194,6 +195,7 @@ export function createServer(
   /** paired devices (server/devices.ts) and the PC's Tailscale login: the two ways in besides the token and this PC itself */
   const devices = new DeviceStore(options.stateDir ?? defaultStateDir());
   const preferences = new PreferenceStore(options.stateDir ?? defaultStateDir());
+  const friends = new FriendStore(options.stateDir ?? defaultStateDir());
   const seen = new SeenStore(options.stateDir ?? defaultStateDir());
   const herdrSidebar = new HerdrSidebarConfig(options.herdrConfigPath ?? herdrConfigPath());
   const cliProxy = options.cliProxy ?? new CLIProxyService(options.stateDir ?? defaultStateDir());
@@ -421,6 +423,8 @@ export function createServer(
       if (pathname === "/api/preferences") { setRequestRoute(pathname); return handlePreferencesRequest(request, preferences); }
       // the finishes read in some browser of this server; a watching device reads them and cannot add to them (above)
       if (pathname === "/api/seen") { setRequestRoute(pathname); return handleSeenRequest(request, seen); }
+      // the friend each workspace wears in the sidebar, the same in every browser of this server
+      if (pathname === "/api/friends") { setRequestRoute(pathname); return handleFriendsRequest(request, friends); }
 
       if (pathname === "/api/usage") { setRequestRoute(pathname); return handleUsageRequest(request, url, usage); }
       if (pathname === "/api/usage/login") { setRequestRoute(pathname); bunServer.timeout(request, 30); return usageLogin.handle(request, collector.trackPane); }

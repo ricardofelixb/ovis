@@ -15,6 +15,10 @@ import { useSidebarActivity } from "../lib/sidebarActivity.tsx";
 import { currentSidebarPins, pruneSidebarPins, setSidebarPins, sidebarPinKey, subscribeSidebarPins, toggleSidebarPin } from "../lib/sidebarPins.ts";
 import { PANE_DRAG_TYPE, paneDragData } from "../lib/split.ts";
 import { AgentMark, hasAgentMark } from "./AgentMark.tsx";
+import { AgentFriend } from "./AgentFriend.tsx";
+import type { Friend } from "../../shared/friends.ts";
+import { friendKey } from "../../shared/friends.ts";
+import { useWorkspaceFriends } from "../lib/friends.ts";
 import { RowMenu } from "./RowMenu.tsx";
 import { BackgroundBadge, displayPaneTitle, onRowContextMenu, PlanBadge, StatusBadge } from "./Sidebar.tsx";
 import "./AgentSidebar.css";
@@ -22,6 +26,8 @@ import "./AgentSidebar.css";
 interface AgentRowBodyProps {
   /** the agent's kind or name; null draws a terminal, for a shell */
   mark: string | null;
+  /** the friend the agent's workspace wears, drawn with the mark as its badge */
+  friend?: Friend;
   /** the kind the mark draws, left off the second line: said for a screen reader, since the mark is aria-hidden */
   markKind: string | null;
   title: string;
@@ -39,9 +45,9 @@ interface AgentRowBodyProps {
  * One agent in a list: the coding agent's mark, what it is working on, who and where it is, what
  * its plugins report, and how it is doing.
  */
-function AgentRowBody({ mark, markKind, title, name, context, tokens, backgroundTasks, plan, status }: AgentRowBodyProps) {
+function AgentRowBody({ mark, friend, markKind, title, name, context, tokens, backgroundTasks, plan, status }: AgentRowBodyProps) {
   return <>
-    <span className="sidebar-mark" aria-hidden="true">{mark !== null ? <AgentMark agent={mark} size={18} /> : <Terminal />}</span>
+    <span className="sidebar-mark" aria-hidden="true">{mark === null ? <Terminal /> : friend ? <AgentFriend friend={friend} agent={mark} status={status} /> : <AgentMark agent={mark} size={18} />}</span>
     <span className="agent-copy">
       {markKind && <span className="visually-hidden">{markKind}: </span>}
       <span className="agent-main">
@@ -98,6 +104,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
   // which `$name` tokens herdr's own sidebar draws, from this server's herdr config (server/herdr-sidebar.ts)
   const rowTokens = useSyncExternalStore(subscribeAgentRowTokens, currentAgentRowTokens, currentAgentRowTokens);
   const activity = useSidebarActivity();
+  const friends = useWorkspaceFriends(machines);
   // Settings → Agents order: herdr's order, or Activity within each PC (each herdr counts its own changes);
   // the pinned rows stand first, in the order they were pinned (lib/agentRoster.ts)
   const byActivity = settings.agentOrder === "activity";
@@ -173,7 +180,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
           event.dataTransfer.setData(PANE_DRAG_TYPE, paneDragData({ machineId: machine.id, paneId: pane.pane_id }));
         }}>
         {/* a saved roster's state is not news: a PC that is away says nothing about its agents */}
-        <AgentRowBody mark={mark} markKind={markKind} title={title} name={name} context={context} tokens={tokens} backgroundTasks={online ? pane.background_tasks : 0} plan={online ? pane.plan : undefined} status={online ? activity.status(machine.id, pane) : undefined} />
+        <AgentRowBody mark={mark} friend={friends[friendKey(machine.id, entry.workspace.workspace_id)]} markKind={markKind} title={title} name={name} context={context} tokens={tokens} backgroundTasks={online ? pane.background_tasks : 0} plan={online ? pane.plan : undefined} status={online ? activity.status(machine.id, pane) : undefined} />
       </button>
       <div className="agent-actions">
         <button type="button" className="sidebar-row-action row-menu-toggle" aria-label={t("More for {title}", { title })} aria-haspopup="menu" aria-expanded={menuOpen} onClick={(event) => toggleMenu(event.currentTarget)}>
