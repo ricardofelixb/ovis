@@ -286,4 +286,8 @@ export const SETTINGS_JA: Record<string, string> = {
   "Increase interface font size": "インターフェースの文字サイズを大きく",
   "This is the demo. Go back to the app's list of PCs to open yours.": "これはデモです。アプリのPC一覧に戻って、ご自分のPCを開いてください。",
   "This app shows {address}. Go back to its list of PCs to open another.": "このアプリは {address} を表示しています。PC一覧に戻ると別のPCを開けます。",
+  "Voice": "声",
+  "American": "アメリカ英語",
+  "British": "イギリス英語",
+  "The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.": "返信の下のスピーカーボタンで、このデバイスで読み上げます。音声はサーバー上の Kokoro が無料・オフラインで作ります。初回は準備に数分かかります。",
 };

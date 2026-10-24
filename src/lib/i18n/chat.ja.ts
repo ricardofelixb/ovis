@@ -162,4 +162,7 @@ export const CHAT_JA: Record<string, string> = {
   "Conversation turns": "会話のターン",
   "Go to turn {n}": "ターン {n} へ移動",
   "Show full message": "メッセージ全体を表示",
+  "Stop reading": "読み上げを停止",
+  "Preparing the voice…": "音声を準備中…",
+  "Couldn't read this aloud. Tap to try again.": "読み上げられませんでした。タップしてもう一度お試しください。",
 };

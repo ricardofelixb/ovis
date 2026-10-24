@@ -45,6 +45,7 @@ import { handleUsageRequest, UsageService } from "./usage.ts";
 import { CLIProxyService } from "./cliproxy.ts";
 import { CLIProxyRoutes } from "./cliproxy-routes.ts";
 import { UsageLoginService } from "./usage-login.ts";
+import { handleSpeechRequest, SpeechService } from "./speech.ts";
 import { handleVoiceRequest, VoiceService } from "./voice.ts";
 
 import { BRIDGE_PROTOCOL } from "../shared/machines.ts";
@@ -145,6 +146,8 @@ export function createServer(
     usageLogin?: UsageLoginService;
     /** voice input's key, provider and models; tests pass one with their own env and fetch */
     voice?: VoiceService;
+    /** read aloud's Kokoro; tests pass one with a stand-in engine */
+    speech?: SpeechService;
     machines?: boolean;
     /** Read-only saved profiles from the local herdr client; tests supply their own catalog. */
     herdrProfiles?: () => Promise<HerdrMachineProfile[]>;
@@ -203,6 +206,7 @@ export function createServer(
   const usageLogin = options.usageLogin ?? new UsageLoginService();
   const usage = options.usage ?? new UsageService(undefined, undefined, (refresh) => cliProxy.report(refresh));
   const voice = options.voice ?? new VoiceService({ stateDir: options.stateDir ?? defaultStateDir(), env: process.env, fetch });
+  const speech = options.speech ?? new SpeechService({ stateDir: options.stateDir ?? defaultStateDir() });
   /** a login named here is taken as it is: a tagged node has none of its own to read (OVIS_TAILSCALE_OWNER) */
   const namedOwner = options.tailscaleOwner !== undefined ? options.tailscaleOwner : process.env["OVIS_TAILSCALE_OWNER"]?.trim() || undefined;
   const tailnet = options.tailnet ?? new TailnetIdentitySource();
@@ -431,6 +435,8 @@ export function createServer(
       if (pathname === "/api/cliproxy" || pathname.startsWith("/api/cliproxy/")) { bunServer.timeout(request, 60); return cliProxyRoutes.handle(request); }
       // a long clip can keep the provider silent past Bun's 10 s idle limit before the first line
       if (pathname === "/api/voice" || pathname.startsWith("/api/voice/")) { bunServer.timeout(request, 120); return handleVoiceRequest(request, pathname, voice); }
+      // the first request installs Kokoro and downloads its model: minutes, not seconds
+      if (pathname === "/api/speech") { bunServer.timeout(request, 0); return handleSpeechRequest(request, speech); }
 
       if (pathname === "/api/push" || pathname.startsWith("/api/push/")) {
         try {

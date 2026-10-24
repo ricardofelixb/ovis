@@ -30,6 +30,7 @@ import { isLoopbackHost, phonePlan } from "../lib/phone.ts";
 import type { AgentIntegration, HealthAuth, PluginActions, RemoteAccess } from "../../shared/protocol.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { loadIntegrations, outcomeFor, type IntegrationsResult } from "../lib/integrations.ts";
+import { SPEECH_VOICES, type SpeechVoice } from "../../shared/speech.ts";
 import type { VoiceStatus } from "../../shared/voice.ts";
 import { dictationLocale, VOICE_CONFIG_EVENT } from "../lib/voice.ts";
 import { DevicesPanel } from "./DevicesPanel.tsx";
@@ -585,6 +586,14 @@ function VoicePage() {
           </SettingsRow>
         </SettingsGroup>
       )}
+
+      <SettingsGroup title={t("Read aloud")} section="read-aloud">
+        <SettingsRow label={t("Voice")} description={t("The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.")} htmlFor="settings-speech-voice">
+          <select id="settings-speech-voice" className="select settings-select" value={settings.speechVoice} onChange={(event) => update({ speechVoice: event.target.value as SpeechVoice })}>
+            {SPEECH_VOICES.map((voice) => <option key={voice} value={voice}>{`${voice.charAt(3).toUpperCase()}${voice.slice(4)} · ${voice.startsWith("a") ? t("American") : t("British")}`}</option>)}
+          </select>
+        </SettingsRow>
+      </SettingsGroup>
 
       <SettingsGroup title={t("OpenAI API key")} section="openai-key">
         <div className="settings-item">

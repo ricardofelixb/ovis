@@ -1548,6 +1548,8 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
   }
   // no key in the demo: the app falls back to the browser's own speech recognition
   if (path === "/api/voice") return json({ configured: false, source: null, ...VOICE_DEFAULTS } satisfies VoiceStatus, 200, { "cache-control": "no-store" });
+  // the demo has no Kokoro: a reply's speaker button shows that it could not read aloud
+  if (path === "/api/speech") return json({ error: { code: "unavailable", message: "The demo cannot read aloud" } }, 503);
   if (path === "/api/voice/config") return error("demo", "the demo saves no OpenAI key", 409);
   if (path === "/api/voice/transcribe") return error("voice_not_configured", "transcription is unavailable in the demo", 409);
   if (path === "/api/workspace/diff/files" || path === "/api/workspace/diff/file") {
