@@ -430,6 +430,16 @@ export function App() {
   const [filesOpen, setFilesOpen] = useState(false);
   // the Computer view (ComputerView) over the active half, until Chat or Terminal is picked again
   const [computerOpen, setComputerOpen] = useState(false);
+  // and kept connected, out of sight, for 2 minutes after: coming back within them needs no new connection
+  const [computerKept, setComputerKept] = useState(false);
+  useEffect(() => {
+    if (computerOpen) {
+      setComputerKept(true);
+      return;
+    }
+    const timer = setTimeout(() => setComputerKept(false), 120_000);
+    return () => clearTimeout(timer);
+  }, [computerOpen]);
   const { viewing, openFile, closeFile, setPresentation, releaseFile } = useFileViewer();
   // a repository diff from the Files dialog's Changes tab, an entry of its own like a file
   const { viewing: diffViewing, openDiff, closeDiff, releaseDiff } = useRepoDiffViewer();
@@ -1842,7 +1852,7 @@ export function App() {
                 {/* the tab strip's panel: its id is what each tab's aria-controls points at, one per half.
                     No tabIndex - the terminal (PaneTerminal) and the composer are the focusable things inside it. */}
                 <main className="terminal-host">
-                  {active && computerOpen && <ComputerView machineId={machineId} machineName={machines.find((item) => item.id === machineId)?.name ?? machineId} />}
+                  {active && (computerOpen || computerKept) && <ComputerView machineId={machineId} machineName={machines.find((item) => item.id === machineId)?.name ?? machineId} hidden={!computerOpen} />}
                   <div id={slotPanelId} className="terminal-tabpanel" role={slotPanelLabel === null ? undefined : "tabpanel"} aria-label={slotPanelLabel ?? undefined}>
                   <PaneCanvas key={machineId} snapshot={slotSnapshot} pane={pane} selectedPaneId={paneId} onSelect={onSelect} onChanged={actions.refresh} actionsRef={active ? paneActionsRef : undefined}
                     onOpenInHalf={wideScreen ? (id, side) => dockSide({ machineId, paneId: id }, side) : undefined}
