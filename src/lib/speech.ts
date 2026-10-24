@@ -83,6 +83,7 @@ export function useSpeechStatus(id: string): SpeechStatus {
   return useSyncExternalStore(
     (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
     () => (playback.id === id ? playback.status : "idle"),
+    () => "idle",
   );
 }
 

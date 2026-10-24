@@ -31,9 +31,9 @@
   height: 9px;
 }
 
-.agent-friend.is-working { animation: friend-bounce 1.1s ease-in-out infinite; }
-.agent-friend.is-done { animation: friend-hop 0.5s ease-out 2, friend-wave 1.6s ease-in-out 1s infinite; }
-.agent-friend.is-blocked { animation: friend-wobble 0.9s ease-in-out infinite; }
+.agent-friend.is-working { animation: friend-bounce 1.1s steps(6) infinite; }
+.agent-friend.is-done { animation: friend-hop 0.5s ease-out 2, friend-wave 1.6s steps(8) 1s infinite; }
+.agent-friend.is-blocked { animation: friend-wobble 0.9s steps(4) infinite; }
 
 .is-offline .agent-friend { opacity: 0.45; filter: grayscale(1); animation: none; }
 
@@ -61,5 +61,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agent-friend { animation: none !important; }
+  .agent-friend, .agent-friend.is-working, .agent-friend.is-done, .agent-friend.is-blocked { animation: none; }
 }
