@@ -1,7 +1,8 @@
 /**
  * Read aloud: one agent reply at a time is spoken by the server's Kokoro (shared/speech.ts). The reply loses what
- * a voice should not read (code, tables, links' addresses, markdown marks), is cut into stretches, and the next
- * stretch is asked for while the last one plays, so speech starts after the first short stretch is made.
+ * a voice should not read (code, tables, links' addresses, markdown marks) and is cut into stretches that grow from
+ * one sentence. The server makes a few stretches ahead while earlier ones play, and each is scheduled to start the
+ * moment the one before ends, so speech starts after the first sentence and runs without breaks.
  */
 import { useSyncExternalStore } from "react";
 import { SPEECH_MAX_CHARS, type SpeechVoice } from "../../shared/speech.ts";
@@ -24,11 +25,17 @@ export function speechText(markdown: string): string {
     .join("\n\n");
 }
 
+/** Stretches the server makes ahead of the one playing. It makes them one at a time, so more only wait in line. */
+const AHEAD = 3;
+/** The shortest stretch after the first, so a reply opening with "Sure." does not crawl along in tiny requests. */
+const MIN_CHARS = 60;
+
 /**
- * Stretches of whole sentences: the first is one sentence, so speech starts soon; the rest gather sentences up to
- * `size` characters, as fewer requests sound smoother. A sentence longer than a request is cut at a space.
+ * Stretches of whole sentences: the first is one sentence, so speech starts soon. Each one after may be at most
+ * twice as long as the one before, up to `size` characters: the server speaks about twice as fast as it plays, so
+ * the next is made before the last one ends. A sentence longer than a request is cut at a space.
  */
-export function speechChunks(text: string, size = 240): string[] {
+export function speechChunks(text: string, size = 300): string[] {
   const sentences = text.split(/\n{2,}/).flatMap((block) => block.match(/.+?(?:[.!?]+["')\]]*(?=\s|$)|$)\s*/g) ?? [])
     .map((sentence) => sentence.trim()).filter(Boolean)
     .flatMap((sentence) => {
@@ -43,10 +50,15 @@ export function speechChunks(text: string, size = 240): string[] {
       return [...parts, rest];
     });
   const chunks: string[] = [];
+  let limit = 0;
   for (const sentence of sentences) {
     const last = chunks.length > 1 ? chunks[chunks.length - 1]! : null;
-    if (last !== null && last.length + sentence.length + 1 <= size) chunks[chunks.length - 1] = `${last} ${sentence}`;
-    else chunks.push(sentence);
+    if (last !== null && last.length + sentence.length + 1 <= limit) {
+      chunks[chunks.length - 1] = `${last} ${sentence}`;
+      continue;
+    }
+    if (chunks.length > 0) limit = Math.min(size, Math.max(MIN_CHARS, 2 * chunks[chunks.length - 1]!.length));
+    chunks.push(sentence);
   }
   return chunks;
 }
@@ -57,7 +69,7 @@ interface Playback { id: string; status: SpeechStatus }
 let playback: Playback = { id: "", status: "idle" };
 let session = 0;
 let context: AudioContext | null = null;
-let source: AudioBufferSourceNode | null = null;
+const sources = new Set<AudioBufferSourceNode>();
 let abort: AbortController | null = null;
 const listeners = new Set<() => void>();
 
@@ -78,8 +90,10 @@ export function stopSpeech(): void {
   session += 1;
   abort?.abort();
   abort = null;
-  try { source?.stop(); } catch { /* it had not started */ }
-  source = null;
+  for (const node of sources) {
+    try { node.stop(); } catch { /* it had not started */ }
+  }
+  sources.clear();
   if (playback.status !== "idle") set({ id: "", status: "idle" });
 }
 
@@ -89,14 +103,15 @@ async function fetchChunk(text: string, voice: SpeechVoice, signal: AbortSignal)
   return context!.decodeAudioData(await response.arrayBuffer());
 }
 
-function play(buffer: AudioBuffer): Promise<void> {
+/** Starts `buffer` at `at` on the audio clock; the promise settles when it has played. */
+function schedule(buffer: AudioBuffer, at: number): Promise<void> {
   return new Promise((resolve) => {
     const node = context!.createBufferSource();
     node.buffer = buffer;
     node.connect(context!.destination);
-    node.onended = () => resolve();
-    source = node;
-    node.start();
+    node.onended = () => { sources.delete(node); resolve(); };
+    sources.add(node);
+    node.start(at);
   });
 }
 
@@ -114,19 +129,28 @@ export function speak(id: string, markdown: string, voice: SpeechVoice): void {
   const controller = abort = new AbortController();
   set({ id, status: "loading" });
   void (async () => {
+    const pending: Promise<AudioBuffer>[] = [];
+    const ask = (index: number) => {
+      if (index >= chunks.length) return;
+      const chunk = fetchChunk(chunks[index]!, voice, controller.signal);
+      chunk.catch(() => {}); // a failure surfaces when its turn is awaited
+      pending[index] = chunk;
+    };
     try {
-      let next = fetchChunk(chunks[0]!, voice, controller.signal);
+      for (let index = 0; index <= AHEAD; index++) ask(index);
+      let end = 0;
+      let played: Promise<void> = Promise.resolve();
       for (let index = 0; index < chunks.length; index++) {
-        const buffer = await next;
+        const buffer = await pending[index]!;
         if (mine !== session) return;
-        if (index + 1 < chunks.length) next = fetchChunk(chunks[index + 1]!, voice, controller.signal);
-        // the next one is asked for before this one plays; a failure surfaces when it is awaited
-        next.catch(() => {});
+        ask(index + AHEAD + 1);
+        const at = Math.max(context!.currentTime, end);
+        end = at + buffer.duration;
+        played = schedule(buffer, at);
         if (playback.status !== "playing") set({ id, status: "playing" });
-        await play(buffer);
-        if (mine !== session) return;
       }
-      set({ id: "", status: "idle" });
+      await played;
+      if (mine === session) set({ id: "", status: "idle" });
     } catch {
       if (mine === session) set({ id, status: "failed" });
     }
