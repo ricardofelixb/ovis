@@ -18,10 +18,10 @@ import { liveScreen, parsePrompt, promptTailIsActive } from "./dialogs/live.ts";
 import { codexModelListWaits } from "./dialogs/codex.ts";
 import { sameText } from "./dialogs/omo.ts";
 import { CLAUDE_EFFORT_GUARD_RE, INVISIBLE_CHAR_RE, claudeModelListWaits } from "./dialogs/claude.ts";
-import { parsePiDialog } from "./dialogs/pi.ts";
+import { PI_ASK_HINT_RE, parsePiDialog } from "./dialogs/pi.ts";
 import { parseFallbackPrompt } from "./dialogs/fallback.ts";
 import { SUGGESTION_READ_MS, claudeHeldIsGrey, claudeInputDraft, claudeRestoredDraft, parseClaudeSuggestion, viewportShowsLive } from "./claude-input.ts";
-import { OMO_FORM_RE, omoAsksFor } from "./omo-questions.ts";
+import { OMO_FORM_RE, omoAsksFor, piAsksFor } from "./omo-questions.ts";
 import { codexQueuedPrompt, queuedQuestionCount, type QueueFront } from "./codex-queue.ts";
 import { OpenCodePromptState } from "./opencode-prompt.ts";
 export { removedInvisible } from "./dialogs/claude.ts";
@@ -382,7 +382,8 @@ export function answerKeys(prompt: InteractivePrompt, answer: Pick<PromptAnswer,
     // dialog is the same but for a worse reason: its `>` line already owns the input, so an
     // enter typed before the answer submits the dialog empty and leaves the answer behind to
     // be typed into the agent's own prompt.
-    if (!["claude-question", "claude-plan", "codex-question", "codex-async-question", "pi-input"].includes(parsed.responder)) navigation.push(KEY.enter);
+    // rpiv's Type something. row turns into its input once the cursor is on it
+    if (!["claude-question", "claude-plan", "codex-question", "codex-async-question", "pi-input", "pi-ask"].includes(parsed.responder)) navigation.push(KEY.enter);
     if (parsed.responder === "codex-question") navigation.push(KEY.tab);
     // what was typed into pi's line in the terminal would stay around the answer: the line is
     // emptied first, after the cursor and before it (pi's editor keys, measured on 0.87.1)
@@ -748,7 +749,9 @@ async function readKnownPrompt(
   const screen = await liveScreen(paneId);
   // omo's form reads its text from the session's call, the screen showing where the form stands
   const omoAsks = ["omo", "pi", "claude", ""].includes(agent) && pane.cwd && OMO_FORM_RE.test(screen)
-    ? await omoAsksFor(paneId, pane.cwd, panes) : [];
+    ? await omoAsksFor(paneId, pane.cwd, panes)
+    // pi's own question dialog (dialogs/pi.ts) reads its call the same way
+    : agent === "pi" && PI_ASK_HINT_RE.test(screen) ? await piAsksFor(paneId) : [];
   // a pane herdr names claude, or not at all, is omo's only on evidence: herdr reports it waiting
   // on the user, or the session's pending call is the form on screen
   const omoTrusted = (agent !== "claude" && agent !== "") || pane.agent_status === "blocked";

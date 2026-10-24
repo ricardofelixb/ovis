@@ -74,6 +74,7 @@ type Responder =
   | "omo-review"
   | "omo-typing"
   | "omo-pending"
+  | "pi-ask"
   | "pi-question"
   | "pi-confirm"
   | "pi-input"

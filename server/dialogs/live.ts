@@ -6,7 +6,7 @@ import { OMO_FOOTER_LINES, OMO_HINT_LINES, OMO_NOT_FOOTER_RE, OMO_OPTIONS_HINT_R
 import { CLAUDE_ASK_HINT_RE, CLAUDE_CONFIRM_HINT_RE, CLAUDE_EFFORT_HINT_RE, claudeModelListWaits, withoutClaudeTasks } from "./claude.ts";
 import { OMP_CLIPPED_SINGLE_HINT_RE, OMP_MULTI_HINT_RE, OMP_REVIEW_HINT_RE, OMP_SINGLE_CLIPPED_HINT_RE, OMP_SINGLE_HINT_RE } from "./omp.ts";
 import { HERMES_HINT_RE } from "./hermes.ts";
-import { PI_INPUT_HINT_RE, PI_MENU_HINT_RE } from "./pi.ts";
+import { PI_ASK_HINT_RE, PI_INPUT_HINT_RE, PI_MENU_HINT_RE } from "./pi.ts";
 import { openCodeV1QuestionActive } from "./opencode.ts";
 
 /**
@@ -128,6 +128,9 @@ export function promptTailIsActive(prompt: ParsedPrompt, screen: string): boolea
   if (prompt.responder === "omo-model") return omoModelListWaits(screen);
   // its reader already found the picker ending the screen, which only an open picker does
   if (prompt.responder === "omp-model") return true;
+  // rpiv's hint ends differently while its input is focused, and a narrow pane cuts it short, so
+  // its start among the last lines counts: the reader already found the call still open in the session
+  if (prompt.responder === "pi-ask") return shown.slice(-6).some((_, index, tail) => PI_ASK_HINT_RE.test(tail.slice(index, index + 2).join(" ")));
   if (prompt.responder === "pi-question" || prompt.responder === "pi-confirm" || prompt.responder === "pi-input") {
     return hintAtEnd(shown, PI_MENU_HINT_AT_END_RE, PI_FOOTER_LINES, 4)
       || hintAtEnd(shown, PI_INPUT_HINT_AT_END_RE, PI_FOOTER_LINES, 4);

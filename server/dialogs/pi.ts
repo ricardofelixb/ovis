@@ -1,4 +1,5 @@
 import type { DialogReader } from "./registry.ts";
+import type { OmoAsk } from "./shared.ts";
 import { pickerPlan } from "./interaction-plan.ts";
 import { ANSI_RE, KEY, PI_MODEL_HINT_RE, PI_ROW_RE, type ParsedPrompt, cleanLine, findLastIndex, finishPrompt, isDivider, keySteps, navigationKeys, piModelRows, wrapped } from "./shared.ts";
 
@@ -112,6 +113,47 @@ function parsePiModel(screen: string): ParsedPrompt | null {
   });
 }
 
+/**
+ * The rpiv-ask-user-question extension's dialog: its key hint, cut short in a narrow pane, so only
+ * its start is matched. Its rows read `❯ 1. Label` at the cursor and `  2. Label` elsewhere, with
+ * a description wrapped under each and a last `Type something.` row that takes typed text.
+ */
+export const PI_ASK_HINT_RE = /Enter to select\s+\u00b7\s+\u2191\/\u2193/;
+const PI_ASK_CURSOR_RE = /^[\u276f\u2771>]\s*(\d+)\.\s/;
+const PI_ASK_CUSTOM = "Type something.";
+
+/**
+ * The text comes from the call in pi's session (`ask`, as omo's form is read), which no pane
+ * width wraps or cuts; the screen gives where the cursor stands. One single-choice question
+ * only: a multi-question call has tabs, and a multiple choice ticks rows, which the card does
+ * not walk yet, so those stay with the terminal.
+ */
+function parsePiAsk(screen: string, ask: OmoAsk | null): ParsedPrompt | null {
+  const question = ask?.questions.length === 1 ? ask.questions[0] : undefined;
+  if (!question || question.multiSelect || question.options.length === 0) return null;
+  const lines = screen.replace(ANSI_RE, "").split(/\r?\n/);
+  const hintIndex = findLastIndex(lines, (_, index) => PI_ASK_HINT_RE.test(wrapped(lines, index)));
+  if (hintIndex < 0) return null;
+  const cursorIndex = findLastIndex(lines.slice(0, hintIndex), (line) => PI_ASK_CURSOR_RE.test(cleanLine(line)));
+  if (cursorIndex < 0) return null;
+  const selectedIndex = Number(PI_ASK_CURSOR_RE.exec(cleanLine(lines[cursorIndex]!))![1]) - 1;
+  const custom = question.options.length;
+  if (selectedIndex < 0 || selectedIndex > custom) return null;
+  return finishPrompt("pi", {
+    kind: "question",
+    title: question.header,
+    question: question.question,
+    body: null,
+    options: [...question.options, { label: PI_ASK_CUSTOM, description: null }],
+    multi_select: false,
+    custom_option_index: custom,
+  }, {
+    responder: "pi-ask",
+    menuLabels: [...question.options.map((option) => option.label), PI_ASK_CUSTOM],
+    selectedIndex, checkedOptionIndices: [], customMenuIndex: custom, rejectWithEscapeIndex: null,
+  });
+}
+
 export function parsePiDialog(screen: string, moved = false): ParsedPrompt | null {
   const lines = screen.replace(ANSI_RE, "").split(/\r?\n/);
   const hintIndex = findLastIndex(lines, (_, index) => PI_MENU_HINT_RE.test(wrapped(lines, index)) || PI_INPUT_HINT_RE.test(wrapped(lines, index)));
@@ -176,6 +218,11 @@ export const readers: readonly DialogReader[] = [
       const parsed = parsePiModel(screen);
       return parsed?.responder === "pi-model" ? parsed : null;
     },
+  },
+  {
+    id: "pi-ask", agents: ["pi"], priority: 80,
+    reread: "none", list: "none",
+    parse: (screen, ctx) => parsePiAsk(screen, ctx.omoAsk),
   },
   {
     id: "pi-question", agents: ["pi"], priority: 90,
