@@ -109,6 +109,8 @@ export function bearerMatches(request: Request, token: string): boolean {
 /** /api/health, /api/auth and /api/devices/pair stay open so a client can discover the gate and pass it. */
 export function requiresAuth(pathname: string): boolean {
   if (pathname === "/ws") return true;
+  // the Computer view's pages and sockets (server/screen.ts)
+  if (pathname.startsWith("/screen/")) return true;
   if (!pathname.startsWith("/api/")) return false;
   // a rendered page's media address is its own credential, kept to the client that rendered it for a fixed time
   // (file-view.ts): the page has no origin and sends no cookie
