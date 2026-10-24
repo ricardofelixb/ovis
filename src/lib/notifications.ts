@@ -1,5 +1,6 @@
 import type { AgentStatus } from "../../shared/protocol.ts";
 import { ENDED_NOTIFICATION_BODY, paneNotificationTag, statusNotificationBody } from "../../shared/notify-policy.ts";
+import { nativeAlerts, nativeAlertsState, requestNativeAlerts, showNativeAlert } from "./nativeApp.ts";
 
 /**
  * Tab alerts: Web Notifications for pane status transitions while this page is open
@@ -15,23 +16,38 @@ export { alertStatus, alertsAllow, shouldNotifyStatus } from "../../shared/notif
 
 export type NotificationState = "unsupported" | "default" | "granted" | "denied";
 
+// the Android app answers asynchronously: its last answer, which App asks for on load (syncNotificationState)
+let nativeState: NotificationState = "default";
+
 export function notificationState(): NotificationState {
+  if (nativeAlerts()) return nativeState;
   if (typeof globalThis.Notification === "undefined") return "unsupported";
   return globalThis.Notification.permission;
 }
 
+export async function syncNotificationState(): Promise<NotificationState> {
+  if (nativeAlerts()) nativeState = await nativeAlertsState();
+  return notificationState();
+}
+
 export async function requestNotificationPermission(): Promise<NotificationState> {
+  if (nativeAlerts()) return nativeState = await requestNativeAlerts();
   if (typeof globalThis.Notification === "undefined") return "unsupported";
   const permission = await globalThis.Notification.requestPermission();
   return permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default";
 }
 
 /**
- * Shown through the service worker when there is one: Android Chrome has no
- * `new Notification()`, and the worker's notificationclick (public/sw.js) selects the
- * pane. The constructor is the fallback for a page without a worker.
+ * The Android app shows it natively. Elsewhere, through the service worker when there is
+ * one: Android Chrome has no `new Notification()`, and the worker's notificationclick
+ * (public/sw.js) selects the pane. The constructor is the fallback for a page without a worker.
  */
 async function show(paneId: string, title: string, body: string, onClick?: () => void, machineId = "local", workspaceId?: string): Promise<void> {
+  if (nativeAlerts()) {
+    // a tap comes back through nativeAlertTaps (lib/notificationTarget.ts), as a worker's would
+    if (nativeState === "granted" && document.hidden) await showNativeAlert({ title, body, tag: paneNotificationTag(paneId, machineId), pane_id: paneId, machine_id: machineId, ...(workspaceId ? { workspace_id: workspaceId } : {}) }).catch(() => {});
+    return;
+  }
   if (typeof globalThis.Notification === "undefined") return;
   if (globalThis.Notification.permission !== "granted") return;
   if (typeof document !== "undefined" && !document.hidden) return; // visible tab: the UI already shows it

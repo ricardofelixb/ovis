@@ -5,7 +5,9 @@
  */
 interface CapacitorBridge {
   isNativePlatform?: () => boolean;
+  getPlatform?: () => string;
   nativePromise?: (plugin: string, method: string, options?: Record<string, unknown>) => Promise<unknown>;
+  nativeCallback?: (plugin: string, method: string, options: Record<string, unknown>, callback: (data: unknown) => void) => string;
 }
 
 function bridge(): CapacitorBridge | undefined {
@@ -20,4 +22,38 @@ export function inNativeApp(): boolean {
 /** Back to the app's list of PCs (app/ios/App/App/HerdrShellPlugin.swift, `disconnect`). */
 export async function changePc(): Promise<void> {
   await bridge()?.nativePromise?.("HerdrShell", "disconnect", {});
+}
+
+/** The Android app shows alerts itself (HerdrShellPlugin.java): its WebView has no Web Notifications. */
+export function nativeAlerts(): boolean {
+  return inNativeApp() && bridge()?.getPlatform?.() === "android";
+}
+
+export type NativeAlertsState = "granted" | "denied" | "default";
+
+async function alertsCall(method: "alertsState" | "requestAlerts"): Promise<NativeAlertsState> {
+  const answer = await bridge()?.nativePromise?.("HerdrShell", method, {}) as { state?: string } | undefined;
+  return answer?.state === "granted" ? "granted" : answer?.state === "denied" ? "denied" : "default";
+}
+
+export const nativeAlertsState = (): Promise<NativeAlertsState> => alertsCall("alertsState");
+export const requestNativeAlerts = (): Promise<NativeAlertsState> => alertsCall("requestAlerts");
+
+export interface NativeAlert { title: string; body: string; tag: string; pane_id: string; machine_id: string; workspace_id?: string }
+
+export async function showNativeAlert(alert: NativeAlert): Promise<void> {
+  await bridge()?.nativePromise?.("HerdrShell", "alert", { ...alert });
+}
+
+/** A tapped native alert as public/sw.js posts a tapped notification: a `select-pane` message (lib/notificationTarget.ts). */
+export function nativeAlertTaps(): { addEventListener: (type: "message", listener: (event: MessageEvent) => void) => void } | undefined {
+  const callback = bridge()?.nativeCallback;
+  if (!nativeAlerts() || !callback) return undefined;
+  return {
+    addEventListener: (_type, listener) => {
+      callback("HerdrShell", "addListener", { eventName: "alertTap" }, (data) => {
+        listener(new MessageEvent("message", { data: { ...(data as object), type: "select-pane", view: "chat" } }));
+      });
+    },
+  };
 }
