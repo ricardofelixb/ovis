@@ -1,7 +1,7 @@
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import {
-  ArrowDown, BookOpen, Check, ChevronDown, ChevronRight, Circle, CircleAlert, CircleCheck, CircleDot, CircleQuestionMark, CircleSlash, CircleX, Copy, Layers, LoaderCircle, Square, SquareTerminal, Target, Undo2, Volume2, VolumeX,
+  ArrowDown, BookOpen, Check, ChevronDown, ChevronRight, Circle, CircleAlert, CircleCheck, CircleDot, CircleQuestionMark, CircleSlash, CircleX, Copy, Layers, LoaderCircle, Pause, Play, Square, SquareTerminal, Target, Undo2, Volume2, VolumeX,
   type LucideProps,
 } from "lucide-react";
 
@@ -29,7 +29,7 @@ import { useWholeOutput as useScopedOutput } from "../lib/useWholeOutput.ts";
 import { turnSkills } from "../lib/skillActivity.ts";
 import { ApiError } from "../lib/api.ts";
 import { copyText } from "../lib/clipboard.ts";
-import { speak, stopSpeech, useSpeechStatus } from "../lib/speech.ts";
+import { speak, stopSpeech, toggleSpeechPause, useSpeechStatus } from "../lib/speech.ts";
 import { attachmentFileName, mentionFileName, type GalleryImage } from "../lib/imageViewer.ts";
 import { useMachineApi } from "../lib/machineContext.tsx";
 import { toTranscriptMessages, type TranscriptMessage } from "../lib/transcript.ts";
@@ -234,18 +234,29 @@ function plainText(markdown: string): string {
     .replace(/^>\s?/gm, "");
 }
 
-/** Reads an agent's reply aloud on this device; a second tap, or a tap on another reply, stops it. */
+/**
+ * Reads an agent's reply aloud on this device: a tap pauses and resumes it, the square beside it stops it, and a
+ * tap on another reply reads that one instead.
+ */
 function SpeakButton({ id, text }: { id: string; text: string }) {
   const t = useT();
   const { settings } = useSettings();
   const status = useSpeechStatus(id);
-  const busy = status === "loading" || status === "playing";
-  const label = status === "loading" ? t("Preparing the voice…") : status === "playing" ? t("Stop reading") : status === "failed" ? t("Couldn't read this aloud. Tap to try again.") : t("Read aloud");
+  const started = status === "playing" || status === "paused";
+  const busy = started || status === "loading";
+  const label = status === "loading" ? t("Preparing the voice…") : status === "playing" ? t("Pause reading") : status === "paused" ? t("Resume reading") : status === "failed" ? t("Couldn't read this aloud. Tap to try again.") : t("Read aloud");
+  const tap = () => (started ? toggleSpeechPause() : status === "loading" ? stopSpeech() : speak(id, text, settings.speechVoice));
   return (
-    <button type="button" className={busy ? "chat-meta-btn chat-speak is-active" : "chat-meta-btn chat-speak"} aria-label={label} title={label} aria-pressed={busy}
-      onClick={() => (busy ? stopSpeech() : speak(id, text, settings.speechVoice))}>
-      {status === "loading" ? <LoaderCircle className="chat-speak-progress" aria-hidden="true" /> : status === "playing" ? <Square aria-hidden="true" /> : status === "failed" ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
-    </button>
+    <>
+      <button type="button" className={busy ? "chat-meta-btn chat-speak is-active" : "chat-meta-btn chat-speak"} aria-label={label} title={label} aria-pressed={busy} onClick={tap}>
+        {status === "loading" ? <LoaderCircle className="chat-speak-progress" aria-hidden="true" /> : status === "playing" ? <Pause aria-hidden="true" /> : status === "paused" ? <Play aria-hidden="true" /> : status === "failed" ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
+      </button>
+      {started && (
+        <button type="button" className="chat-meta-btn chat-speak" aria-label={t("Stop reading")} title={t("Stop reading")} onClick={stopSpeech}>
+          <Square aria-hidden="true" />
+        </button>
+      )}
+    </>
   );
 }
 

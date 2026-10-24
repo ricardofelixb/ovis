@@ -163,6 +163,8 @@ export const CHAT_ZH: Record<string, string> = {
   "Go to turn {n}": "跳到第 {n} 轮",
   "Show full message": "显示完整消息",
   "Stop reading": "停止朗读",
+  "Pause reading": "暂停朗读",
+  "Resume reading": "继续朗读",
   "Preparing the voice…": "正在准备语音…",
   "Couldn't read this aloud. Tap to try again.": "无法朗读。点按重试。",
 };
