@@ -286,4 +286,8 @@ export const SETTINGS_KO: Record<string, string> = {
   "Increase interface font size": "인터페이스 글자 크기 키우기",
   "This is the demo. Go back to the app's list of PCs to open yours.": "데모 화면입니다. 앱의 PC 목록으로 돌아가 내 PC를 여세요.",
   "This app shows {address}. Go back to its list of PCs to open another.": "이 앱은 {address}를 보여 주고 있습니다. PC 목록으로 돌아가 다른 PC를 열 수 있습니다.",
+  "Voice": "음성",
+  "American": "미국식",
+  "British": "영국식",
+  "The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.": "답변 아래의 스피커 버튼을 누르면 이 기기에서 읽어 줍니다. 음성은 서버의 Kokoro가 무료로, 오프라인에서 만듭니다. 처음 한 번은 준비하는 데 몇 분이 걸립니다.",
 };

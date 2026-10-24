@@ -162,4 +162,7 @@ export const CHAT_KO: Record<string, string> = {
   "Conversation turns": "대화 턴",
   "Go to turn {n}": "{n}번째 턴으로 이동",
   "Show full message": "전체 메시지 보기",
+  "Stop reading": "읽기 중지",
+  "Preparing the voice…": "음성 준비 중…",
+  "Couldn't read this aloud. Tap to try again.": "소리 내어 읽지 못했습니다. 다시 시도하려면 누르세요.",
 };

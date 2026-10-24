@@ -1,7 +1,7 @@
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { createPortal } from "react-dom";
 import {
-  ArrowDown, BookOpen, Check, ChevronDown, ChevronRight, Circle, CircleAlert, CircleCheck, CircleDot, CircleQuestionMark, CircleSlash, CircleX, Copy, Layers, SquareTerminal, Target, Undo2,
+  ArrowDown, BookOpen, Check, ChevronDown, ChevronRight, Circle, CircleAlert, CircleCheck, CircleDot, CircleQuestionMark, CircleSlash, CircleX, Copy, Layers, LoaderCircle, Square, SquareTerminal, Target, Undo2, Volume2, VolumeX,
   type LucideProps,
 } from "lucide-react";
 
@@ -29,6 +29,7 @@ import { useWholeOutput as useScopedOutput } from "../lib/useWholeOutput.ts";
 import { turnSkills } from "../lib/skillActivity.ts";
 import { ApiError } from "../lib/api.ts";
 import { copyText } from "../lib/clipboard.ts";
+import { speak, stopSpeech, useSpeechStatus } from "../lib/speech.ts";
 import { attachmentFileName, mentionFileName, type GalleryImage } from "../lib/imageViewer.ts";
 import { useMachineApi } from "../lib/machineContext.tsx";
 import { toTranscriptMessages, type TranscriptMessage } from "../lib/transcript.ts";
@@ -231,6 +232,21 @@ function plainText(markdown: string): string {
     .replace(/(?:\*\*|__|~~|`)(.*?)(?:\*\*|__|~~|`)/g, "$1")
     .replace(/^#{1,3}\s+/gm, "")
     .replace(/^>\s?/gm, "");
+}
+
+/** Reads an agent's reply aloud on this device; a second tap, or a tap on another reply, stops it. */
+function SpeakButton({ id, text }: { id: string; text: string }) {
+  const t = useT();
+  const { settings } = useSettings();
+  const status = useSpeechStatus(id);
+  const busy = status === "loading" || status === "playing";
+  const label = status === "loading" ? t("Preparing the voice…") : status === "playing" ? t("Stop reading") : status === "failed" ? t("Couldn't read this aloud. Tap to try again.") : t("Read aloud");
+  return (
+    <button type="button" className={busy ? "chat-meta-btn chat-speak is-active" : "chat-meta-btn chat-speak"} aria-label={label} title={label} aria-pressed={busy}
+      onClick={() => (busy ? stopSpeech() : speak(id, text, settings.speechVoice))}>
+      {status === "loading" ? <LoaderCircle className="chat-speak-progress" aria-hidden="true" /> : status === "playing" ? <Square aria-hidden="true" /> : status === "failed" ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
+    </button>
+  );
 }
 
 /** A quiet text button that copies and says "Copied" for a moment. */
@@ -889,6 +905,7 @@ const Turn = memo(function Turn({ paneId, turn, live, waiting, showThinking, ski
       {/* a mouse reads one copy glyph and the words "Plain text"; touch reads the two formats */}
       <CopyButton className="chat-meta-btn" text={answerText} label={t("Copy as markdown")} onResult={copied}><span className="chat-meta-fmt">MD</span></CopyButton>
       <CopyButton className="chat-meta-btn chat-meta-plain" text={plainText(answerText)} label={t("Copy as plain text")} onResult={copied}><span className="chat-meta-fmt">TXT</span><span className="chat-meta-word">{t("Plain text")}</span></CopyButton>
+      {!live && <SpeakButton id={`${paneId}:${turn.ts ?? ""}:${answerText.length}`} text={answerText} />}
       {time}
     </div>}
     {copyError}

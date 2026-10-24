@@ -220,6 +220,19 @@
   height: var(--fs-sm);
 }
 
+/* the reply being read keeps its button in view while the rest of the meta row fades */
+.chat-speak.is-active { opacity: 1; color: var(--accent); }
+
+.chat-speak-progress { animation: chat-speak-spin var(--dur-spin) steps(8) infinite; }
+
+@keyframes chat-speak-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-speak-progress { animation: none; }
+}
+
 .chat-turn-agent {
   display: flex;
   flex-direction: column;

@@ -17,6 +17,7 @@
 import type { AgentIntegration, AgentStatus, CommandForm, CommandOutcome, ConversationTurn, IntegrationsResponse, Machine, MachineEvent, PaneDirection, PaneFindMatch, PaneFindRequest, PanePlan, PaneResized, PaneSplit, PaneSwapped, PaneZoomed, PendingMessage, PlanStep, PluginActionResult, PluginActions, PluginActionsResponse, PortalStatus, ServerMessage, SessionSnapshot, SlashCommand, TabMoved, UsageReport, WorkspaceCreated, WorkspaceInfo, WorktreeEntry, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../../shared/protocol.ts";
 import type { RepoDiffFile, RepoDiffFileList, RepoDiffFilePatch, RepoDiffRepository, RepoDiffScope, SessionHistoryAgent, SessionHistoryResponse, SessionResumeResponse } from "../../shared/protocol.ts";
 import { VOICE_DEFAULTS, type VoiceStatus } from "../../shared/voice.ts";
+import { FRIENDS, type FriendsResponse } from "../../shared/friends.ts";
 import { isAgentName } from "../../shared/agent-name.ts";
 import { skillSyntax } from "../../shared/skill-syntax.ts";
 import { firstMessageFault } from "../../shared/launch-rules.ts";
@@ -1548,6 +1549,13 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
   }
   // no key in the demo: the app falls back to the browser's own speech recognition
   if (path === "/api/voice") return json({ configured: false, source: null, ...VOICE_DEFAULTS } satisfies VoiceStatus, 200, { "cache-control": "no-store" });
+  // the demo has no Kokoro: a reply's speaker button shows that it could not read aloud
+  if (path === "/api/friends") {
+    const live = (await bodyOf(init, input))["live"];
+    const keys = Array.isArray(live) ? live.filter((key): key is string => typeof key === "string") : [];
+    return json({ friends: Object.fromEntries(keys.map((key, index) => [key, FRIENDS[index % FRIENDS.length]!])) } satisfies FriendsResponse);
+  }
+  if (path === "/api/speech") return json({ error: { code: "unavailable", message: "The demo cannot read aloud" } }, 503);
   if (path === "/api/voice/config") return error("demo", "the demo saves no OpenAI key", 409);
   if (path === "/api/voice/transcribe") return error("voice_not_configured", "transcription is unavailable in the demo", 409);
   if (path === "/api/workspace/diff/files" || path === "/api/workspace/diff/file") {

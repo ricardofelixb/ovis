@@ -286,4 +286,8 @@ export const SETTINGS_ZH: Record<string, string> = {
   "Increase interface font size": "增大界面字号",
   "This is the demo. Go back to the app's list of PCs to open yours.": "这是演示。回到应用的电脑列表即可打开你自己的电脑。",
   "This app shows {address}. Go back to its list of PCs to open another.": "此应用正在显示 {address}。回到电脑列表可打开其他电脑。",
+  "Voice": "声音",
+  "American": "美式",
+  "British": "英式",
+  "The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.": "点回复下方的扬声器按钮，即在此设备上朗读。语音由服务器上的 Kokoro 免费离线生成，首次使用需要几分钟准备。",
 };
