@@ -40,6 +40,14 @@ export type Palette = ThemeId;
  *  narrow: 820px; default: follows the pane, up to 60rem (chatLaneWidth); wide: 72rem; full: the pane, less the gutters */
 export type ChatWidth = "narrow" | "default" | "wide" | "full";
 export const CHAT_WIDTHS: readonly ChatWidth[] = ["narrow", "default", "wide", "full"];
+/** what Enter does in the composer; auto: sends with a keyboard, breaks the line on a touch screen, where Send sends */
+export type EnterKey = "auto" | "send" | "newline";
+export const ENTER_KEYS: readonly EnterKey[] = ["auto", "send", "newline"];
+
+/** true when Enter sends (Shift+Enter breaks the line), false when Ctrl/Cmd+Enter sends */
+export function enterSends(key: EnterKey, touch: boolean): boolean {
+  return key === "auto" ? !touch : key === "send";
+}
 /** the microphone button. auto: in the chat composer off a phone, and only where dictation can work;
  *  on: there, on a phone and in the terminal input line, disabled with its reason where it cannot work; off: nowhere */
 export type VoiceButton = "auto" | "on" | "off";
@@ -114,8 +122,8 @@ export interface Settings {
   /** how wide the chat lane may run on a large screen, keyed as data-chat-width in src/styles.css; default follows the pane
    *  (chatLaneWidth, written by lib/chatLane.ts); a narrower pane is never affected */
   chatWidth: ChatWidth;
-  /** true: Enter sends in the composer, Shift+Enter breaks the line; false: Ctrl/Cmd+Enter sends */
-  enterSends: boolean;
+  /** what Enter does in the composer (enterSends) */
+  enterKey: EnterKey;
   /** true: a message sent while the agent works goes by itself when the turn ends; false: it waits for Send now */
   autoSendQueued: boolean;
   /** a New tab with an agent… button in the chat's composer, in a mouse-driven window; off until chosen, so the
@@ -191,7 +199,7 @@ export type DiffStyle = (typeof DIFF_STYLES)[number];
 type TelemetrySourceSettings = Omit<Settings,
   "keyBarExtras" | "keyBarItems" | "shortcutOverrides" | "terminalFontFamily" | "chatFontFamily"
   | "quickReplies" | "usageOrder" | "usageHidden" | "fileOpen" | "webLinks" | "claudeLaunchMode" | "codexLaunchMode"
-  | "followHerdrFocus" | "composerNewTabButton" | "speechVoice">;
+  | "followHerdrFocus" | "composerNewTabButton" | "speechVoice" | "enterKey">;
 
 /** Compare structured custom settings by content against this app's built-in defaults. */
 function differsFromDefault(value: unknown, defaultValue: unknown): boolean {
@@ -218,7 +226,7 @@ export function telemetrySettingsSnapshot(settings: Settings): TelemetrySettings
     chatFontSize: settings.chatFontSize,
     uiFontSize: settings.uiFontSize,
     chatWidth: settings.chatWidth,
-    enterSends: settings.enterSends,
+    enterSends: settings.enterKey !== "newline",
     autoSendQueued: settings.autoSendQueued,
     suggestionChip: settings.suggestionChip,
     showThinking: settings.showThinking,
@@ -270,7 +278,7 @@ export const SETTING_SCOPE = {
   terminalWheelSpeed: "device", terminalFontFamily: "device", paneClipboard: "device", releasePaneAway: "device",
   // a desk that follows herdr's focus must not move a phone open on another pane
   followHerdrFocus: "device",
-  chatFontSize: "device", chatFontFamily: "device", uiFontSize: "device", chatWidth: "device", enterSends: "device",
+  chatFontSize: "device", chatFontFamily: "device", uiFontSize: "device", chatWidth: "device", enterKey: "device",
   // a desk's composer button: a phone never shows it
   composerNewTabButton: "device",
   keepScreenOn: "device", alertsOn: "device", alertInput: "device", alertDone: "device", alertInApp: "device", alertSound: "device",
@@ -313,7 +321,7 @@ export const DEFAULT_SETTINGS: Settings = {
   chatFontFamily: "",
   uiFontSize: null,
   chatWidth: "default",
-  enterSends: true,
+  enterKey: "auto",
   autoSendQueued: true,
   composerNewTabButton: false,
   suggestionChip: false,
@@ -489,7 +497,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     followHerdrFocus: typeof record["followHerdrFocus"] === "boolean" ? record["followHerdrFocus"] : DEFAULT_SETTINGS.followHerdrFocus,
     chatFontFamily: sanitizeFontFamily(record["chatFontFamily"]),
     chatWidth: CHAT_WIDTHS.includes(record["chatWidth"] as ChatWidth) ? record["chatWidth"] as ChatWidth : DEFAULT_SETTINGS.chatWidth,
-    enterSends: typeof record["enterSends"] === "boolean" ? record["enterSends"] : DEFAULT_SETTINGS.enterSends,
+    // enterSends was saved with every record, so a stored true is the old default, not a choice
+    enterKey: ENTER_KEYS.find((key) => key === record["enterKey"]) ?? (record["enterSends"] === false ? "newline" : DEFAULT_SETTINGS.enterKey),
     autoSendQueued: typeof record["autoSendQueued"] === "boolean" ? record["autoSendQueued"] : DEFAULT_SETTINGS.autoSendQueued,
     composerNewTabButton: typeof record["composerNewTabButton"] === "boolean" ? record["composerNewTabButton"] : DEFAULT_SETTINGS.composerNewTabButton,
     suggestionChip: typeof record["suggestionChip"] === "boolean" ? record["suggestionChip"] : DEFAULT_SETTINGS.suggestionChip,
