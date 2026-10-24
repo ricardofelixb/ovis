@@ -2,7 +2,8 @@
  * Read aloud: one agent reply at a time is spoken by the server's Kokoro (shared/speech.ts). The reply loses what
  * a voice should not read (code, tables, links' addresses, markdown marks) and is cut into stretches that grow from
  * one sentence. The server makes a few stretches ahead while earlier ones play, and each is scheduled to start the
- * moment the one before ends, so speech starts after the first sentence and runs without breaks.
+ * moment the one before ends, so speech starts after the first sentence and runs without breaks. Pausing freezes
+ * the audio clock, and the last few replies keep their audio, so resuming or reading one again makes nothing twice.
  */
 import { useSyncExternalStore } from "react";
 import { SPEECH_MAX_CHARS, type SpeechVoice } from "../../shared/speech.ts";
@@ -63,8 +64,25 @@ export function speechChunks(text: string, size = 300): string[] {
   return chunks;
 }
 
-export type SpeechStatus = "idle" | "loading" | "playing" | "failed";
+export type SpeechStatus = "idle" | "loading" | "playing" | "paused" | "failed";
 interface Playback { id: string; status: SpeechStatus }
+
+/** Replies whose audio is kept, newest last; a long one is a few MB. */
+const KEPT = 4;
+const kept = new Map<string, { text: string; buffers: AudioBuffer[] }>();
+
+function keptAudio(id: string, voice: SpeechVoice, text: string): AudioBuffer[] {
+  const key = `${voice}:${id}`;
+  let entry = kept.get(key);
+  if (entry?.text !== text) entry = { text, buffers: [] };
+  kept.delete(key);
+  kept.set(key, entry);
+  for (const old of kept.keys()) {
+    if (kept.size <= KEPT) break;
+    kept.delete(old);
+  }
+  return entry.buffers;
+}
 
 let playback: Playback = { id: "", status: "idle" };
 let session = 0;
@@ -78,7 +96,7 @@ function set(next: Playback): void {
   for (const listener of listeners) listener();
 }
 
-/** Where `id` stands: only the reply being read is ever loading or playing. */
+/** Where `id` stands: only the reply being read is ever loading, playing or paused. */
 export function useSpeechStatus(id: string): SpeechStatus {
   return useSyncExternalStore(
     (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
@@ -96,6 +114,14 @@ export function stopSpeech(): void {
   }
   sources.clear();
   if (playback.status !== "idle") set({ id: "", status: "idle" });
+}
+
+/** Pauses or resumes the reply being read. Call it from the tap itself, as iOS resumes audio only on a gesture. */
+export function toggleSpeechPause(): void {
+  if (!context || (playback.status !== "playing" && playback.status !== "paused")) return;
+  const pausing = playback.status === "playing";
+  void (pausing ? context.suspend() : context.resume());
+  set({ id: playback.id, status: pausing ? "paused" : "playing" });
 }
 
 async function fetchChunk(text: string, voice: SpeechVoice, signal: AbortSignal): Promise<AudioBuffer> {
@@ -122,8 +148,10 @@ function schedule(buffer: AudioBuffer, at: number): Promise<void> {
  */
 export function speak(id: string, markdown: string, voice: SpeechVoice): void {
   stopSpeech();
-  const chunks = speechChunks(speechText(markdown));
+  const text = speechText(markdown);
+  const chunks = speechChunks(text);
   if (chunks.length === 0 || typeof AudioContext === "undefined") return;
+  const buffers = keptAudio(id, voice, text);
   context ??= new AudioContext();
   void context.resume();
   const mine = ++session;
@@ -133,8 +161,9 @@ export function speak(id: string, markdown: string, voice: SpeechVoice): void {
     const pending: Promise<AudioBuffer>[] = [];
     const ask = (index: number) => {
       if (index >= chunks.length) return;
-      const chunk = fetchChunk(chunks[index]!, voice, controller.signal);
-      chunk.catch(() => {}); // a failure surfaces when its turn is awaited
+      const ready = buffers[index];
+      const chunk = ready ? Promise.resolve(ready) : fetchChunk(chunks[index]!, voice, controller.signal);
+      chunk.then((buffer) => { buffers[index] = buffer; }, () => {}); // a failure surfaces when its turn is awaited
       pending[index] = chunk;
     };
     try {
@@ -148,7 +177,7 @@ export function speak(id: string, markdown: string, voice: SpeechVoice): void {
         const at = Math.max(context!.currentTime, end);
         end = at + buffer.duration;
         played = schedule(buffer, at);
-        if (playback.status !== "playing") set({ id, status: "playing" });
+        if (playback.status === "loading") set({ id, status: "playing" });
       }
       await played;
       if (mine === session) set({ id: "", status: "idle" });
