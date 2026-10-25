@@ -4,14 +4,14 @@
  * pi writes for the finished message is stamped later, so a last turn ending at or after it holds
  * the message itself.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
-import type { ConversationPart, ConversationTurn } from "../../shared/protocol.ts";
+import type { ConversationTurn } from "../../shared/protocol.ts";
 
-/** how often the typing moves on: about 15 frames a second, not one a screen refresh */
-export const LIVE_TYPE_MS = 66;
 /** a live message whose file is gone stays this long at most while the transcript is read */
 export const LIVE_HOLD_MS = 5000;
+/** how long a streamed reply's newest words stay dim when no more follow them */
+export const FRESH_MS = 200;
 
 export function liveLanded(turns: readonly ConversationTurn[], live: ConversationTurn): boolean {
   const last = turns.at(-1);
@@ -28,45 +28,72 @@ export function withLiveTurn(turns: ConversationTurn[], live: ConversationTurn |
   return [...turns.slice(0, -1), { ...last, end_ts: live.ts ?? last.end_ts, parts: [...last.parts, ...live.parts] }];
 }
 
-/**
- * How much of a growing text to draw after a step: what is left closes in about four steps, so a
- * burst pi wrote at once is typed out by the next read (every 250 ms), at least two characters a
- * step. Cut short of the end, it stops after a whole word, the next one's end when none ends sooner.
- */
-export function typedLength(text: string, shown: number): number {
-  if (shown >= text.length) return text.length;
-  const next = Math.min(text.length, shown + Math.max(2, Math.ceil((text.length - shown) / 4)));
-  if (next === text.length) return next;
-  const space = text.lastIndexOf(" ", next);
-  if (space > shown) return space;
-  // no word ends within the step: it finishes the word it is in
-  const after = text.indexOf(" ", next);
-  return after === -1 ? text.length : after;
+const FRESH = "live-fresh";
+let fresh: Highlight | null = null;
+
+/** The one highlight every chat's newest words join, drawn dim by `::highlight(live-fresh)`; null where there is no Highlight API. */
+function freshHighlight(): Highlight | null {
+  if (typeof CSS === "undefined" || !("highlights" in CSS) || typeof Highlight === "undefined") return null;
+  if (fresh === null) {
+    fresh = new Highlight();
+    CSS.highlights.set(FRESH, fresh);
+  }
+  return fresh;
 }
 
-type Typed = Extract<ConversationPart, { kind: "text" | "thinking" }>;
+/** A range over an element's text from a character offset to its end. */
+function rangeFrom(element: HTMLElement, offset: number): Range | null {
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let seen = 0;
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const length = node.textContent?.length ?? 0;
+    if (seen + length > offset) {
+      const range = document.createRange();
+      range.setStart(node, offset - seen);
+      range.setEnd(element, element.childNodes.length);
+      return range;
+    }
+    seen += length;
+  }
+  return null;
+}
 
 /**
- * The live message as it is typed: every part but the last drawn whole, the last (its text or its
- * thinking) up to where the typing is. What a part already held when it was first seen is drawn at
- * once (a chat opened mid-reply does not type it out again): only what it grows by is typed. Steps
- * run only while the chat is visible and something is left to type.
+ * While a turn streams, the words an update adds to its last block of prose start dim and settle
+ * at the next update, or after FRESH_MS when none follows. Each update is drawn as it comes, as
+ * pi's own screen does: the dimming is a highlight over text already there, so it costs no frame
+ * of its own. What the turn held when it was first seen is not new.
  */
-export function useTypedLive(live: ConversationTurn | null, visible: boolean): ConversationTurn | null {
-  const last = live?.parts.at(-1);
-  const typed = last !== undefined && (last.kind === "text" || last.kind === "thinking") ? last as Typed : null;
-  const key = live === null ? "" : `${live.ts ?? ""}:${live.parts.length - 1}`;
-  const total = typed?.text.length ?? 0;
-  const [shown, setShown] = useState({ key, length: total });
-  const length = shown.key === key ? shown.length : total;
-  useEffect(() => {
-    if (shown.key !== key) { setShown({ key, length: total }); return; }
-    if (!visible || typed === null || length >= total) return;
-    const timer = setTimeout(() => setShown({ key, length: typedLength(typed.text, length) }), LIVE_TYPE_MS);
-    return () => clearTimeout(timer);
-  }, [visible, typed, key, shown.key, length, total]);
-  if (live === null || typed === null || length >= total) return live;
-  return { ...live, parts: [...live.parts.slice(0, -1), { ...typed, text: typed.text.slice(0, length) }] };
+export function useFreshWords(article: RefObject<HTMLElement | null>, streaming: boolean, turn: ConversationTurn): void {
+  const last = useRef<{ element: HTMLElement; length: number } | null>(null);
+  const shown = useRef<{ range: Range; timer: ReturnType<typeof setTimeout> } | null>(null);
+  useLayoutEffect(() => {
+    const blocks = article.current?.querySelectorAll<HTMLElement>(".markdown");
+    const element = blocks?.[blocks.length - 1] ?? null;
+    const length = element?.textContent?.length ?? 0;
+    const before = last.current;
+    last.current = streaming && element !== null ? { element, length } : null;
+    const highlight = freshHighlight();
+    if (highlight === null || last.current === null || before === null) return;
+    const from = before.element === element ? before.length : 0;
+    const range = from < length && element !== null ? rangeFrom(element, from) : null;
+    if (range === null) return;
+    if (shown.current !== null) {
+      clearTimeout(shown.current.timer);
+      highlight.delete(shown.current.range);
+    }
+    const timer = setTimeout(() => {
+      highlight.delete(range);
+      if (shown.current?.range === range) shown.current = null;
+    }, FRESH_MS);
+    shown.current = { range, timer };
+    highlight.add(range);
+  }, [article, streaming, turn]);
+  useEffect(() => () => {
+    if (shown.current === null) return;
+    clearTimeout(shown.current.timer);
+    fresh?.delete(shown.current.range);
+  }, []);
 }
 
 /** The last live message, kept a while after its file goes: the transcript may not hold it yet. */

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, watch, type FSWatcher } from "node:fs";
+import { basename, dirname } from "node:path";
 import type { ConversationTurn, SessionSnapshot } from "../shared/protocol.ts";
 import { ConversationNotStarted, ConversationUnavailable, paneTranscript, type NativeTranscript } from "./conversation.ts";
 import { agyDatabasePath } from "./agy.ts";
@@ -15,6 +16,8 @@ interface WatchedConversation {
   observed?: string;
   /** the identity of pi's live-message file (ovis-model writes `<session>.live` while a reply streams) */
   live?: string;
+  /** pi's session folder, watched so a streamed reply is read when it is written, not at the next stat */
+  watcher?: { path: string; watcher: FSWatcher | null };
   nextResolve: number;
   resolving: boolean;
 }
@@ -67,6 +70,7 @@ export class ConversationMonitor {
   }
 
   unwatch(paneId: string): void {
+    this.panes.get(paneId)?.watcher?.watcher?.close();
     this.panes.delete(paneId);
     if (this.panes.size === 0) {
       clearInterval(this.timer);
@@ -76,6 +80,7 @@ export class ConversationMonitor {
 
   stop(): void {
     this.stopped = true;
+    for (const state of this.panes.values()) state.watcher?.watcher?.close();
     this.panes.clear();
     clearInterval(this.timer);
     this.timer = undefined;
@@ -102,8 +107,33 @@ export class ConversationMonitor {
     // Resolve once immediately on disappearance, not on every missing-file stat.
     if (identity === "missing" && observed !== state.observed) state.nextResolve = 0;
     this.publish(paneId, state, observed);
-    if (transcript.source === "pi-transcript") this.readLive(paneId, state, `${transcript.path}.live`);
+    if (transcript.source === "pi-transcript") {
+      this.watchFolder(paneId, state, transcript.path);
+      this.readLive(paneId, state, `${transcript.path}.live`);
+    } else if (state.watcher) {
+      state.watcher.watcher?.close();
+      state.watcher = undefined;
+    }
     return identity !== "missing";
+  }
+
+  /**
+   * Read a pi pane again as soon as its session or live file changes: the stat loop alone leaves a
+   * streamed reply up to its interval behind and in steps of it. Where the folder cannot be watched
+   * (out of watches, a gone folder) the stat loop still reads it.
+   */
+  private watchFolder(paneId: string, state: WatchedConversation, path: string): void {
+    if (state.watcher?.path === path) return;
+    state.watcher?.watcher?.close();
+    const names = new Set([basename(path), `${basename(path)}.live`]);
+    let watcher: FSWatcher | null = null;
+    try {
+      watcher = watch(dirname(path), { persistent: false }, (_event, name) => {
+        if (name !== null && names.has(name) && this.panes.get(paneId) === state) this.read(paneId, state);
+      });
+      watcher.on("error", () => watcher?.close());
+    } catch { watcher = null; }
+    state.watcher = { path, watcher };
   }
 
   private readLive(paneId: string, state: WatchedConversation, path: string): void {

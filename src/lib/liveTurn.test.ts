@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { ConversationTurn } from "../../shared/protocol.ts";
-import { typedLength, withLiveTurn } from "./liveTurn.ts";
+import { withLiveTurn } from "./liveTurn.ts";
 
 const user: ConversationTurn = { role: "user", ts: "2026-10-25T10:00:00.000Z", parts: [{ kind: "text", text: "hi" }] };
 const working: ConversationTurn = { role: "assistant", ts: "2026-10-25T10:00:01.000Z", end_ts: "2026-10-25T10:00:03.000Z", parts: [{ kind: "tool", name: "bash", summary: "ls", input: "{}", output: "a" }] };
@@ -19,15 +19,4 @@ describe("pi's live message", () => {
     expect(withLiveTurn(read, live)).toBe(read);
   });
 
-  test("typing closes on a burst in a few steps and stops after a whole word", () => {
-    const text = "one two three four five six seven eight nine ten";
-    let shown = 0, steps = 0;
-    while (shown < text.length) {
-      const next = typedLength(text, shown);
-      expect(next).toBeGreaterThan(shown);
-      if (next < text.length) expect(text[next]).toBe(" ");
-      shown = next; steps++;
-    }
-    expect(steps).toBeLessThanOrEqual(12);
-  });
 });
