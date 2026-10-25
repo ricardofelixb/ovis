@@ -356,6 +356,8 @@ export type ConversationPart =
   /** `error`: the call failed (the agent recorded it so, or its output says a command exited non-zero) */
   | {
     kind: "tool"; name: string; summary: string; input: string; output: string; error?: boolean;
+    /** no result yet: the call runs (pi), or the turn was cut off before it answered */
+    running?: true;
     /** Hermes could not load a tool-call list whose arguments exceeded its page limit. */
     arguments_omitted?: true;
     skill?: SkillActivity;
