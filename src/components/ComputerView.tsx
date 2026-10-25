@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Maximize2, Minimize2, Settings2 } from "lucide-react";
 import { t } from "../lib/i18n.ts";
-import { NO_STICKY_MODIFIERS, type StickyModifiers } from "../lib/keys.ts";
+import { NO_STICKY_MODIFIERS, hasModifiers, type StickyModifiers } from "../lib/keys.ts";
 import type { KeyBarKeyItem } from "../lib/keyBar.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { useSettings } from "../lib/settings.ts";
@@ -67,7 +67,7 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
   /** One key to the desktop, with the held modifiers, which a key without its own chord then lets go of. */
   const send = useCallback((key: string, own?: StickyModifiers) => {
     post({ screen: "key", key, modifiers: own ?? modifiersRef.current });
-    if (own === undefined && (modifiersRef.current.ctrl || modifiersRef.current.alt || modifiersRef.current.shift)) setModifiers(NO_STICKY_MODIFIERS);
+    if (own === undefined && hasModifiers(modifiersRef.current)) setModifiers(NO_STICKY_MODIFIERS);
   }, [post]);
 
   useEffect(() => {
@@ -161,7 +161,12 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
           onCompositionStart={() => { composingRef.current = true; }}
           onCompositionEnd={(event) => { composingRef.current = false; refill(event.currentTarget); }} />
         <KeyBar items={settings.keyBarItems} modifiers={modifiers}
-          onToggleModifier={(modifier) => setModifiers((held) => ({ ...held, [modifier]: !held[modifier] }))}
+          // Super tapped again while held is Super on its own: the desktop's app menu
+          onToggleModifier={(modifier) => {
+            if (modifier !== "super" || !modifiers.super) { setModifiers((held) => ({ ...held, [modifier]: !held[modifier] })); return; }
+            send("Super", NO_STICKY_MODIFIERS);
+            setModifiers(NO_STICKY_MODIFIERS);
+          }}
           onKey={(item: KeyBarKeyItem) => send(item.key, item.modifiers)}
           directTyping={!typing} directLabel={t("Keyboard")}
           onToggleDirect={() => { if (typing) fieldRef.current?.blur(); else fieldRef.current?.focus(); }} />

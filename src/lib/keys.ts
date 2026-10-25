@@ -21,11 +21,12 @@ export function sanitizeKeyBarExtras(value: unknown, fallback: readonly KeyBarEx
   return KEY_BAR_EXTRAS.filter((extra) => value.includes(extra));
 }
 
-export interface StickyModifiers { ctrl: boolean; alt: boolean; shift: boolean }
+/** super: a desktop's Super key, for the Computer view; a terminal chord has no Super, so it sends the key alone */
+export interface StickyModifiers { ctrl: boolean; alt: boolean; shift: boolean; super?: boolean }
 export const NO_STICKY_MODIFIERS: StickyModifiers = { ctrl: false, alt: false, shift: false };
 
 export function hasModifiers(modifiers: StickyModifiers): boolean {
-  return modifiers.ctrl || modifiers.alt || modifiers.shift;
+  return modifiers.ctrl || modifiers.alt || modifiers.shift || modifiers.super === true;
 }
 
 /** Ctrl+C/V remain native clipboard shortcuts on non-Latin layouts; Latin layouts keep their typed letter. */

@@ -4,7 +4,7 @@ import { Keyboard } from "lucide-react";
 import "./KeyBar.css";
 
 import type { KeyBarKey, StickyModifiers } from "../lib/keys.ts";
-import { keyBarItemId, keyBarItemLabel, type KeyBarItem, type KeyBarKeyItem } from "../lib/keyBar.ts";
+import { MODIFIER_CAPS, keyBarItemId, keyBarItemLabel, type KeyBarItem, type KeyBarKeyItem } from "../lib/keyBar.ts";
 import { createKeyRepeat, isRepeatableKeyBarItem, type KeyRepeat } from "../lib/keyRepeat.ts";
 import { useT } from "../lib/i18n.ts";
 
@@ -251,17 +251,17 @@ export function KeyBar({ onKey, modifiers, onToggleModifier, items, directTyping
       )}
       {items.map((item) => {
         if (item.type === "modifier") {
-          const cap = { ctrl: "Ctrl", alt: "Alt", shift: "Shift" }[item.modifier];
-          const dataKey = { ctrl: "Control", alt: "Alt", shift: "Shift" }[item.modifier];
+          const cap = MODIFIER_CAPS[item.modifier];
+          const dataKey = { ctrl: "Control", alt: "Alt", shift: "Shift", super: "Super" }[item.modifier];
           // Alt and Shift are said as written; Ctrl is not
           const label = item.modifier === "ctrl" ? t("Control") : undefined;
-          return <Key key={keyBarItemId(item)} disabled={disabled} dataKey={dataKey} label={label} pressed={modifiers[item.modifier]} onPress={() => onToggleModifier(item.modifier)}>{cap}</Key>;
+          return <Key key={keyBarItemId(item)} disabled={disabled} dataKey={dataKey} label={label} pressed={!!modifiers[item.modifier]} onPress={() => onToggleModifier(item.modifier)}>{cap}</Key>;
         }
         const arrow = ARROWS.find((candidate) => candidate.key === item.key);
         const spoken = spokenKey(item);
         // a chord keeps the notation Settings writes it in (Ctrl+Alt+Shift+key), its base key said
         const label = item.modifiers !== undefined
-          ? t("Press {key}", { key: [item.modifiers.ctrl && "Ctrl", item.modifiers.alt && "Alt", item.modifiers.shift && "Shift", spoken].filter(Boolean).join("+") })
+          ? t("Press {key}", { key: [item.modifiers.super && "Super", item.modifiers.ctrl && "Ctrl", item.modifiers.alt && "Alt", item.modifiers.shift && "Shift", spoken].filter(Boolean).join("+") })
           : spoken === keyBarItemLabel(item) ? undefined : spoken;
         return <Key key={keyBarItemId(item)} disabled={disabled} dataKey={item.modifiers === undefined ? item.key : keyBarItemId(item)} label={label} onPress={() => onKey(item)}
           repeatable={isRepeatableKeyBarItem(item)} holdScope={holdScope}>

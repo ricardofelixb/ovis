@@ -377,11 +377,11 @@ export function PaneTerminal({
   const coarseRef = useRef(coarse); coarseRef.current = coarse;
   const { settings, update: updateSettings } = useSettings();
   const availableModifiers = settings.keyBarItems.reduce((mask, item) => item.type === "modifier"
-    ? mask | { ctrl: 4, alt: 2, shift: 1 }[item.modifier] : mask, 0);
+    ? mask | { ctrl: 4, alt: 2, shift: 1, super: 8 }[item.modifier] : mask, 0);
   useLayoutEffect(() => {
     const current = modifiersRef.current;
-    const next = { ctrl: current.ctrl && !!(availableModifiers & 4), alt: current.alt && !!(availableModifiers & 2), shift: current.shift && !!(availableModifiers & 1) };
-    if (next.ctrl === current.ctrl && next.alt === current.alt && next.shift === current.shift) return;
+    const next = { ctrl: current.ctrl && !!(availableModifiers & 4), alt: current.alt && !!(availableModifiers & 2), shift: current.shift && !!(availableModifiers & 1), super: !!current.super && !!(availableModifiers & 8) };
+    if (next.ctrl === current.ctrl && next.alt === current.alt && next.shift === current.shift && next.super === !!current.super) return;
     modifiersRef.current = next;
     setModifiers(next);
   }, [availableModifiers]);

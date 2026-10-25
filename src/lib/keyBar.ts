@@ -60,7 +60,7 @@ export function migrateKeyBarItems(extras: readonly KeyBarExtra[]): KeyBarItem[]
 export const DEFAULT_KEY_BAR_ITEMS: KeyBarItem[] = [
   { type: "key", key: "Escape" }, { type: "key", key: "Tab" }, { type: "key", key: "ctrl-c" },
   { type: "modifier", modifier: "ctrl" }, { type: "modifier", modifier: "alt" }, { type: "modifier", modifier: "shift" },
-  { type: "key", key: "Enter" },
+  { type: "modifier", modifier: "super" }, { type: "key", key: "Enter" },
   { type: "key", key: "ArrowUp" }, { type: "key", key: "ArrowDown" }, { type: "key", key: "ArrowLeft" }, { type: "key", key: "ArrowRight" },
 ];
 
@@ -68,7 +68,7 @@ export const DEFAULT_KEY_BAR_ITEMS: KeyBarItem[] = [
 export function keyBarItemId(item: KeyBarItem): string {
   if (item.type === "modifier") return `modifier:${item.modifier}`;
   const modifiers = item.modifiers;
-  const policy = modifiers === undefined ? "held" : `${Number(modifiers.ctrl)}${Number(modifiers.alt)}${Number(modifiers.shift)}`;
+  const policy = modifiers === undefined ? "held" : `${Number(modifiers.ctrl)}${Number(modifiers.alt)}${Number(modifiers.shift)}${modifiers.super ? "1" : ""}`;
   return `key:${JSON.stringify(item.key)}:${policy}`;
 }
 
@@ -78,12 +78,14 @@ const CAPS: Readonly<Record<string, string>> = {
   "ctrl-c": "^C", "ctrl-d": "^D", "ctrl-z": "^Z", pipe: "|", tilde: "~", slash: "/", " ": "Space",
 };
 
+export const MODIFIER_CAPS: Readonly<Record<keyof StickyModifiers, string>> = { ctrl: "Ctrl", alt: "Alt", shift: "Shift", super: "Super" };
+
 /** Key caps are keyboard notation rather than translated prose. */
 export function keyBarItemLabel(item: KeyBarItem): string {
-  if (item.type === "modifier") return ({ ctrl: "Ctrl", alt: "Alt", shift: "Shift" })[item.modifier];
+  if (item.type === "modifier") return MODIFIER_CAPS[item.modifier];
   const cap = CAPS[item.key] ?? item.key;
   if (item.modifiers === undefined) return cap;
-  return [item.modifiers.ctrl && "Ctrl", item.modifiers.alt && "Alt", item.modifiers.shift && "Shift", cap].filter(Boolean).join("+");
+  return [item.modifiers.super && "Super", item.modifiers.ctrl && "Ctrl", item.modifiers.alt && "Alt", item.modifiers.shift && "Shift", cap].filter(Boolean).join("+");
 }
 
 function sanitizeItem(raw: unknown): KeyBarItem | null {
@@ -91,7 +93,7 @@ function sanitizeItem(raw: unknown): KeyBarItem | null {
   const record = raw as Record<string, unknown>;
   if (record["type"] === "modifier") {
     const modifier = record["modifier"];
-    return modifier === "ctrl" || modifier === "alt" || modifier === "shift" ? { type: "modifier", modifier } : null;
+    return modifier === "ctrl" || modifier === "alt" || modifier === "shift" || modifier === "super" ? { type: "modifier", modifier } : null;
   }
   const key = record["key"];
   if (record["type"] !== "key" || typeof key !== "string" || keyBarInputSequence(key, false) === null) return null;
@@ -99,7 +101,7 @@ function sanitizeItem(raw: unknown): KeyBarItem | null {
   const rawModifiers = record["modifiers"];
   if (typeof rawModifiers !== "object" || rawModifiers === null || Array.isArray(rawModifiers)) return null;
   const modifiers = rawModifiers as Record<string, unknown>;
-  return { type: "key", key, modifiers: { ctrl: modifiers["ctrl"] === true, alt: modifiers["alt"] === true, shift: modifiers["shift"] === true } };
+  return { type: "key", key, modifiers: { ctrl: modifiers["ctrl"] === true, alt: modifiers["alt"] === true, shift: modifiers["shift"] === true, ...(modifiers["super"] === true ? { super: true } : {}) } };
 }
 
 /** Keep explicit removals/order; malformed entries cannot inject text blocks or terminal sequences. */
