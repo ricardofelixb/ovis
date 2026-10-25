@@ -1876,17 +1876,13 @@ button {
   flex: 0 0 auto;
 }
 
-/* From 769px the lens switch is its two words and nothing around them: no track, no glyphs, the
-   chosen lens on the hover fill. Files follows it as an action of its own, after a hairline. */
+/* From 769px the lens switch is its icons and nothing around them: no track, the chosen lens on
+   the hover fill. Files follows it as an action of its own, after a hairline. */
 @media (min-width: 769px) {
   .app-header .view-switch {
     padding: 0;
     background: transparent;
     border-color: transparent;
-  }
-
-  .app-header .view-switch > button svg {
-    display: none;
   }
 }
 
@@ -2771,11 +2767,6 @@ button {
   .header-desktop-only {
     display: none;
   }
-}
-
-/* just above phone width the lens labels would squeeze the pane title to a glyph: icons only */
-@media (max-width: 560px) {
-  .view-switch .header-desktop-only { display: none; }
 }
 
 /* phones: every header control is a full thumb target. The lens track draws smaller than the bar,

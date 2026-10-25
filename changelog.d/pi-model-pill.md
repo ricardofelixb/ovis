@@ -9,3 +9,5 @@
 - The context ring stands before the model pill and a tap shows its numbers in a bubble, on a phone
   too. pi's has no Compact button.
 - The model pill no longer draws the agent's mark: the header names the agent.
+- The Chat, Terminal and Computer switch in the header is icons only at every width; each
+  button keeps its name for screen readers and its tooltip.

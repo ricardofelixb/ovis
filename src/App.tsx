@@ -1681,18 +1681,15 @@ export function App() {
         )}
         {selectedPane && (
           <div className="segmented view-switch" role="group" aria-label="Pane view">
-            <button type="button" aria-pressed={!computerOpen && view === "chat"} onClick={() => { setComputerOpen(false); setView("chat"); setDrawerOpen(false); }} title={t("Chat transcript (⌘⇧J)")}>
-              <MessageSquare />
-              <span className="header-desktop-only">{t("Chat")}</span>
+            <button type="button" aria-pressed={!computerOpen && view === "chat"} onClick={() => { setComputerOpen(false); setView("chat"); setDrawerOpen(false); }} aria-label={t("Chat")} title={t("Chat transcript (⌘⇧J)")}>
+              <MessageSquare aria-hidden="true" />
             </button>
-            <button type="button" aria-pressed={!computerOpen && view === "terminal"} onClick={() => { setComputerOpen(false); setView("terminal"); setDrawerOpen(false); }} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
-              <SquareTerminal />
-              <span className="header-desktop-only">{t("Terminal")}</span>
+            <button type="button" aria-pressed={!computerOpen && view === "terminal"} onClick={() => { setComputerOpen(false); setView("terminal"); setDrawerOpen(false); }} aria-label={t("Terminal")} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
+              <SquareTerminal aria-hidden="true" />
               {!terminalAttach && <span className="pill pill-soon">{t("soon")}</span>}
             </button>
-            <button type="button" aria-pressed={computerOpen} onClick={() => { setComputerOpen(true); setDrawerOpen(false); }} title={t("The PC's desktop")}>
-              <Monitor />
-              <span className="header-desktop-only">{t("Computer")}</span>
+            <button type="button" aria-pressed={computerOpen} onClick={() => { setComputerOpen(true); setDrawerOpen(false); }} aria-label={t("Computer")} title={t("The PC's desktop")}>
+              <Monitor aria-hidden="true" />
             </button>
           </div>
         )}
