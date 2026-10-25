@@ -55,6 +55,7 @@ import { SnapshotRequests } from "./lib/snapshotRequests.ts";
 import { ReorderCoordinator } from "./lib/workspaceOrder.ts";
 import { ReorderContext } from "./lib/machineContext.tsx";
 import { alertPrefs, useSettings } from "./lib/settings.ts";
+import { readComputerSettings } from "./lib/computerSettings.ts";
 import { formatKeys, shortcutDisplayKeys, useShortcuts } from "./lib/shortcuts.ts";
 import { useMediaQuery } from "./lib/useMediaQuery.ts";
 import { useAnnouncedText } from "./lib/useAnnouncedText.ts";
@@ -430,16 +431,17 @@ export function App() {
   const [filesOpen, setFilesOpen] = useState(false);
   // the Computer view (ComputerView) over the active half, until Chat or Terminal is picked again
   const [computerOpen, setComputerOpen] = useState(false);
-  // and kept connected, out of sight, for 2 minutes after: coming back within them needs no new connection
+  // and kept connected, out of sight, for the minutes its settings give after (2 by default): coming back within
+  // them needs no new connection
   const [computerKept, setComputerKept] = useState(false);
   useEffect(() => {
     if (computerOpen) {
       setComputerKept(true);
       return;
     }
-    const timer = setTimeout(() => setComputerKept(false), 120_000);
+    const timer = setTimeout(() => setComputerKept(false), Number(readComputerSettings(selectedMachineId).keep) * 60_000);
     return () => clearTimeout(timer);
-  }, [computerOpen]);
+  }, [computerOpen, selectedMachineId]);
   const { viewing, openFile, closeFile, setPresentation, releaseFile } = useFileViewer();
   // a repository diff from the Files dialog's Changes tab, an entry of its own like a file
   const { viewing: diffViewing, openDiff, closeDiff, releaseDiff } = useRepoDiffViewer();

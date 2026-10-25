@@ -42,10 +42,16 @@
   display: block;
 }
 
-.computer-view-full {
+/* the gear and full screen, see-through over the desktop's corner; the settings open under them */
+.computer-view-corner {
   position: absolute;
   top: 8px;
   right: 8px;
+  display: flex;
+  gap: 6px;
+}
+
+.computer-view-button {
   display: grid;
   place-items: center;
   width: 32px;
@@ -59,14 +65,66 @@
   cursor: pointer;
 }
 
-.computer-view-full:hover,
-.computer-view-full:focus-visible {
+.computer-view-button:hover,
+.computer-view-button:focus-visible,
+.computer-view-button[aria-expanded="true"] {
   opacity: 1;
 }
 
-.computer-view-full svg {
+.computer-view-button svg {
   width: 18px;
   height: 18px;
+}
+
+.computer-view-settings {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(340px, calc(100vw - 16px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  /* down to near the view's bottom; the rest scrolls */
+  max-height: calc(var(--app-height, 100dvh) - 120px);
+  overscroll-behavior: contain;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  overflow-y: auto;
+  color: var(--text);
+  background: var(--bg-panel);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-pop);
+}
+
+.computer-view-settings-head {
+  color: var(--text-dim);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+}
+
+/* as narrow as a phone at any width: each control under its label, as wide as the card */
+.computer-view-settings .settings-card > .settings-row {
+  padding: var(--space-2) var(--space-3);
+}
+
+.computer-view-settings .settings-row.is-wide {
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.computer-view-settings .settings-row.is-wide > .settings-segmented {
+  display: flex;
+}
+
+.computer-view-settings .settings-row.is-wide > .settings-segmented > button {
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+  padding: 0 var(--space-2);
 }
 
 /* the phone's keyboard types here; nothing of it shows */

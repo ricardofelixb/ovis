@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, Settings2 } from "lucide-react";
 import { t } from "../lib/i18n.ts";
 import { NO_STICKY_MODIFIERS, type StickyModifiers } from "../lib/keys.ts";
 import type { KeyBarKeyItem } from "../lib/keyBar.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { useSettings } from "../lib/settings.ts";
+import { useComputerSettings, viewerOptions, type ComputerSettings } from "../lib/computerSettings.ts";
 import { KeyBar } from "./KeyBar.tsx";
+import { SettingsRow, Segmented, Toggle } from "./SettingsControls.tsx";
 import "./ComputerView.css";
 
 type Screen = { path: string } | { error: string } | null;
@@ -21,11 +23,19 @@ const KEYS = new Set(["Escape", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "Arr
  * under it. The server opens screen-here's bridge to that PC (server/screen.ts) and passes on its
  * viewer, which carries the desktop, its sound and a login when the PC asks for one. On a touch
  * screen the viewer works as a trackpad, and the Terminal's key bar and the phone's keyboard type
- * into the desktop through it. `hidden` keeps it connected out of sight.
+ * into the desktop through it. Its settings (computerSettings.ts) change the view live. `hidden`
+ * keeps it connected out of sight.
  */
 export function ComputerView({ machineId, machineName, hidden }: { machineId: string; machineName: string; hidden: boolean }) {
   const [screen, setScreen] = useState<Screen>(null);
   const [full, setFull] = useState(false);
+  const [tuning, setTuning] = useState(false);
+  // whether the PC's desktop follows the view's size, as the viewer says once it has loaded
+  const [resizes, setResizes] = useState(false);
+  const [computer, setComputer] = useComputerSettings(machineId);
+  const computerRef = useRef(computer);
+  computerRef.current = computer;
+  const tuningRef = useRef<HTMLDivElement | null>(null);
   const [typing, setTyping] = useState(false);
   const [modifiers, setModifiers] = useState<StickyModifiers>(NO_STICKY_MODIFIERS);
   const modifiersRef = useRef(modifiers);
@@ -45,7 +55,9 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
       .then(async (response) => {
         const body = await response.json().catch(() => null) as { path?: string; error?: { message?: string } } | null;
         if (!live) return;
-        setScreen(response.ok && body?.path ? { path: body.path } : { error: body?.error?.message ?? t("This PC's desktop can't be shown.") });
+        // the settings as they are now go in the address; a change after goes to the loaded page (below)
+        const options = encodeURIComponent(JSON.stringify(viewerOptions(computerRef.current)));
+        setScreen(response.ok && body?.path ? { path: `${body.path}#${options}` } : { error: body?.error?.message ?? t("This PC's desktop can't be shown.") });
       })
       .catch(() => { if (live) setScreen({ error: t("This PC's desktop can't be shown.") }); });
     return () => { live = false; };
@@ -63,7 +75,29 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
     if (!hidden) return;
     fieldRef.current?.blur();
     setFull(false);
+    setTuning(false);
   }, [hidden, post]);
+
+  useEffect(() => post({ screen: "options", options: viewerOptions(computer) }), [computer, post]);
+  useEffect(() => {
+    const ready = ({ source, data }: MessageEvent): void => {
+      if (source === frameRef.current?.contentWindow && data?.screen === "ready") setResizes(data.resizes === true);
+    };
+    addEventListener("message", ready);
+    return () => removeEventListener("message", ready);
+  }, []);
+  // The settings close on a press outside them; one on the desktop lands in its page, which this one hears as a blur
+  useEffect(() => {
+    if (!tuning) return;
+    const outside = (event: PointerEvent): void => { if (!tuningRef.current?.contains(event.target as Node)) setTuning(false); };
+    const away = (): void => setTuning(false);
+    document.addEventListener("pointerdown", outside);
+    addEventListener("blur", away);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      removeEventListener("blur", away);
+    };
+  }, [tuning]);
 
   // Full screen: the view covers the page, and the browser's own full screen hides the phone's bars where it may
   useEffect(() => {
@@ -107,10 +141,17 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
       <div className="computer-view-desktop">
         <iframe ref={frameRef} src={screen.path} title={t("{name}'s desktop", { name: machineName })} allow="autoplay; clipboard-read; clipboard-write"
           onLoad={() => post({ screen: "shown", shown: !hidden })} />
-        <button type="button" className="computer-view-full" aria-label={t(full ? "Exit full screen" : "Full screen")} title={t(full ? "Exit full screen" : "Full screen")}
-          onClick={() => setFull((value) => !value)}>
-          {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
-        </button>
+        <div ref={tuningRef} className="computer-view-corner" onKeyDown={(event) => { if (event.key === "Escape" && tuning) { event.stopPropagation(); setTuning(false); } }}>
+          <button type="button" className="computer-view-button" aria-label={t("View settings")} title={t("View settings")} aria-expanded={tuning}
+            onClick={() => setTuning((value) => !value)}>
+            <Settings2 aria-hidden="true" />
+          </button>
+          <button type="button" className="computer-view-button" aria-label={t(full ? "Exit full screen" : "Full screen")} title={t(full ? "Exit full screen" : "Full screen")}
+            onClick={() => setFull((value) => !value)}>
+            {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
+          </button>
+          {tuning && <ViewSettings settings={computer} onChange={setComputer} resizes={resizes} touch={coarse} />}
+        </div>
       </div>
       {coarse && <>
         <textarea ref={fieldRef} className="computer-view-field" defaultValue={PAD} aria-label={t("Type on {name}", { name: machineName })}
@@ -124,6 +165,44 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
           directTyping={!typing} directLabel={t("Keyboard")}
           onToggleDirect={() => { if (typing) fieldRef.current?.blur(); else fieldRef.current?.focus(); }} />
       </>}
+    </div>
+  );
+}
+
+/** The Computer view's settings for this PC, on this device. */
+function ViewSettings({ settings, onChange, resizes, touch }: { settings: ComputerSettings; onChange: (patch: Partial<ComputerSettings>) => void; resizes: boolean; touch: boolean }) {
+  return (
+    <div className="computer-view-settings" role="dialog" aria-label={t("View settings")}>
+      <header className="computer-view-settings-head">{t("View on this device")}</header>
+      <div className="settings-card">
+        {resizes && <SettingsRow label={t("Fit")} wide>
+          <Segmented label={t("Fit")} value={settings.fit} onChange={(fit) => onChange({ fit })}
+            options={[{ value: "resize", label: t("Resize the PC") }, { value: "scale", label: t("Keep its size") }]} />
+        </SettingsRow>}
+        {resizes && settings.fit === "resize" && <SettingsRow label={t("Sharpness")} wide>
+          <Segmented label={t("Sharpness")} value={settings.sharpness} onChange={(sharpness) => onChange({ sharpness })}
+            options={[{ value: "1", label: "1×" }, { value: "1.5", label: "1.5×" }, { value: "2", label: "2×" }]} />
+        </SettingsRow>}
+        <SettingsRow label={t("Quality")} wide>
+          <Segmented label={t("Quality")} value={settings.quality} onChange={(quality) => onChange({ quality })}
+            options={[{ value: "low", label: t("Low") }, { value: "medium", label: t("Medium") }, { value: "high", label: t("High") }]} />
+        </SettingsRow>
+        {touch && <SettingsRow label={t("Touch")} wide>
+          <Segmented label={t("Touch")} value={settings.cursor} onChange={(cursor) => onChange({ cursor })}
+            options={[{ value: "trackpad", label: t("Trackpad") }, { value: "direct", label: t("Tap to click") }]} />
+        </SettingsRow>}
+        {touch && settings.cursor === "trackpad" && <SettingsRow label={t("Trackpad speed")} wide>
+          <Segmented label={t("Trackpad speed")} value={settings.speed} onChange={(speed) => onChange({ speed })}
+            options={[{ value: "slow", label: t("Slow") }, { value: "normal", label: t("Normal") }, { value: "fast", label: t("Fast") }]} />
+        </SettingsRow>}
+        <SettingsRow label={t("Keep connected")} description={t("After you switch to Chat or Terminal")} wide>
+          <Segmented label={t("Keep connected")} value={settings.keep} onChange={(keep) => onChange({ keep })}
+            options={[{ value: "0", label: t("Off") }, { value: "2", label: t("2 min") }, { value: "5", label: t("5 min") }, { value: "10", label: t("10 min") }]} />
+        </SettingsRow>
+        <SettingsRow label={t("Sound")}>
+          <Toggle label={t("Sound")} checked={settings.sound} onChange={(sound) => onChange({ sound })} />
+        </SettingsRow>
+      </div>
     </div>
   );
 }
