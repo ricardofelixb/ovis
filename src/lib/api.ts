@@ -350,11 +350,16 @@ export async function fetchPaneConversation(paneId: string, machineId = "local",
   const url = conversationUrl(paneId, machineId, page);
   const polled = page.before === undefined;
   const known = polled ? conversationAnswers.get(url) : undefined;
-  const { response, body } = await withChatReadDeadline(async (signal) => {
-    const response = await fetch(url, { cache: "no-store", signal, ...(known && !page.fresh ? { headers: { "if-none-match": known.etag } } : {}) });
-    if (response.status === 304 && known) return { response, body: known.body };
+  const { response, body, whole } = await withChatReadDeadline(async (signal) => {
+    // naming the answer held asks for only the turns that changed since it (server/conversation-delta.ts);
+    // a fresh read gets those too, only never the 304 that hands back the held answer itself
+    const held = known === undefined ? url : `${url}&delta=${encodeURIComponent(known.etag)}`;
+    const response = await fetch(held, { cache: "no-store", signal, ...(known && !page.fresh ? { headers: { "if-none-match": known.etag } } : {}) });
+    if (response.status === 304 && known) return { response, body: known.body, whole: true };
     if (!response.ok) throw await errorFrom(url, response);
-    return { response, body: (await response.json()) as ConversationResponse };
+    const { delta, ...answer } = (await response.json()) as ConversationResponse & { delta?: { drop: number; keep: number } };
+    if (delta === undefined || known === undefined) return { response, body: answer, whole: true };
+    return { response, body: { ...answer, turns: [...known.body.turns.slice(delta.drop, delta.drop + delta.keep), ...answer.turns] }, whole: false };
   }, chatReadDeadlineMs(machineId));
   // Cache changes occur after the bounded read: a late, aborted answer cannot replace it.
   if (response.status === 304 && known) {
@@ -366,7 +371,8 @@ export async function fetchPaneConversation(paneId: string, machineId = "local",
   if (!polled) return body;
   conversationAnswers.delete(url);
   if (etag !== null) {
-    conversationAnswers.set(url, { etag, body, bytes: conversationAnswerBytes(body, response.headers.get("content-length"), response.headers.get("content-encoding")) });
+    // a delta's length is not the answer's: that is measured from the turns put together
+    conversationAnswers.set(url, { etag, body, bytes: conversationAnswerBytes(body, whole ? response.headers.get("content-length") : null, response.headers.get("content-encoding")) });
     trimConversationAnswers(url);
   }
   return body;

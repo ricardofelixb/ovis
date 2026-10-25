@@ -14,7 +14,7 @@ import { parseOsc52 } from "./osc52.ts";
 import { matchHerdrWidths } from "./terminalWidths.ts";
 import { paneStorageId } from "../../shared/machines.ts";
 import { secretPrompt } from "../../shared/secret-prompt.ts";
-import type { ClientRole, ServerMessage } from "../../shared/protocol.ts";
+import type { ClientRole, ConversationTurn, ServerMessage } from "../../shared/protocol.ts";
 import { terminalTheme, type Palette, type ResolvedTheme, type Settings } from "./settings.ts";
 import { TERMINAL_FONT_STACK } from "./fontFamily.ts";
 import type { Translate } from "./i18n.ts";
@@ -105,6 +105,8 @@ export interface TerminalMountDeps {
   secretRef: RefObject<string | null>;
   sessionRef: RefObject<MachineSession | null>;
   setChatInvalidation: Dispatch<SetStateAction<number>>;
+  /** the message pi is writing in this pane (conversation-live), null once it is gone */
+  setChatLive: Dispatch<SetStateAction<ConversationTurn | null>>;
   setChatRefresh: Dispatch<SetStateAction<number>>;
   setChatSent: Dispatch<SetStateAction<number>>;
   setComposing: (active: boolean) => void;
@@ -147,7 +149,7 @@ export interface TerminalMountDeps {
 }
 
 export function useTerminalMount(deps: TerminalMountDeps): void {
-  const { activeRef, barKeyRef, baseFontRef, cachedRef, cachedReleaseRef, cancelLeaveRef, chatMountedRef, chatOutputRef, chatViewRef, clearModifiers, clipboardTimerRef, coarseRef, composingRef, compositionCommitPendingRef, deferAttachRef, draftHeldForRef, draftPaneRef, endedRef, findOpenRef, fitRef, fittedRef, fixedGridRef, followCursorRef, followRef, frameGateRef, heldRef, hostRef, hyperlinksRef, keyboardHoldsRef, leaveRef, lineScroll, machineId, machineSessions, mirroredRef, modifiersRef, modifyOtherKeysRef, narrowFontRef, noteClipboard, observeRef, onChatSuggestion, onInputRowFrameRef, onRoleAckRef, onServerMessageRef, openFileRef, openWebRef, osc52AllowedRef, outputTargetRef, palette, paneRef, pendingEpochRef, pendingScopeRef, pendingSubmissionsRef, pinchBadgeRef, pinchStatusRef, presentationRef, presentedRef, reassertIfStaleRef, reattachRef, redrawGreeting, releaseAwayRef, releaseRef, releasedRef, retireOutputRef, secretRef, sessionRef, setChatInvalidation, setChatRefresh, setChatSent, setComposing, setConnected, setConnectedBefore, setConversationPushes, setDraft, setEnded, setHeld, setInputError, setInputReady, setObserving, setOutputError, setOutputReady, setParsedTarget, setReleased, setSecret, setSelectionQuote, setTerminal, setUnsupported, setWatching, sharedGridRef, shortcutSettings, shownRef, sizesPty, socketRef, stackRef, stalledRef, stopKeyRef, submitRetention, t, tRef, termRef, terminalFontSize, theme, updateSettings, uploadFileRef, watchingRef, wheelStateRef } = deps;
+  const { activeRef, barKeyRef, baseFontRef, cachedRef, cachedReleaseRef, cancelLeaveRef, chatMountedRef, chatOutputRef, chatViewRef, clearModifiers, clipboardTimerRef, coarseRef, composingRef, compositionCommitPendingRef, deferAttachRef, draftHeldForRef, draftPaneRef, endedRef, findOpenRef, fitRef, fittedRef, fixedGridRef, followCursorRef, followRef, frameGateRef, heldRef, hostRef, hyperlinksRef, keyboardHoldsRef, leaveRef, lineScroll, machineId, machineSessions, mirroredRef, modifiersRef, modifyOtherKeysRef, narrowFontRef, noteClipboard, observeRef, onChatSuggestion, onInputRowFrameRef, onRoleAckRef, onServerMessageRef, openFileRef, openWebRef, osc52AllowedRef, outputTargetRef, palette, paneRef, pendingEpochRef, pendingScopeRef, pendingSubmissionsRef, pinchBadgeRef, pinchStatusRef, presentationRef, presentedRef, reassertIfStaleRef, reattachRef, redrawGreeting, releaseAwayRef, releaseRef, releasedRef, retireOutputRef, secretRef, sessionRef, setChatInvalidation, setChatLive, setChatRefresh, setChatSent, setComposing, setConnected, setConnectedBefore, setConversationPushes, setDraft, setEnded, setHeld, setInputError, setInputReady, setObserving, setOutputError, setOutputReady, setParsedTarget, setReleased, setSecret, setSelectionQuote, setTerminal, setUnsupported, setWatching, sharedGridRef, shortcutSettings, shownRef, sizesPty, socketRef, stackRef, stalledRef, stopKeyRef, submitRetention, t, tRef, termRef, terminalFontSize, theme, updateSettings, uploadFileRef, watchingRef, wheelStateRef } = deps;
 
     // Install before the pane layout effect so resets cancel pending input before the next task.
     useLayoutEffect(() => {
@@ -855,6 +857,11 @@ export function useTerminalMount(deps: TerminalMountDeps): void {
         if (message.type === "conversation-changed" && message.pane_id === paneRef.current
           && chatMountedRef.current && document.visibilityState !== "hidden") {
           setChatInvalidation((current) => current + 1);
+        }
+        // a hidden page sends no watch (ChatView turns it off), so a late frame is all that is ignored here
+        if (message.type === "conversation-live" && message.pane_id === paneRef.current
+          && chatMountedRef.current && document.visibilityState !== "hidden") {
+          setChatLive(message.turn);
         }
         if (paneRef.current) setInputReady(socket.canInput(paneRef.current));
         if (message.type === "input-ready" || message.type === "output-recovering") {

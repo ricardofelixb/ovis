@@ -830,6 +830,10 @@ export type ServerMessage =
   | { type: "pane-status"; pane_id: string; agent_status: AgentStatus; finish_id?: number; finish_epoch?: string; /** a pane's running background tasks (OmO's, or a Claude Code pane's subagents and commands), when the frame is about them: it changes no status */ background_tasks?: number; /** every frame says it: absent, the pane does not wait on its turn's background work */ background_wait?: true; /** a pane's plan, when the frame is about it (null: it keeps none now); it changes no status */ plan?: PlanSummary | null }
   /** Native transcript invalidation for an interested attached pane; signature is opaque, not a REST ETag. Refetch the existing conversation endpoint. */
   | { type: "conversation-changed"; pane_id: string; signature: string }
+  /** The message pi is writing in an interested attached pane, as a turn of its parts so far (ovis-model's live
+   * file), or null once it is gone. Its `ts` is when the message began: the transcript's last turn ending at or
+   * after it holds the message itself. Nothing is pushed for agents that stream no live message. */
+  | { type: "conversation-live"; pane_id: string; turn: ConversationTurn | null }
   /** a pane's process exited (pushed even when nobody is attached to it) */
   | { type: "pane-exited"; pane_id: string }
   /** session structure changed (pane created/closed): refetch /api/session */
