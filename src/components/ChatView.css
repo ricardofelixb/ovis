@@ -233,6 +233,23 @@
   .chat-speak-progress { animation: none; }
 }
 
+/* a message just sent from here comes out of the composer: it fades in and settles, once, as its
+   turn is first read (.chat-turn-new) or, for a command, as its sent row appears */
+.chat-turn-new .chat-bubble,
+.chat-turn-sent .chat-bubble {
+  transform-origin: bottom right;
+  animation: chat-bubble-pop 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes chat-bubble-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-turn-new .chat-bubble,
+  .chat-turn-sent .chat-bubble { animation: none; }
+}
+
 .chat-turn-agent {
   display: flex;
   flex-direction: column;

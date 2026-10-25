@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { statSync } from "node:fs";
-import type { SessionSnapshot } from "../shared/protocol.ts";
+import { readFileSync, statSync } from "node:fs";
+import type { ConversationTurn, SessionSnapshot } from "../shared/protocol.ts";
 import { ConversationNotStarted, ConversationUnavailable, paneTranscript, type NativeTranscript } from "./conversation.ts";
 import { agyDatabasePath } from "./agy.ts";
 import { sessionSnapshot } from "./herdr/client.ts";
+import { parseOmpTranscript } from "./transcript-records.ts";
 
 const STAT_INTERVAL_MS = 250;
 const RESOLVE_INTERVAL_MS = 5000;
@@ -12,6 +13,8 @@ const MISSING_RESOLVE_INTERVAL_MS = 2000;
 interface WatchedConversation {
   transcript: NativeTranscript | null;
   observed?: string;
+  /** the identity of pi's live-message file (ovis-model writes `<session>.live` while a reply streams) */
+  live?: string;
   nextResolve: number;
   resolving: boolean;
 }
@@ -23,13 +26,24 @@ function fileIdentity(path: string): string {
   } catch { return "missing"; }
 }
 
-/** One server-local stat loop, one resolution per interested pane, never a turn parser. SQLite includes its WAL. */
+/** The message pi is writing, as the turn its line reads as; null when there is none or it cannot be read. */
+function liveTurn(path: string): ConversationTurn | null {
+  try {
+    const turn = parseOmpTranscript(readFileSync(path, "utf8"), 1).at(-1);
+    return turn?.role === "assistant" ? turn : null;
+  } catch { return null; }
+}
+
+/** One server-local stat loop, one resolution per interested pane, never a turn parser. SQLite includes its WAL.
+ * The one parse is pi's live message: a single line, read only when its file changed. */
 export class ConversationMonitor {
   private readonly panes = new Map<string, WatchedConversation>();
   private readonly salt = randomUUID();
   private timer?: ReturnType<typeof setInterval>;
   private snapshot: Promise<SessionSnapshot> | null = null;
   private stopped = false;
+  /** told pi's live message for a pane whenever it changes: its turn, or null once it is gone */
+  liveChanged?: (paneId: string, turn: ConversationTurn | null) => void;
 
   constructor(
     private readonly changed: (paneId: string, signature: string) => void,
@@ -88,7 +102,18 @@ export class ConversationMonitor {
     // Resolve once immediately on disappearance, not on every missing-file stat.
     if (identity === "missing" && observed !== state.observed) state.nextResolve = 0;
     this.publish(paneId, state, observed);
+    if (transcript.source === "pi-transcript") this.readLive(paneId, state, `${transcript.path}.live`);
     return identity !== "missing";
+  }
+
+  private readLive(paneId: string, state: WatchedConversation, path: string): void {
+    const identity = fileIdentity(path);
+    if (identity === state.live) return;
+    // a pane first watched with no reply under way has nothing to clear
+    const first = state.live === undefined;
+    state.live = identity;
+    if (identity === "missing" && first) return;
+    this.liveChanged?.(paneId, identity === "missing" ? null : liveTurn(path));
   }
 
   private poll(): void {

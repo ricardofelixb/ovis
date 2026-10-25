@@ -85,6 +85,13 @@ export function createTerminalRegistry({ options, clients, stopped, terminalAtta
       }
     }
   }, options.codexHome, options.devinDbPath, options.opencodeDb, options.hermesHome, options.grokHome);
+  conversations.liveChanged = (paneId, turn) => {
+    for (const client of clients) {
+      if (!connectionOf(client).closing && client.readyState === WebSocket.OPEN && client.data.attached.has(paneId) && client.data.conversationInterests.has(paneId)) {
+        send(client, { type: "conversation-live", pane_id: paneId, turn });
+      }
+    }
+  };
 
   function releaseConversation(paneId: string): void {
     for (const client of clients) {
