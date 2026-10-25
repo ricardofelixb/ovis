@@ -1872,12 +1872,8 @@ button {
 }
 
 /* A phone's header names the pane's branch on a dim line under the title instead of the crumb
-   (HeaderBranch.tsx): the two lines share the one-line header's height */
+   (HeaderBranch.tsx), lined up with the name: the two lines share the one-line header's height */
 .context.has-branch {
-  flex-flow: column nowrap;
-  align-items: flex-start;
-  justify-content: center;
-  row-gap: 0;
   max-height: none;
 }
 
@@ -1885,10 +1881,14 @@ button {
   min-height: 0;
 }
 
+.context-title-stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .context-branch {
   display: flex;
-  align-items: center;
-  gap: var(--space-1);
   max-width: 100%;
   min-width: 0;
   padding: 0;
@@ -1897,14 +1897,11 @@ button {
   color: var(--text-dim);
   font: inherit;
   font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  letter-spacing: normal;
   line-height: var(--lh-tight);
+  text-align: left;
   cursor: pointer;
-}
-
-.context-branch svg {
-  flex: 0 0 auto;
-  width: 11px;
-  height: 11px;
 }
 
 .context-branch-text {

@@ -1,9 +1,8 @@
 /**
- * The pane's branch as a dim line under its title in the header, where the composer has no strip
+ * The pane's branch as a dim line under its title in the header, no icon, where the composer has no strip
  * to show it (a phone's screen, a touch one). A name cut short is whole in a bubble under it on a
  * tap; a press anywhere else, a resize or a scroll closes it.
  */
-import { GitBranch } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -36,7 +35,6 @@ export function HeaderBranch({ branch }: { branch: string }) {
   return (
     <>
       <button ref={button} type="button" className="context-branch" title={branch} aria-expanded={tip !== null} onClick={toggle}>
-        <GitBranch aria-hidden="true" />
         <span className="visually-hidden">{t("Branch")}: </span>
         <span className="context-branch-text">{branch}</span>
       </button>

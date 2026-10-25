@@ -1668,9 +1668,13 @@ export function App() {
           <div className={`context${headerBranch !== null ? " has-branch" : ""}`} title={crumb.tooltip}>
             <div className="context-title">
               {selectedAgent && (selectedFriend ? <AgentFriend friend={selectedFriend} agent={selectedAgent} status={activity.status(selectedMachineId, selectedPane)} /> : <AgentMark agent={selectedAgent} size={18} />)}
-              <span className="context-title-text">{selectedTitle}</span>
+              {/* the branch stands under the name, lined up with it, not under the mark */}
+              {headerBranch !== null ? <span className="context-title-stack">
+                <span className="context-title-text">{selectedTitle}</span>
+                <HeaderBranch branch={headerBranch} />
+              </span> : <span className="context-title-text">{selectedTitle}</span>}
             </div>
-            {headerBranch !== null ? <HeaderBranch branch={headerBranch} /> : <div className="context-sub">
+            {headerBranch === null && <div className="context-sub">
               {/* one PC needs no name: the sidebar leaves it out too, and More still says it */}
               {crumb.showMachine && <><span className="machine-context-name">{crumb.machine}</span><span className="context-sep" aria-hidden="true">›</span></>}
               <span>{crumb.workspace}</span>
