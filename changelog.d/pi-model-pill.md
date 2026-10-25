@@ -4,6 +4,8 @@
   it is idle. The extension also gives the context ring pi's own window, for providers no catalog
   on disk names (claude-bridge). Each model in the menu carries its maker's mark (Claude, Codex,
   Gemini, Grok, Kimi, Qwen), read from its name whatever provider carries it.
+- The composer's pill shows the current model's maker mark before its name, for any agent. Where
+  the row is tight the name steps out first and the mark and the thinking level stay.
 - Settings → Context circle hides the ring.
 
 ### Changed

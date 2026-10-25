@@ -256,12 +256,14 @@ export function composerStatusHint(state: { uploading: boolean; connected: boole
  *   or cleared.
  * - "no-effort": without Queue the effort word steps out whole before the name gives a letter,
  *   so a sliver of a word is never drawn. A name still too long is ellipsized as the last resort.
+ * - "no-name": a model with its maker's mark lets the name step out instead, as the mark says
+ *   who made it; the mark and the effort word stay.
  */
-export type ComposerModelDraw = "full" | "no-effort" | "out";
+export type ComposerModelDraw = "full" | "no-effort" | "no-name" | "out";
 
-export function composerModelDraw(state: { modelClipped: boolean; effortClipped: boolean }): ComposerModelDraw {
+export function composerModelDraw(state: { modelClipped: boolean; effortClipped: boolean; marked?: boolean }): ComposerModelDraw {
   if (!state.modelClipped && !state.effortClipped) return "full";
-  return "no-effort";
+  return state.marked ? "no-name" : "no-effort";
 }
 
 /** Herdr agent ids are machine-friendly; the composer presents a short human label. */

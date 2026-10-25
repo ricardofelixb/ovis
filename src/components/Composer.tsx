@@ -488,6 +488,7 @@ export function Composer({
       const first = composerModelDraw({
         modelClipped: clipped(".composer-model"),
         effortClipped: clipped(".composer-reasoning"),
+        marked: status.querySelector(".composer-pill-mark") !== null,
       });
       if (first !== "full") status.setAttribute("data-model", first);
       // with the level stepped out the row is laid out again: a name still cut to its floor (its
@@ -1054,6 +1055,7 @@ export function Composer({
   }, [picked, settled]);
   const modelId = pickedModel ? pickedModel.id.slice(pickedModel.id.indexOf("/") + 1) : metadata?.model;
   const modelShown = Boolean(modelId || effort);
+  const pillMark = modelId ? modelMark(modelId) : null;
   // an id modelLabel cannot name takes the name pi gives it, where pi's extension recorded one
   const label = modelId ? modelLabel(modelId) : null;
   const model = label && !label.named && currentModel ? { ...label, text: currentModel.name, named: true } : label;
@@ -1411,7 +1413,8 @@ export function Composer({
             <span className="composer-status-separator visually-hidden" aria-hidden="true">·</span>
             <strong className="visually-hidden">{t(composerStatusWord(shownStatus))}</strong>
             {/* the model and the level as one quiet pill, the context ring before it. The header names the agent,
-                so the pill draws no mark. A pane that names no model draws no fill (.is-bare) */}
+                so the pill draws no agent's mark, only the model's maker's where there is one. A pane that names
+                no model draws no fill (.is-bare) */}
             {metadata?.context && settings.contextCircle && <ContextRing context={metadata.context} onCompact={agent === "pi" ? undefined : compactNow} />}
             {/* pi with its ovis-model extension names the models it may switch to: the pill opens them, and the
                 thinking slider, while pi is idle; any other pane's pill only shows */}
@@ -1419,6 +1422,7 @@ export function Composer({
               <button type="button" className={`composer-pill is-menu${metadata?.model ? "" : " is-bare"}`} aria-haspopup="menu" aria-expanded={modelMenu !== null}
                 disabled={!switchable} title={switchable ? t("Switch model") : t("Switch the model once the agent is idle")}
                 onClick={(event) => setModelMenu(modelMenu ? null : event.currentTarget)}>
+              {pillMark && <AgentMark agent={pillMark} size={14} className="composer-pill-mark" />}
               {modelShown && <span className="composer-model-info" aria-label={t("Model and reasoning")}>
                 {/* a name only for an id modelLabel can name for certain; any other id is drawn as received, in the identifier face */}
                 <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={modelId ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
@@ -1444,6 +1448,7 @@ export function Composer({
               </button>
             ) : (
               <span className={`composer-pill${metadata?.model ? "" : " is-bare"}`}>
+              {pillMark && <AgentMark agent={pillMark} size={14} className="composer-pill-mark" />}
               {modelShown && <span className="composer-model-info" aria-label={t("Model and reasoning")}>
                 {/* a name only for an id modelLabel can name for certain; any other id is drawn as received, in the identifier face */}
                 <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={modelId ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>

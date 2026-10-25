@@ -254,7 +254,9 @@
 
 /* stepped out: read, not drawn (the properties of .visually-hidden, set from the measured row) */
 .composer-status[data-model="out"] .composer-model-info,
-.composer-status[data-model="no-effort"] .composer-reasoning {
+.composer-status[data-model="no-effort"] .composer-reasoning,
+.composer-status[data-model="no-name"] .composer-model,
+.composer-status[data-model="no-name"] .composer-reasoning-dot {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1528,6 +1530,12 @@
 .composer-pill.is-menu:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+/* the model's maker, quiet before its name */
+.composer-pill-mark {
+  flex: none;
+  opacity: 0.8;
 }
 
 .composer-pill-chevron {
