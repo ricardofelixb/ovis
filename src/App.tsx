@@ -74,6 +74,7 @@ import {
   type NotificationState,
 } from "./lib/notifications.ts";
 import { ensurePushSubscription, pushSupported, removePushSubscription } from "./lib/push.ts";
+import { nativeAlerts } from "./lib/nativeApp.ts";
 import { machineGone, notificationLanding, notificationTargetFromSearch, sameLink, notificationViewForPane, onNotificationTarget, type NotificationTarget } from "./lib/notificationTarget.ts";
 import { useUpdates } from "./lib/updates.ts";
 import { UpdateNotice } from "./components/UpdateControls.tsx";
@@ -515,6 +516,13 @@ export function App() {
   const [notifications, setNotifications] = useState<NotificationState>(() => notificationState());
   // the Android app's answer comes later than the first frame
   useEffect(() => { void syncNotificationState().then(setNotifications); }, []);
+  // alerts turned on elsewhere (they sync) or before a reinstall: the Android app asks once on load
+  const askedNativeAlerts = useRef(false);
+  useEffect(() => {
+    if (!alertsOn || notifications !== "default" || !nativeAlerts() || askedNativeAlerts.current) return;
+    askedNativeAlerts.current = true;
+    void requestNotificationPermission().then(setNotifications);
+  }, [alertsOn, notifications]);
   // this device has a server-side push subscription: alerts come from the server, not the tab
   const [pushOn, setPushOn] = useState(false);
   const pushOnRef = useRef(pushOn);
