@@ -11,3 +11,5 @@
 - The model pill no longer draws the agent's mark: the header names the agent.
 - The Chat, Terminal and Computer switch in the header is icons only at every width; each
   button keeps its name for screen readers and its tooltip.
+- On a phone or touch screen, the header names the pane's git branch on a dim line under its title,
+  where the composer has no folder-and-branch strip. A tap shows a long name whole.

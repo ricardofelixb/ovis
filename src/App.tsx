@@ -13,6 +13,7 @@ import { paneCovered, paneContentKey, paneContentPresented } from "./lib/panePre
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { worktreeRepoName } from "./lib/composerStrip.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
+import { HeaderBranch } from "./components/HeaderBranch.tsx";
 import { AgentMark } from "./components/AgentMark.tsx";
 import { AgentFriend } from "./components/AgentFriend.tsx";
 import { useWorkspaceFriends } from "./lib/friends.ts";
@@ -58,6 +59,7 @@ import { alertPrefs, useSettings } from "./lib/settings.ts";
 import { readComputerSettings } from "./lib/computerSettings.ts";
 import { formatKeys, shortcutDisplayKeys, useShortcuts } from "./lib/shortcuts.ts";
 import { useMediaQuery } from "./lib/useMediaQuery.ts";
+import { DETACHED, usePaneBranch } from "./lib/paneBranch.ts";
 import { useAnnouncedText } from "./lib/useAnnouncedText.ts";
 import { PaneLenses } from "./lib/paneLens.ts";
 import { paneContextPress } from "./lib/paneCanvas.ts";
@@ -994,6 +996,10 @@ export function App() {
     ? (snapshot?.workspaces.find((workspace) => workspace.workspace_id === selectedPane.workspace_id) ?? null)
     : null;
   const selectedLayout = snapshot?.layouts.find((layout) => layout.tab_id === selectedPane?.tab_id);
+  // where the composer drops its folder-and-branch strip (Composer.tsx), the header says the branch
+  const branchInHeader = useMediaQuery("(max-width: 640px), (pointer: coarse)");
+  const paneBranch = usePaneBranch(selectedMachineId, selectedPane?.workspace_id ?? null);
+  const headerBranch = !branchInHeader || paneBranch === null ? null : paneBranch === DETACHED ? t("Detached HEAD") : paneBranch;
   // Selection can precede rendering: in a zoomed tab the layout effect below redirects it,
   // but the sidebar's passive effect can still see that first selection. Only the selected
   // pane the canvas actually draws counts; paneInFront checks coverage at acknowledgement time.
@@ -1659,12 +1665,12 @@ export function App() {
         </div>
         <HeaderNote note={note} />
         {note !== null ? null : selectedPane && crumb ? (
-          <div className="context" title={crumb.tooltip}>
+          <div className={`context${headerBranch !== null ? " has-branch" : ""}`} title={crumb.tooltip}>
             <div className="context-title">
               {selectedAgent && (selectedFriend ? <AgentFriend friend={selectedFriend} agent={selectedAgent} status={activity.status(selectedMachineId, selectedPane)} /> : <AgentMark agent={selectedAgent} size={18} />)}
               <span className="context-title-text">{selectedTitle}</span>
             </div>
-            <div className="context-sub">
+            {headerBranch !== null ? <HeaderBranch branch={headerBranch} /> : <div className="context-sub">
               {/* one PC needs no name: the sidebar leaves it out too, and More still says it */}
               {crumb.showMachine && <><span className="machine-context-name">{crumb.machine}</span><span className="context-sep" aria-hidden="true">›</span></>}
               <span>{crumb.workspace}</span>
@@ -1674,7 +1680,7 @@ export function App() {
                   <span>{crumb.folder}</span>
                 </>
               )}
-            </div>
+            </div>}
           </div>
         ) : (
           <><Brand /><span className="machine-context-name">{selectedMachine?.name ?? selectedMachineId}</span></>

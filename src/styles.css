@@ -1871,6 +1871,63 @@ button {
   overflow: visible;
 }
 
+/* A phone's header names the pane's branch on a dim line under the title instead of the crumb
+   (HeaderBranch.tsx): the two lines share the one-line header's height */
+.context.has-branch {
+  flex-flow: column nowrap;
+  align-items: flex-start;
+  justify-content: center;
+  row-gap: 0;
+  max-height: none;
+}
+
+.context.has-branch .context-title {
+  min-height: 0;
+}
+
+.context-branch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-tight);
+  cursor: pointer;
+}
+
+.context-branch svg {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+}
+
+.context-branch-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-branch-tip {
+  position: fixed;
+  z-index: 60;
+  max-width: calc(100vw - 16px);
+  padding: var(--space-1) var(--space-2);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-strong);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
 /* the switch keeps its size; the pane title (.context) is the header's one flexible item */
 .view-switch {
   flex: 0 0 auto;
