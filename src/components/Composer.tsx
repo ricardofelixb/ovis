@@ -295,6 +295,7 @@ export function Composer({
   /** the card's own width: a narrow one shows the task chip's count */
   const [cardWidth, setCardWidth] = useState(0);
   const [modelMenu, setModelMenu] = useState<HTMLElement | null>(null);
+  const [picked, setPicked] = useState<{ id: string; level: string | null } | null>(null);
   const composingRef = useRef(false);
   // the chat lens's input surface takes the keyboard when it appears (a pane switch remounts
   // it), as the grid does in the terminal lens: a pane picked from the drawer is typed into
@@ -1030,16 +1031,30 @@ export function Composer({
   const statusCompact = composerStatusCompact(cardWidth);
   const sendShown = sending || composerSendShown({ working: isWorking, text });
   const hint = composerStatusHint({ uploading, connected, text, noRoom: roomless !== undefined });
-  const modelShown = Boolean(metadata?.model || metadata?.reasoning_effort);
   const models = agent === "pi" && role !== "observe" && metadata?.models?.length ? metadata.models : undefined;
-  const currentModel = models?.find((entry) => entry.current);
+  // a switch shows at once: pi applies it in a moment, but its transcript reaches the pill a read later
+  // (seconds for a long one or a far phone). The pick holds until the transcript says the same, or 8s
+  const recordedModel = models?.find((entry) => entry.current);
+  const pickedModel = picked === null ? undefined : models?.find((entry) => entry.id === picked.id);
+  const currentModel = pickedModel ?? recordedModel;
+  const effort = picked?.level ?? metadata?.reasoning_effort ?? null;
+  const settled = picked !== null && recordedModel?.id === picked.id && (picked.level === null || metadata?.reasoning_effort === picked.level);
+  useEffect(() => {
+    if (picked === null) return;
+    if (settled) return setPicked(null);
+    const timer = window.setTimeout(() => setPicked(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [picked, settled]);
+  const modelId = pickedModel ? pickedModel.id.slice(pickedModel.id.indexOf("/") + 1) : metadata?.model;
+  const modelShown = Boolean(modelId || effort);
   // an id modelLabel cannot name takes the name pi gives it, where pi's extension recorded one
-  const label = metadata?.model ? modelLabel(metadata.model) : null;
+  const label = modelId ? modelLabel(modelId) : null;
   const model = label && !label.named && currentModel ? { ...label, text: currentModel.name, named: true } : label;
   const switchable = connected && !sending && !isWorking && agentStatus !== "blocked" && onCommand !== undefined;
-  const switchTo = (args: string): void => {
+  const switchTo = (id: string, level: string | null = null): void => {
     setModelMenu(null);
-    if (!onCommand?.(`/ovis-model ${args}`)) setNote(t("Not confirmed. Check the terminal before sending again."));
+    if (onCommand?.(`/ovis-model ${id}${level ? ` ${level}` : ""}`)) setPicked({ id, level });
+    else setNote(t("Not confirmed. Check the terminal before sending again."));
   };
   const usageDetail = usageWindows.map((window) => {
     const reset = formatResetIn(window.resets_at, Date.now());
@@ -1060,7 +1075,7 @@ export function Composer({
   const worktree = worktreeRepo !== null;
   // Fit only changes to drawn content. Streaming context usage is a fixed-size ring unless
   // its number is open on desktop; transcript/status refreshes need no measurement layout.
-  useLayoutEffect(fitStatus, [fitStatus, agent, metadata?.model, metadata?.reasoning_effort,
+  useLayoutEffect(fitStatus, [fitStatus, agent, modelId, effort,
     metadata?.context?.window, settings.contextCircle, metadata?.models, mobile, usageCaption, usage?.problem, hintText, dictation.shown, backgroundTasks,
     plan?.done, plan?.total, statusCompact, compactNow !== undefined, facesLoaded, t]);
   const menuId = `composer-menu-${paneId}`;
@@ -1399,15 +1414,15 @@ export function Composer({
                 onClick={(event) => setModelMenu(modelMenu ? null : event.currentTarget)}>
               {modelShown && <span className="composer-model-info" aria-label={t("Model and reasoning")}>
                 {/* a name only for an id modelLabel can name for certain; any other id is drawn as received, in the identifier face */}
-                <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={metadata?.model ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
+                <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={modelId ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
                 {/* behind a name the id as received is still read; a touch cannot reach the title */}
-                {model?.named && <span className="composer-model-id visually-hidden">{metadata?.model}</span>}
+                {model?.named && <span className="composer-model-id visually-hidden">{modelId}</span>}
                 {/* no level recorded: nothing is drawn for it, no dot and no dash; the sentence is still read */}
-                <span className={`composer-reasoning${metadata?.reasoning_effort ? "" : " visually-hidden"}`} title={metadata?.reasoning_effort ? t("Reasoning effort: {effort}", { effort: metadata.reasoning_effort }) : t("Reasoning effort not available")}>
-                  <span className="composer-reasoning-full visually-hidden">{t("Reasoning {effort}", { effort: metadata?.reasoning_effort ?? "—" })}</span>
-                  {metadata?.reasoning_effort && <>
+                <span className={`composer-reasoning${effort ? "" : " visually-hidden"}`} title={effort ? t("Reasoning effort: {effort}", { effort: effort }) : t("Reasoning effort not available")}>
+                  <span className="composer-reasoning-full visually-hidden">{t("Reasoning {effort}", { effort: effort ?? "—" })}</span>
+                  {effort && <>
                     <span className="composer-reasoning-dot" aria-hidden="true">·</span>
-                    <span className="composer-reasoning-short" aria-hidden="true">{metadata.reasoning_effort}</span>
+                    <span className="composer-reasoning-short" aria-hidden="true">{effort}</span>
                   </>}
                 </span>
               </span>}
@@ -1424,15 +1439,15 @@ export function Composer({
               <span className={`composer-pill${metadata?.model ? "" : " is-bare"}`}>
               {modelShown && <span className="composer-model-info" aria-label={t("Model and reasoning")}>
                 {/* a name only for an id modelLabel can name for certain; any other id is drawn as received, in the identifier face */}
-                <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={metadata?.model ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
+                <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={modelId ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
                 {/* behind a name the id as received is still read; a touch cannot reach the title */}
-                {model?.named && <span className="composer-model-id visually-hidden">{metadata?.model}</span>}
+                {model?.named && <span className="composer-model-id visually-hidden">{modelId}</span>}
                 {/* no level recorded: nothing is drawn for it, no dot and no dash; the sentence is still read */}
-                <span className={`composer-reasoning${metadata?.reasoning_effort ? "" : " visually-hidden"}`} title={metadata?.reasoning_effort ? t("Reasoning effort: {effort}", { effort: metadata.reasoning_effort }) : t("Reasoning effort not available")}>
-                  <span className="composer-reasoning-full visually-hidden">{t("Reasoning {effort}", { effort: metadata?.reasoning_effort ?? "—" })}</span>
-                  {metadata?.reasoning_effort && <>
+                <span className={`composer-reasoning${effort ? "" : " visually-hidden"}`} title={effort ? t("Reasoning effort: {effort}", { effort: effort }) : t("Reasoning effort not available")}>
+                  <span className="composer-reasoning-full visually-hidden">{t("Reasoning {effort}", { effort: effort ?? "—" })}</span>
+                  {effort && <>
                     <span className="composer-reasoning-dot" aria-hidden="true">·</span>
-                    <span className="composer-reasoning-short" aria-hidden="true">{metadata.reasoning_effort}</span>
+                    <span className="composer-reasoning-short" aria-hidden="true">{effort}</span>
                   </>}
                 </span>
               </span>}
@@ -1446,10 +1461,10 @@ export function Composer({
               </span>
             )}
             {modelMenu && models && <RowMenu anchor={modelMenu} title={t("Model")} onClose={() => setModelMenu(null)}
-              items={models.map((entry) => ({ id: entry.id, label: entry.name, icon: Cpu, checked: entry.current,
-                run: () => { if (!entry.current) switchTo(entry.id); } }))}
-              footer={currentModel && currentModel.levels.length > 1 ? <ThinkingSlider levels={currentModel.levels} value={metadata?.reasoning_effort ?? null} disabled={!switchable}
-                onCommit={(level) => switchTo(`${currentModel.id} ${level}`)} /> : undefined} />}
+              items={models.map((entry) => ({ id: entry.id, label: entry.name, icon: Cpu, checked: entry.id === currentModel?.id,
+                run: () => { if (entry.id !== currentModel?.id) switchTo(entry.id); } }))}
+              footer={currentModel && currentModel.levels.length > 1 ? <ThinkingSlider levels={currentModel.levels} value={effort} disabled={!switchable}
+                onCommit={(level) => switchTo(currentModel.id, level)} /> : undefined} />}
             {/* the chip is a button in the left controls; its count is still said here, where a change is announced */}
             {backgroundTasks > 0 && <span className="composer-task-count visually-hidden">{t(backgroundTasks === 1 ? "{n} background task" : "{n} background tasks", { n: backgroundTasks })}</span>}
           </span>
