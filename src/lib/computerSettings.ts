@@ -10,6 +10,8 @@ export interface ComputerSettings {
   fit: "resize" | "scale";
   /** device pixels per CSS pixel a resized desktop gets at most */
   sharpness: "1" | "1.5" | "2";
+  /** percent a resized desktop draws its text and windows at: less shows more of it */
+  zoom: "100" | "75" | "50";
   quality: "low" | "medium" | "high";
   /** on a touch screen: a trackpad, or a tap clicks where it lands */
   cursor: "trackpad" | "direct";
@@ -19,10 +21,14 @@ export interface ComputerSettings {
   keep: "0" | "2" | "5" | "10";
 }
 
-export const COMPUTER_DEFAULTS: ComputerSettings = { fit: "resize", sharpness: "1.5", quality: "medium", cursor: "trackpad", speed: "normal", sound: true, keep: "2" };
+// A phone's desktop, the size of the phone, gets more room at 75%; a desktop's has room enough at 100%
+const coarse = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+export const COMPUTER_DEFAULTS: ComputerSettings = {
+  fit: "resize", sharpness: "1.5", zoom: coarse ? "75" : "100", quality: "medium", cursor: "trackpad", speed: "normal", sound: true, keep: "2",
+};
 
 const CHOICES: { [K in keyof ComputerSettings]: readonly ComputerSettings[K][] } = {
-  fit: ["resize", "scale"], sharpness: ["1", "1.5", "2"], quality: ["low", "medium", "high"], cursor: ["trackpad", "direct"],
+  fit: ["resize", "scale"], sharpness: ["1", "1.5", "2"], zoom: ["100", "75", "50"], quality: ["low", "medium", "high"], cursor: ["trackpad", "direct"],
   speed: ["slow", "normal", "fast"], sound: [true, false], keep: ["0", "2", "5", "10"],
 };
 
@@ -74,5 +80,5 @@ export function useComputerSettings(machineId: string): [ComputerSettings, (patc
 
 /** The settings as the viewer takes them, in its address's #fragment and in each change posted to it. */
 export function viewerOptions(settings: ComputerSettings): Record<string, unknown> {
-  return { fit: settings.fit, sharpness: Number(settings.sharpness), quality: settings.quality, cursor: settings.cursor, speed: settings.speed, sound: settings.sound };
+  return { fit: settings.fit, sharpness: Number(settings.sharpness), zoom: Number(settings.zoom) / 100, quality: settings.quality, cursor: settings.cursor, speed: settings.speed, sound: settings.sound };
 }

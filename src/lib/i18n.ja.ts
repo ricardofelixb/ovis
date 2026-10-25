@@ -82,6 +82,8 @@ const BASE: Record<string, string> = {
   "Resize the PC": "PCをリサイズ",
   "Keep its size": "サイズを保つ",
   "Sharpness": "鮮明さ",
+  "Zoom": "ズーム",
+  "Smaller shows more of the PC": "小さくするとPCの表示範囲が広がります",
   "Quality": "画質",
   "Low": "低",
   "Medium": "中",

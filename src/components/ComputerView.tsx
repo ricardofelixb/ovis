@@ -156,7 +156,8 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
       {coarse && <>
         <textarea ref={fieldRef} className="computer-view-field" defaultValue={PAD} aria-label={t("Type on {name}", { name: machineName })}
           autoCapitalize="off" autoComplete="off" autoCorrect="off" spellCheck={false} enterKeyHint="enter"
-          onFocus={() => setTyping(true)} onBlur={() => setTyping(false)} onInput={typed} onKeyDown={pressed}
+          onFocus={() => { setTyping(true); post({ screen: "keyboard", open: true }); }}
+          onBlur={() => { setTyping(false); post({ screen: "keyboard", open: false }); }} onInput={typed} onKeyDown={pressed}
           onCompositionStart={() => { composingRef.current = true; }}
           onCompositionEnd={(event) => { composingRef.current = false; refill(event.currentTarget); }} />
         <KeyBar items={settings.keyBarItems} modifiers={modifiers}
@@ -182,6 +183,10 @@ function ViewSettings({ settings, onChange, resizes, touch }: { settings: Comput
         {resizes && settings.fit === "resize" && <SettingsRow label={t("Sharpness")} wide>
           <Segmented label={t("Sharpness")} value={settings.sharpness} onChange={(sharpness) => onChange({ sharpness })}
             options={[{ value: "1", label: "1×" }, { value: "1.5", label: "1.5×" }, { value: "2", label: "2×" }]} />
+        </SettingsRow>}
+        {resizes && settings.fit === "resize" && <SettingsRow label={t("Zoom")} description={t("Smaller shows more of the PC")} wide>
+          <Segmented label={t("Zoom")} value={settings.zoom} onChange={(zoom) => onChange({ zoom })}
+            options={[{ value: "100", label: "100%" }, { value: "75", label: "75%" }, { value: "50", label: "50%" }]} />
         </SettingsRow>}
         <SettingsRow label={t("Quality")} wide>
           <Segmented label={t("Quality")} value={settings.quality} onChange={(quality) => onChange({ quality })}
