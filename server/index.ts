@@ -1,6 +1,7 @@
 import "./adopt-legacy-env.ts";
 import { handleWorkspaceRequest } from "./workspace-routes.ts";
 import { connectionData, createCore, type SocketData } from "./core/index.ts";
+import { handleScreenOpen, handleScreenRequest, isScreenPath, withScreenSockets, type ScreenSocketData } from "./screen.ts";
 import { ClientConnectionLog } from "./client-connection-log.ts";
 import { RequestLog } from "./request-log.ts";
 import { handlePaneRequest } from "./pane-routes.ts";
@@ -242,7 +243,7 @@ export function createServer(
 
   const envPort = process.env["PORT"];
   const clientConnectionLog = new ClientConnectionLog();
-  const server = Bun.serve<SocketData>({
+  const server = Bun.serve<SocketData | ScreenSocketData>({
     port: options.port ?? (envPort ? Number(envPort) : DEFAULT_PORT),
     hostname,
     maxRequestBodySize: BUN_BODY_CEILING,
@@ -343,6 +344,19 @@ export function createServer(
       // request gets it: the routes open without sign-in (health, auth, pairing) keep the default,
       // so an unauthenticated client cannot hold idle sockets for a minute.
       if (pathname.startsWith("/api/") && authenticated) bunServer.timeout(request, 60);
+
+      // the Computer view (server/screen.ts): a PC's desktop is driven, so a watching device gets none
+      // of it, and only this app's pages reach it past a page load, as the bridge's own origin check
+      // sees this server instead
+      if (pathname === "/api/screen" || isScreenPath(pathname)) {
+        setRequestRoute(pathname === "/api/screen" ? pathname : "/screen");
+        if (readOnly) return jsonResponse({ error: { code: "read_only", message: "This device only watches" } }, 403);
+        const pageLoad = request.method === "GET" && request.headers.get("upgrade") === null;
+        if (!pageLoad && !sameOrigin(request)) return jsonResponse({ error: { code: "invalid_origin", message: "Use controls from this app" } }, 403);
+        if (pathname === "/api/screen") return handleScreenOpen(request, machines?.list() ?? []);
+        bunServer.timeout(request, 0);
+        return handleScreenRequest(request, url, bunServer);
+      }
 
       if (pathname === "/api/bridge") {
         setRequestRoute(pathname);
@@ -548,7 +562,7 @@ export function createServer(
       });
     },
 
-    websocket: core.websocket,
+    websocket: withScreenSockets(core.websocket),
   });
 
   const requestLog = new RequestLog(options.stateDir ?? defaultStateDir());
