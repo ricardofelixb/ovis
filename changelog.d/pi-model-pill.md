@@ -2,7 +2,8 @@
 - With pi's ovis-model extension, the composer's model pill opens a menu of pi's scoped models and
   a thinking slider with the levels the model takes; a choice switches pi through its own API while
   it is idle. The extension also gives the context ring pi's own window, for providers no catalog
-  on disk names (claude-bridge).
+  on disk names (claude-bridge). Each model in the menu carries its maker's mark (Claude, Codex,
+  Gemini, Grok, Kimi, Qwen), read from its name whatever provider carries it.
 - Settings → Context circle hides the ring.
 
 ### Changed

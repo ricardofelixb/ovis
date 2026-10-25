@@ -59,6 +59,7 @@ import { resolveComposerMenuActiveItemId } from "../lib/composerMenuHighlight.ts
 import { enterSends, quickReplyButtons, useSettings } from "../lib/settings.ts";
 import { composerUsage, formatPercent, formatResetIn, HIGH_PERCENT, meterPercent, meterText, providerForAgent, statusWindows, usageName, useUsage, windowLabel } from "../lib/usage.ts";
 import { BackgroundTasks } from "./BackgroundTasks.tsx";
+import { AgentMark, modelMark } from "./AgentMark.tsx";
 import { RowMenu } from "./RowMenu.tsx";
 import { ThinkingSlider } from "./ThinkingSlider.tsx";
 import { MicButton, VoiceRecordingPill, useDictation } from "./VoiceInput.tsx";
@@ -229,6 +230,12 @@ function ContextRing({ context, onCompact }: { context: NonNullable<Conversation
     )}
     </>
   );
+}
+
+/** a model's maker's mark for the model menu; the menu's chip icon stands for a maker without one */
+function markGlyph(model: string): ReactNode {
+  const mark = modelMark(model);
+  return mark ? <AgentMark agent={mark} size={16} /> : undefined;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -1461,7 +1468,7 @@ export function Composer({
               </span>
             )}
             {modelMenu && models && <RowMenu anchor={modelMenu} title={t("Model")} onClose={() => setModelMenu(null)}
-              items={models.map((entry) => ({ id: entry.id, label: entry.name, icon: Cpu, checked: entry.id === currentModel?.id,
+              items={models.map((entry) => ({ id: entry.id, label: entry.name, icon: Cpu, glyph: markGlyph(entry.id), checked: entry.id === currentModel?.id,
                 run: () => { if (entry.id !== currentModel?.id) switchTo(entry.id); } }))}
               footer={currentModel && currentModel.levels.length > 1 ? <ThinkingSlider levels={currentModel.levels} value={effort} disabled={!switchable}
                 onCommit={(level) => switchTo(currentModel.id, level)} /> : undefined} />}
