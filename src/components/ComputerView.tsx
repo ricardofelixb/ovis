@@ -164,7 +164,7 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
           onToggleModifier={(modifier) => setModifiers((held) => ({ ...held, [modifier]: !held[modifier] }))}
           onKey={(item: KeyBarKeyItem) => send(item.key, item.modifiers)}
           directTyping={!typing} directLabel={t("Keyboard")}
-          onToggleDirect={() => { if (typing) fieldRef.current?.blur(); else fieldRef.current?.focus(); }} />
+          onToggleDirect={() => { if (typing) fieldRef.current?.blur(); else fieldRef.current?.focus({ preventScroll: true }); }} />
       </>}
     </div>
   );

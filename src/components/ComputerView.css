@@ -127,10 +127,11 @@
   padding: 0 var(--space-2);
 }
 
-/* the phone's keyboard types here; nothing of it shows */
+/* the phone's keyboard types here; nothing of it shows. At the top, so the keyboard never covers it: covered while the
+   keyboard comes up, Chrome scrolled the view up to reveal it, and the view stayed up */
 .computer-view-field {
   position: absolute;
-  bottom: 0;
+  top: 0;
   left: 0;
   width: 1px;
   height: 1px;
