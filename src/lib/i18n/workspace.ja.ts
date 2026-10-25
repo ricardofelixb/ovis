@@ -56,7 +56,6 @@ export const WORKSPACE_JA: Record<string, string> = {
   "Starting shell…": "シェルを起動しています…",
   "Directory not found": "ディレクトリが見つかりません",
   "model, effort": "モデル、推論レベル",
-  "Model": "モデル",
   "Empty: the agent's own model.": "空のままならエージェント自身のモデルを使います。",
   "One model name, without spaces.": "空白を含まないモデル名を一つ指定してください。",
   "Effort": "推論レベル",

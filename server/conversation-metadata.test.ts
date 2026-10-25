@@ -128,6 +128,17 @@ describe("context use", () => {
     });
   });
 
+  it("takes pi's window and models from its ovis-model entry, for a provider no catalog names", () => {
+    const model = (id: string, contextWindow: number) => ({ provider: "bridge-test", id, name: id.toUpperCase(), contextWindow, levels: ["low", "high"] });
+    const recorded = (current: string) => ({ type: "custom", customType: "ovis-model", data: { model: model(current, current === "big" ? 1_000_000 : 200_000), scoped: [model("big", 1_000_000), model("small", 200_000)] } });
+    const answer = { type: "message", message: { role: "assistant", provider: "bridge-test", model: "big", usage: { totalTokens: 97_000 } } };
+    const metadata = parseConversationMetadata(jsonl(recorded("big"), answer), "pi-transcript");
+    expect(metadata.context).toEqual({ used: 97_000, window: 1_000_000 });
+    expect(metadata.models?.map((entry) => [entry.id, entry.current])).toEqual([["bridge-test/big", true], ["bridge-test/small", false]]);
+    // a switch puts the last request on the new model's window before anything is asked of it
+    expect(parseConversationMetadata(jsonl(recorded("small")), "pi-transcript", metadata).context).toEqual({ used: 97_000, window: 200_000 });
+  });
+
   it("adds up a pi request itself when it states no total", () => {
     const usage = (extra: Record<string, unknown> = {}) => ({ type: "message", message: { role: "assistant", model: "qwen-test", usage: { input: 1_000, output: 200, cacheRead: 500, cacheWrite: 0, ...extra } } });
     expect(parseConversationMetadata(jsonl(usage()), "pi-transcript").context).toEqual({ used: 1_700, window: null });

@@ -52,6 +52,8 @@ interface Props {
   /** drawn above the items, and in the sheet's head in the title's place: what the menu is about, when that is more than a name */
   header?: ReactNode;
   items: RowMenuItem[];
+  /** drawn under the items: a control that is not an item (the model menu's thinking slider), which keeps its own keys */
+  footer?: ReactNode;
   /** which edge of the button the popover lines up with: its right one (a row's ⋯), or its left one (a tab) */
   align?: "start" | "end";
   onClose: () => void;
@@ -65,7 +67,7 @@ const POPOVER_ITEMS = '[role="menuitem"], [role="menuitemcheckbox"]';
 // the sheet is modal: its Cancel is one of the stops
 const SHEET_ITEMS = '.row-sheet-item, .row-sheet-cancel';
 
-export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail, header, items, align = "end", onClose, variant }: Props) {
+export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail, header, items, footer, align = "end", onClose, variant }: Props) {
   const t = useT();
   const sheet = useMediaQuery(SHEET_QUERY);
   const surface = useRef<HTMLDivElement>(null);
@@ -151,6 +153,7 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail
   }, [anchor, onClose, point, sheet]);
 
   const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (event.target instanceof Element && event.target.closest(".row-menu-footer")) return;
     const buttons = [...(surface.current?.querySelectorAll<HTMLElement>(sheet ? SHEET_ITEMS : POPOVER_ITEMS) ?? [])];
     const index = buttons.indexOf(document.activeElement as HTMLElement);
     const move = (next: number): void => {
@@ -204,6 +207,7 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail
               </button>
             ))}
           </div>
+          {footer && <div className="row-menu-footer">{footer}</div>}
           <button type="button" className="btn row-sheet-cancel" onMouseDown={keepFocus} onClick={onClose}>{t("Cancel")}</button>
         </div>
       </div>,
@@ -225,6 +229,7 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail
           </button>
         </Fragment>
       ))}
+      {footer && <div className="row-menu-footer">{footer}</div>}
     </div>,
     document.body,
   );

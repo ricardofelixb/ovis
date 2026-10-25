@@ -403,6 +403,11 @@ export interface ConversationMetadata {
    * response reports its usage. `window` is null when the transcript does not say it.
    */
   context?: { used: number; window: number | null };
+  /**
+   * The models the pane may switch to, as pi's ovis-model extension records them: `id` is
+   * "provider/id", `levels` the thinking levels that model takes. Absent without the extension.
+   */
+  models?: { id: string; name: string; window: number; levels: string[]; current: boolean }[];
 }
 
 export type { OmoTask, OmoRunNode, OmoRun, OmoActivity } from "./tasks.ts";

@@ -158,6 +158,8 @@ export const SETTINGS_JA: Record<string, string> = {
   "Send queued messages automatically": "送信待ちメッセージを自動で送信",
   "A message sent while the agent works goes by itself when the turn ends. When off, it waits until you press Send now.": "エージェントの作業中に送ったメッセージは、ターンが終わると自動で送信されます。オフにすると、「今すぐ送信」を押すまで待ちます。",
   "New tab button": "新しいタブボタン",
+  "Context circle": "コンテキストリング",
+  "A ring beside the model shows how full its context is. Tap it for the numbers.": "モデルの横のリングがコンテキストの使用量を示します。タップすると数値を表示します。",
   "A button in the message box opens New tab with an agent… on the pane's workspace. The tab menu offers it either way.": "入力欄のボタンで、このペインのワークスペースに「エージェント付きの新しいタブ…」を開きます。タブメニューからはいつでも開けます。",
   "Clipboard from a pane": "ペインからクリップボードへ",
   "A program in a pane that copies (vim, tmux, Claude Code) puts its text on this device's clipboard, as a copy you made yourself would. Turn it off if a pane runs output you do not trust: it could replace what you paste next.": "ペインでコピーするプログラム（vim、tmux、Claude Code）は、自分でコピーしたときと同じようにこのデバイスのクリップボードにテキストを入れます。信頼できない出力を実行するペインがある場合はオフにしてください。次に貼り付ける内容が置き換えられることがあります。",

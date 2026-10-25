@@ -1516,3 +1516,43 @@
     backdrop-filter: var(--glass-blur);
   }
 }
+
+/* pi's pill opens its model menu: the pill's own look, as a button */
+.composer-pill.is-menu {
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.composer-pill.is-menu:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.composer-pill-chevron {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-inline-start: calc(var(--space-1) * -1);
+  color: var(--text-dim);
+}
+
+/* the ring's numbers, over it: drawn in the body, so the card cannot clip it */
+.composer-context-tip {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: calc(100vw - 16px);
+  padding: var(--space-1) var(--space-2);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}

@@ -25,6 +25,7 @@ import { PALETTE_ZH } from "./i18n/palette.zh.ts";
  * Placeholders in braces keep their English names.
  */
 const BASE: Record<string, string> = {
+  "Model": "模型",
   "Back": "返回",
   "Scroll pane up": "向上滚动面板",
   "Scroll pane down": "向下滚动面板",

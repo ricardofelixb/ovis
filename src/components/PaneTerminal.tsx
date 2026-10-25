@@ -769,6 +769,14 @@ export function PaneTerminal({
     return () => window.removeEventListener("keydown", onPage, true);
   }, [active, paneId]);
 
+  // a command for the agent's own line (the model pill's /ovis-model): typed and entered as keys, so it is
+  // never a chat message waiting for a turn that will not come. The Enter goes on its own, after the text
+  const runCommand = useCallback((text: string): boolean => {
+    const pane = paneRef.current, socket = socketRef.current;
+    if (!pane || !socket?.connected || observeRef.current) return false;
+    return socket.sendInput(pane, text) && socket.sendInput(pane, "\r");
+  }, []);
+
   const sendApplicationPage = useCallback((direction: -1 | 1) => {
     const pane = paneRef.current, socket = socketRef.current;
     if (!pane || !socket?.connected || !activeRef.current || !presentedRef.current || chatViewRef.current || modalOpen()
@@ -1171,6 +1179,7 @@ export function PaneTerminal({
             </div>
           ) : null}
           onSend={composerSend}
+          onCommand={runCommand}
           onAbort={abortTurn}
           onUploadImage={uploadImage}
         />
