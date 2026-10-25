@@ -11,8 +11,8 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
-import { ArrowUp, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
+import { createPortal, flushSync } from "react-dom";
+import { ArrowUp, ChevronDown, Cpu, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
 
 import "./Composer.css";
 
@@ -58,8 +58,10 @@ import { activeTrigger, applyCompletion, type ActiveTrigger } from "../lib/menti
 import { resolveComposerMenuActiveItemId } from "../lib/composerMenuHighlight.ts";
 import { enterSends, quickReplyButtons, useSettings } from "../lib/settings.ts";
 import { composerUsage, formatPercent, formatResetIn, HIGH_PERCENT, meterPercent, meterText, providerForAgent, statusWindows, usageName, useUsage, windowLabel } from "../lib/usage.ts";
-import { AgentMark } from "./AgentMark.tsx";
 import { BackgroundTasks } from "./BackgroundTasks.tsx";
+import { AgentMark, modelMark } from "./AgentMark.tsx";
+import { RowMenu } from "./RowMenu.tsx";
+import { ThinkingSlider } from "./ThinkingSlider.tsx";
 import { MicButton, VoiceRecordingPill, useDictation } from "./VoiceInput.tsx";
 import { usePaneCommands } from "../lib/usePaneCommands.ts";
 import { useT } from "../lib/i18n.ts";
@@ -116,6 +118,8 @@ export interface ComposerProps {
    * where it named none, with `sendAnyway`; a promise settles to any of them */
   onSend: (text: string, clearDraft?: string, sendAnyway?: boolean) => boolean | string | DraftRefusal | Promise<boolean | string | DraftRefusal>;
   onAbort: () => void;
+  /** types a command into the agent's own line and enters it, outside the chat (the model pill's switch) */
+  onCommand?: (text: string) => boolean;
   onUploadImage: (file: File) => Promise<string>;
 }
 
@@ -175,44 +179,63 @@ function readSlashUsage(): Record<string, number> {
  * screen has no hover). A window the transcript does not name draws no ring. Whether the number
  * is open is the composer's to keep: its text takes room in the row the model label is fitted to.
  */
-function ContextRing({ context, shown, readOnly = false, onToggle, onCompact }: { context: NonNullable<ConversationMetadata["context"]>; shown: boolean; readOnly?: boolean; onToggle: () => void; onCompact?: (() => void) | undefined }) {
+/** How full the model's context is, beside the model pill; a tap shows the numbers in a bubble over it,
+ * drawn through a portal so the card's clipping cannot cut it. A press anywhere else closes it */
+function ContextRing({ context, onCompact }: { context: NonNullable<ConversationMetadata["context"]>; onCompact?: (() => void) | undefined }) {
   const t = useT();
+  const button = useRef<HTMLButtonElement>(null);
+  const bubble = useRef<HTMLDivElement>(null);
+  const [tip, setTip] = useState<{ left: number; bottom: number } | null>(null);
+  useEffect(() => {
+    if (tip === null) return;
+    const inside = (target: EventTarget | null) => target instanceof Node && (button.current?.contains(target) || bubble.current?.contains(target));
+    const press = (event: PointerEvent) => { if (!inside(event.target)) setTip(null); };
+    const close = () => setTip(null);
+    window.addEventListener("pointerdown", press, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("pointerdown", press, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [tip]);
   const left = contextLeftPercent(context);
   if (left === null || context.window === null) return null;
-  const label = t("Context {percent}% left", { percent: left });
-  const detail = t("{used} of {window} tokens", { used: formatTokens(context.used), window: formatTokens(context.window) });
+  const used = Math.round((context.used / context.window) * 1000) / 10;
+  const detail = t("{percent}% used · {used} of {window} tokens", { percent: used, used: formatTokens(context.used), window: formatTokens(context.window) });
   const radius = 6;
   const circumference = 2 * Math.PI * radius;
-  if (readOnly) return <span className={`composer-context composer-context-readonly${left <= 20 ? " is-low" : ""}`}>
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <circle className="composer-context-track" cx="8" cy="8" r={radius} />
-      <circle className="composer-context-used" cx="8" cy="8" r={radius}
-        strokeDasharray={`${circumference * (100 - left) / 100} ${circumference}`} transform="rotate(-90 8 8)" />
-    </svg>
-    <span className="visually-hidden">{label} · {detail}</span>
-  </span>;
+  const toggle = (): void => {
+    const rect = button.current?.getBoundingClientRect();
+    setTip(tip !== null || !rect ? null : { left: rect.left + rect.width / 2, bottom: window.innerHeight - rect.top + 6 });
+  };
   return (
     <>
-    <button
-      type="button"
-      className={`composer-context${left <= 20 ? " is-low" : ""}`}
-      aria-label={`${label} · ${detail}`}
-      title={`${label} · ${detail}`}
-      aria-expanded={shown}
-      onClick={onToggle}
-    >
+    <button ref={button} type="button" className={`composer-context${left <= 20 ? " is-low" : ""}`} aria-label={detail} title={detail} aria-expanded={tip !== null} onClick={toggle}>
       <svg viewBox="0 0 16 16" aria-hidden="true">
         <circle className="composer-context-track" cx="8" cy="8" r={radius} />
         <circle className="composer-context-used" cx="8" cy="8" r={radius}
           strokeDasharray={`${circumference * (100 - left) / 100} ${circumference}`} transform="rotate(-90 8 8)" />
       </svg>
-      {shown && <span className="composer-context-text">{label}</span>}
     </button>
-    {shown && onCompact && <button type="button" className="composer-compact" title={t("Compact context")} aria-label={t("Compact context")} onClick={onCompact}>
-      <Minimize2 aria-hidden="true" />
-    </button>}
+    {tip && createPortal(
+      <div ref={bubble} className="composer-context-tip" role="status" style={{ left: tip.left, bottom: tip.bottom }}>
+        <span>{detail}</span>
+        {onCompact && <button type="button" className="composer-compact" title={t("Compact context")} aria-label={t("Compact context")} onClick={() => { setTip(null); onCompact(); }}>
+          <Minimize2 aria-hidden="true" />
+        </button>}
+      </div>,
+      document.body,
+    )}
     </>
   );
+}
+
+/** a model's maker's mark for the model menu; the menu's chip icon stands for a maker without one */
+function markGlyph(model: string): ReactNode {
+  const mark = modelMark(model);
+  return mark ? <AgentMark agent={mark} size={16} /> : undefined;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -255,6 +278,7 @@ export function Composer({
   worktreeRepo = null,
   onSend,
   onAbort,
+  onCommand,
   onUploadImage,
 }: ComposerProps) {
   const t = useT();
@@ -277,7 +301,8 @@ export function Composer({
   const hintRef = useRef<HTMLSpanElement | null>(null);
   /** the card's own width: a narrow one shows the task chip's count */
   const [cardWidth, setCardWidth] = useState(0);
-  const [contextShown, setContextShown] = useState(false);
+  const [modelMenu, setModelMenu] = useState<HTMLElement | null>(null);
+  const [picked, setPicked] = useState<{ id: string; level: string | null } | null>(null);
   const composingRef = useRef(false);
   // the chat lens's input surface takes the keyboard when it appears (a pane switch remounts
   // it), as the grid does in the terminal lens: a pane picked from the drawer is typed into
@@ -463,6 +488,7 @@ export function Composer({
       const first = composerModelDraw({
         modelClipped: clipped(".composer-model"),
         effortClipped: clipped(".composer-reasoning"),
+        marked: status.querySelector(".composer-pill-mark") !== null,
       });
       if (first !== "full") status.setAttribute("data-model", first);
       // with the level stepped out the row is laid out again: a name still cut to its floor (its
@@ -1013,8 +1039,32 @@ export function Composer({
   const statusCompact = composerStatusCompact(cardWidth);
   const sendShown = sending || composerSendShown({ working: isWorking, text });
   const hint = composerStatusHint({ uploading, connected, text, noRoom: roomless !== undefined });
-  const model = metadata?.model ? modelLabel(metadata.model) : null;
-  const modelShown = Boolean(metadata?.model || metadata?.reasoning_effort);
+  const models = agent === "pi" && role !== "observe" && metadata?.models?.length ? metadata.models : undefined;
+  // a switch shows at once: pi applies it in a moment, but its transcript reaches the pill a read later
+  // (seconds for a long one or a far phone). The pick holds until the transcript says the same, or 8s
+  const recordedModel = models?.find((entry) => entry.current);
+  const pickedModel = picked === null ? undefined : models?.find((entry) => entry.id === picked.id);
+  const currentModel = pickedModel ?? recordedModel;
+  const effort = picked?.level ?? metadata?.reasoning_effort ?? null;
+  const settled = picked !== null && recordedModel?.id === picked.id && (picked.level === null || metadata?.reasoning_effort === picked.level);
+  useEffect(() => {
+    if (picked === null) return;
+    if (settled) return setPicked(null);
+    const timer = window.setTimeout(() => setPicked(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [picked, settled]);
+  const modelId = pickedModel ? pickedModel.id.slice(pickedModel.id.indexOf("/") + 1) : metadata?.model;
+  const modelShown = Boolean(modelId || effort);
+  const pillMark = modelId ? modelMark(modelId) : null;
+  // an id modelLabel cannot name takes the name pi gives it, where pi's extension recorded one
+  const label = modelId ? modelLabel(modelId) : null;
+  const model = label && !label.named && currentModel ? { ...label, text: currentModel.name, named: true } : label;
+  const switchable = connected && !sending && !isWorking && agentStatus !== "blocked" && onCommand !== undefined;
+  const switchTo = (id: string, level: string | null = null): void => {
+    setModelMenu(null);
+    if (onCommand?.(`/ovis-model ${id}${level ? ` ${level}` : ""}`)) setPicked({ id, level });
+    else setNote(t("Not confirmed. Check the terminal before sending again."));
+  };
   const usageDetail = usageWindows.map((window) => {
     const reset = formatResetIn(window.resets_at, Date.now());
     return `${windowLabel(window)} ${meterText(window, settings.usageCount)}${reset ? ` · ${t("Resets in {time}", { time: reset })}` : ""}`;
@@ -1034,9 +1084,8 @@ export function Composer({
   const worktree = worktreeRepo !== null;
   // Fit only changes to drawn content. Streaming context usage is a fixed-size ring unless
   // its number is open on desktop; transcript/status refreshes need no measurement layout.
-  useLayoutEffect(fitStatus, [fitStatus, agent, metadata?.model, metadata?.reasoning_effort,
-    metadata?.context?.window, contextShown && !mobile && metadata?.context ? contextLeftPercent(metadata.context) : null,
-    contextShown, mobile, usageCaption, usage?.problem, hintText, dictation.shown, backgroundTasks,
+  useLayoutEffect(fitStatus, [fitStatus, agent, modelId, effort,
+    metadata?.context?.window, settings.contextCircle, metadata?.models, mobile, usageCaption, usage?.problem, hintText, dictation.shown, backgroundTasks,
     plan?.done, plan?.total, statusCompact, compactNow !== undefined, facesLoaded, t]);
   const menuId = `composer-menu-${paneId}`;
   // the suggestions' own close, for a pointer or a phone, which has no Escape: it does what Escape does, and the
@@ -1363,26 +1412,31 @@ export function Composer({
             <span className="composer-agent-label visually-hidden">{agentLabel}</span>
             <span className="composer-status-separator visually-hidden" aria-hidden="true">·</span>
             <strong className="visually-hidden">{t(composerStatusWord(shownStatus))}</strong>
-            {/* the mark, the model, the level and the context ring as one quiet pill. It only shows: no role,
-                no focus, nothing to press but the ring inside it. A pane that names no model draws no pill
-                (.is-bare): the mark, a level if it has one, and the ring stand in the row as they are */}
-            <span className={`composer-pill${metadata?.model ? "" : " is-bare"}`}>
-              {agent && <AgentMark agent={agent} size={14} />}
+            {/* the model and the level as one quiet pill, the context ring before it. The header names the agent,
+                so the pill draws no agent's mark, only the model's maker's where there is one. A pane that names
+                no model draws no fill (.is-bare) */}
+            {metadata?.context && settings.contextCircle && <ContextRing context={metadata.context} onCompact={agent === "pi" ? undefined : compactNow} />}
+            {/* pi with its ovis-model extension names the models it may switch to: the pill opens them, and the
+                thinking slider, while pi is idle; any other pane's pill only shows */}
+            {models ? (
+              <button type="button" className={`composer-pill is-menu${metadata?.model ? "" : " is-bare"}`} aria-haspopup="menu" aria-expanded={modelMenu !== null}
+                disabled={!switchable} title={switchable ? t("Switch model") : t("Switch the model once the agent is idle")}
+                onClick={(event) => setModelMenu(modelMenu ? null : event.currentTarget)}>
+              {pillMark && <AgentMark agent={pillMark} size={14} className="composer-pill-mark" />}
               {modelShown && <span className="composer-model-info" aria-label={t("Model and reasoning")}>
                 {/* a name only for an id modelLabel can name for certain; any other id is drawn as received, in the identifier face */}
-                <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={metadata?.model ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
+                <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={modelId ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
                 {/* behind a name the id as received is still read; a touch cannot reach the title */}
-                {model?.named && <span className="composer-model-id visually-hidden">{metadata?.model}</span>}
+                {model?.named && <span className="composer-model-id visually-hidden">{modelId}</span>}
                 {/* no level recorded: nothing is drawn for it, no dot and no dash; the sentence is still read */}
-                <span className={`composer-reasoning${metadata?.reasoning_effort ? "" : " visually-hidden"}`} title={metadata?.reasoning_effort ? t("Reasoning effort: {effort}", { effort: metadata.reasoning_effort }) : t("Reasoning effort not available")}>
-                  <span className="composer-reasoning-full visually-hidden">{t("Reasoning {effort}", { effort: metadata?.reasoning_effort ?? "—" })}</span>
-                  {metadata?.reasoning_effort && <>
+                <span className={`composer-reasoning${effort ? "" : " visually-hidden"}`} title={effort ? t("Reasoning effort: {effort}", { effort: effort }) : t("Reasoning effort not available")}>
+                  <span className="composer-reasoning-full visually-hidden">{t("Reasoning {effort}", { effort: effort ?? "—" })}</span>
+                  {effort && <>
                     <span className="composer-reasoning-dot" aria-hidden="true">·</span>
-                    <span className="composer-reasoning-short" aria-hidden="true">{metadata.reasoning_effort}</span>
+                    <span className="composer-reasoning-short" aria-hidden="true">{effort}</span>
                   </>}
                 </span>
               </span>}
-              {metadata?.context && <ContextRing context={metadata.context} shown={contextShown} readOnly={mobile} onToggle={() => setContextShown((open) => !open)} onCompact={compactNow} />}
               {usage !== undefined && usage.problem === null && usageLimit !== undefined && <span
                 className={`composer-usage${usageLimit.used_percent >= HIGH_PERCENT ? " is-high" : ""}${usage.problem ? " has-problem" : ""}`}
                 title={`${usageName(usage)}\n${usageDetail}`}
@@ -1390,7 +1444,39 @@ export function Composer({
                 <span aria-hidden="true">{usageCaption}</span>
                 <span className="visually-hidden">{usageAccessible}</span>
               </span>}
-            </span>
+              {models && <ChevronDown className="composer-pill-chevron" aria-hidden="true" />}
+              </button>
+            ) : (
+              <span className={`composer-pill${metadata?.model ? "" : " is-bare"}`}>
+              {pillMark && <AgentMark agent={pillMark} size={14} className="composer-pill-mark" />}
+              {modelShown && <span className="composer-model-info" aria-label={t("Model and reasoning")}>
+                {/* a name only for an id modelLabel can name for certain; any other id is drawn as received, in the identifier face */}
+                <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={modelId ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
+                {/* behind a name the id as received is still read; a touch cannot reach the title */}
+                {model?.named && <span className="composer-model-id visually-hidden">{modelId}</span>}
+                {/* no level recorded: nothing is drawn for it, no dot and no dash; the sentence is still read */}
+                <span className={`composer-reasoning${effort ? "" : " visually-hidden"}`} title={effort ? t("Reasoning effort: {effort}", { effort: effort }) : t("Reasoning effort not available")}>
+                  <span className="composer-reasoning-full visually-hidden">{t("Reasoning {effort}", { effort: effort ?? "—" })}</span>
+                  {effort && <>
+                    <span className="composer-reasoning-dot" aria-hidden="true">·</span>
+                    <span className="composer-reasoning-short" aria-hidden="true">{effort}</span>
+                  </>}
+                </span>
+              </span>}
+              {usage !== undefined && usage.problem === null && usageLimit !== undefined && <span
+                className={`composer-usage${usageLimit.used_percent >= HIGH_PERCENT ? " is-high" : ""}${usage.problem ? " has-problem" : ""}`}
+                title={`${usageName(usage)}\n${usageDetail}`}
+              >
+                <span aria-hidden="true">{usageCaption}</span>
+                <span className="visually-hidden">{usageAccessible}</span>
+              </span>}
+              </span>
+            )}
+            {modelMenu && models && <RowMenu anchor={modelMenu} title={t("Model")} onClose={() => setModelMenu(null)}
+              items={models.map((entry) => ({ id: entry.id, label: entry.name, icon: Cpu, glyph: markGlyph(entry.id), checked: entry.id === currentModel?.id,
+                run: () => { if (entry.id !== currentModel?.id) switchTo(entry.id); } }))}
+              footer={currentModel && currentModel.levels.length > 1 ? <ThinkingSlider levels={currentModel.levels} value={effort} disabled={!switchable}
+                onCommit={(level) => switchTo(currentModel.id, level)} /> : undefined} />}
             {/* the chip is a button in the left controls; its count is still said here, where a change is announced */}
             {backgroundTasks > 0 && <span className="composer-task-count visually-hidden">{t(backgroundTasks === 1 ? "{n} background task" : "{n} background tasks", { n: backgroundTasks })}</span>}
           </span>

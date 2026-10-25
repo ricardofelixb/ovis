@@ -204,8 +204,9 @@ function readStream(stream: TranscriptStream, from: number, to: number): Buffer 
  * The same pass keeps an omp-family transcript's latest model and thinking-level
  * records (small lines): a change between the metadata head and the newest page
  * is otherwise never read, and the chat showed the level the session started at. */
-const SETTING_TYPES = ['"model_change"', '"thinking_level_change"'];
-const clearScans = new Map<string, { id: string; scanned: number; floor: number; tail: string; settings: Partial<Record<"model_change" | "thinking_level_change", { offset: number; end: number; line: string }>>; branch?: ClaudeBranch }>();
+const SETTING_TYPES = ['"model_change"', '"thinking_level_change"', '"ovis-model"'];
+type SettingType = "model_change" | "thinking_level_change" | "ovis-model";
+const clearScans = new Map<string, { id: string; scanned: number; floor: number; tail: string; settings: Partial<Record<SettingType, { offset: number; end: number; line: string }>>; branch?: ClaudeBranch }>();
 function applyHistoryBoundary(path: string, stream: TranscriptStream, source: RecognizedConversation["source"]): void {
   if (source === "codex-transcript" || source === "grok-transcript" || source === "agy-transcript") return;
   let scan = clearScans.get(path);
@@ -230,8 +231,11 @@ function applyHistoryBoundary(path: string, stream: TranscriptStream, source: Re
       if (!skipping && isClear(line)) scan.floor = base + offset;
       else if (!skipping && source !== "claude-transcript" && SETTING_TYPES.some((type) => line.includes(type))) {
         try {
-          const type: unknown = JSON.parse(line.toString("utf8"))?.type;
-          if (type === "model_change" || type === "thinking_level_change") scan.settings[type] = { offset: base + offset, end: base + newline, line: line.toString("utf8") };
+          const parsed: unknown = JSON.parse(line.toString("utf8"));
+          const fields = parsed !== null && typeof parsed === "object" ? parsed as { type?: unknown; customType?: unknown } : {};
+          // pi's ovis-model extension records the models a pane may switch to as a custom entry
+          const type = fields.type === "custom" && fields.customType === "ovis-model" ? "ovis-model" : fields.type;
+          if (type === "model_change" || type === "thinking_level_change" || type === "ovis-model") scan.settings[type] = { offset: base + offset, end: base + newline, line: line.toString("utf8") };
         } catch { /* not a record */ }
       }
       if (branch) {

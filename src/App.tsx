@@ -13,6 +13,7 @@ import { paneCovered, paneContentKey, paneContentPresented } from "./lib/panePre
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { worktreeRepoName } from "./lib/composerStrip.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
+import { HeaderBranch } from "./components/HeaderBranch.tsx";
 import { AgentMark } from "./components/AgentMark.tsx";
 import { AgentFriend } from "./components/AgentFriend.tsx";
 import { useWorkspaceFriends } from "./lib/friends.ts";
@@ -58,6 +59,7 @@ import { alertPrefs, useSettings } from "./lib/settings.ts";
 import { readComputerSettings } from "./lib/computerSettings.ts";
 import { formatKeys, shortcutDisplayKeys, useShortcuts } from "./lib/shortcuts.ts";
 import { useMediaQuery } from "./lib/useMediaQuery.ts";
+import { DETACHED, usePaneBranch } from "./lib/paneBranch.ts";
 import { useAnnouncedText } from "./lib/useAnnouncedText.ts";
 import { PaneLenses } from "./lib/paneLens.ts";
 import { paneContextPress } from "./lib/paneCanvas.ts";
@@ -994,6 +996,10 @@ export function App() {
     ? (snapshot?.workspaces.find((workspace) => workspace.workspace_id === selectedPane.workspace_id) ?? null)
     : null;
   const selectedLayout = snapshot?.layouts.find((layout) => layout.tab_id === selectedPane?.tab_id);
+  // where the composer drops its folder-and-branch strip (Composer.tsx), the header says the branch
+  const branchInHeader = useMediaQuery("(max-width: 640px), (pointer: coarse)");
+  const paneBranch = usePaneBranch(selectedMachineId, selectedPane?.workspace_id ?? null);
+  const headerBranch = !branchInHeader || paneBranch === null ? null : paneBranch === DETACHED ? t("Detached HEAD") : paneBranch;
   // Selection can precede rendering: in a zoomed tab the layout effect below redirects it,
   // but the sidebar's passive effect can still see that first selection. Only the selected
   // pane the canvas actually draws counts; paneInFront checks coverage at acknowledgement time.
@@ -1659,12 +1665,16 @@ export function App() {
         </div>
         <HeaderNote note={note} />
         {note !== null ? null : selectedPane && crumb ? (
-          <div className="context" title={crumb.tooltip}>
+          <div className={`context${headerBranch !== null ? " has-branch" : ""}`} title={crumb.tooltip}>
             <div className="context-title">
               {selectedAgent && (selectedFriend ? <AgentFriend friend={selectedFriend} agent={selectedAgent} status={activity.status(selectedMachineId, selectedPane)} /> : <AgentMark agent={selectedAgent} size={18} />)}
-              <span className="context-title-text">{selectedTitle}</span>
+              {/* the branch stands under the name, lined up with it, not under the mark */}
+              {headerBranch !== null ? <span className="context-title-stack">
+                <span className="context-title-text">{selectedTitle}</span>
+                <HeaderBranch branch={headerBranch} />
+              </span> : <span className="context-title-text">{selectedTitle}</span>}
             </div>
-            <div className="context-sub">
+            {headerBranch === null && <div className="context-sub">
               {/* one PC needs no name: the sidebar leaves it out too, and More still says it */}
               {crumb.showMachine && <><span className="machine-context-name">{crumb.machine}</span><span className="context-sep" aria-hidden="true">›</span></>}
               <span>{crumb.workspace}</span>
@@ -1674,25 +1684,22 @@ export function App() {
                   <span>{crumb.folder}</span>
                 </>
               )}
-            </div>
+            </div>}
           </div>
         ) : (
           <><Brand /><span className="machine-context-name">{selectedMachine?.name ?? selectedMachineId}</span></>
         )}
         {selectedPane && (
           <div className="segmented view-switch" role="group" aria-label="Pane view">
-            <button type="button" aria-pressed={!computerOpen && view === "chat"} onClick={() => { setComputerOpen(false); setView("chat"); setDrawerOpen(false); }} title={t("Chat transcript (⌘⇧J)")}>
-              <MessageSquare />
-              <span className="header-desktop-only">{t("Chat")}</span>
+            <button type="button" aria-pressed={!computerOpen && view === "chat"} onClick={() => { setComputerOpen(false); setView("chat"); setDrawerOpen(false); }} aria-label={t("Chat")} title={t("Chat transcript (⌘⇧J)")}>
+              <MessageSquare aria-hidden="true" />
             </button>
-            <button type="button" aria-pressed={!computerOpen && view === "terminal"} onClick={() => { setComputerOpen(false); setView("terminal"); setDrawerOpen(false); }} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
-              <SquareTerminal />
-              <span className="header-desktop-only">{t("Terminal")}</span>
+            <button type="button" aria-pressed={!computerOpen && view === "terminal"} onClick={() => { setComputerOpen(false); setView("terminal"); setDrawerOpen(false); }} aria-label={t("Terminal")} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
+              <SquareTerminal aria-hidden="true" />
               {!terminalAttach && <span className="pill pill-soon">{t("soon")}</span>}
             </button>
-            <button type="button" aria-pressed={computerOpen} onClick={() => { setComputerOpen(true); setDrawerOpen(false); }} title={t("The PC's desktop")}>
-              <Monitor />
-              <span className="header-desktop-only">{t("Computer")}</span>
+            <button type="button" aria-pressed={computerOpen} onClick={() => { setComputerOpen(true); setDrawerOpen(false); }} aria-label={t("Computer")} title={t("The PC's desktop")}>
+              <Monitor aria-hidden="true" />
             </button>
           </div>
         )}

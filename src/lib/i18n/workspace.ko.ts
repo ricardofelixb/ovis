@@ -56,7 +56,6 @@ export const WORKSPACE_KO: Record<string, string> = {
   "Starting shell…": "셸 시작 중…",
   "Directory not found": "폴더를 찾을 수 없습니다",
   "model, effort": "모델, 노력 수준",
-  "Model": "모델",
   "Empty: the agent's own model.": "비우면 에이전트 자체 모델을 씁니다.",
   "One model name, without spaces.": "띄어쓰기 없는 모델 이름 하나를 적으세요.",
   "Effort": "노력 수준",

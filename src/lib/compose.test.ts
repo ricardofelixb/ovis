@@ -329,6 +329,8 @@ describe("composer presentation helpers", () => {
     expect(composerModelDraw({ modelClipped: false, effortClipped: true })).toBe("no-effort");
     expect(composerModelDraw({ modelClipped: true, effortClipped: true })).toBe("no-effort");
     expect(composerModelDraw({ modelClipped: true, effortClipped: false })).toBe("no-effort");
+    expect(composerModelDraw({ modelClipped: true, effortClipped: false, marked: true })).toBe("no-name");
+    expect(composerModelDraw({ modelClipped: false, effortClipped: false, marked: true })).toBe("full");
   });
 
   it("turns machine agent ids into labels", () => {

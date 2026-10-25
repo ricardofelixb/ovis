@@ -24,6 +24,7 @@ import { outcomeCommand } from "../lib/outcomeChip.ts";
 import { composerLift, greetingMemory, greetingFits, greetingFolder, roomOverComposer, showsGreeting } from "../lib/greeting.ts";
 import { DETACHED, usePaneBranch } from "../lib/paneBranch.ts";
 import { answerHint } from "../lib/promptAnswer.ts";
+import { composerPayload } from "../lib/compose.ts";
 import { composerDrafts } from "../lib/composerDraft.ts";
 import { appendQuote, formatTerminalQuote } from "../lib/terminalQuote.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
@@ -769,6 +770,15 @@ export function PaneTerminal({
     return () => window.removeEventListener("keydown", onPage, true);
   }, [active, paneId]);
 
+  // a command for the agent's own line (the model pill's /ovis-model): typed and entered as keys, so it is
+  // never a chat message waiting for a turn that will not come. It goes in as one paste: typed key by key,
+  // pi's autocomplete answers late and the Enter takes a stale suggestion ("low" arrived as "losettings")
+  const runCommand = useCallback((text: string): boolean => {
+    const pane = paneRef.current, socket = socketRef.current;
+    if (!pane || !socket?.connected || observeRef.current) return false;
+    return socket.sendInput(pane, composerPayload(text, termRef.current?.modes.bracketedPasteMode ?? true)) && socket.sendInput(pane, "\r");
+  }, []);
+
   const sendApplicationPage = useCallback((direction: -1 | 1) => {
     const pane = paneRef.current, socket = socketRef.current;
     if (!pane || !socket?.connected || !activeRef.current || !presentedRef.current || chatViewRef.current || modalOpen()
@@ -1171,6 +1181,7 @@ export function PaneTerminal({
             </div>
           ) : null}
           onSend={composerSend}
+          onCommand={runCommand}
           onAbort={abortTurn}
           onUploadImage={uploadImage}
         />

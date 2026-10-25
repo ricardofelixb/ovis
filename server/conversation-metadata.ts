@@ -32,6 +32,22 @@ function contextOf(used: number, model: string | null, window: number | null, be
   return { used, window: long ? CLAUDE_LONG_WINDOW : null };
 }
 
+/** The ovis-model entry's models: the scoped ones, and the current one where it is not among them. */
+function ovisModels(data: RecordValue): NonNullable<ConversationMetadata["models"]> {
+  const read = (value: unknown) => {
+    const model = record(value);
+    const provider = label(model.provider);
+    const id = label(model.id);
+    if (!provider || !id) return null;
+    const levels = Array.isArray(model.levels) ? model.levels.filter((level): level is string => typeof level === "string") : [];
+    return { id: `${provider}/${id}`, name: label(model.name) ?? id, window: count(model.contextWindow), levels };
+  };
+  const current = read(data.model);
+  const scoped = (Array.isArray(data.scoped) ? data.scoped : []).map(read).filter((model) => model !== null);
+  if (current && !scoped.some((model) => model.id === current.id)) scoped.push(current);
+  return scoped.map((model) => ({ ...model, current: model.id === current?.id }));
+}
+
 /** Read recorded settings, never infer effort from the presence of thinking text.
  * Codex turn_context is a snapshot; omp/omo setting changes are separate events. */
 export function parseConversationMetadata(text: string, source: ConversationResponse["source"], before?: ConversationMetadata): ConversationMetadata {
@@ -80,6 +96,12 @@ export function parseConversationMetadata(text: string, source: ConversationResp
         piProvider = label(entry.provider) ?? (slash > 0 ? named!.slice(0, slash) : null);
       }
       if (entry.type === "thinking_level_change") metadata.reasoning_effort = label(entry.thinkingLevel);
+      if (source === "pi-transcript" && entry.type === "custom" && entry.customType === "ovis-model") {
+        metadata.models = ovisModels(record(entry.data));
+        // a switch moves what the last request filled onto the new model's window, as pi's footer does
+        const current = metadata.models.find((model) => model.current);
+        if (current && metadata.context) metadata.context = { used: metadata.context.used, window: current.window };
+      }
       const message = piMessage(entry) ?? {};
       // a turn answers at whatever model it ran at, and that is the one the window belongs to
       if (entry.type === "message" && message.role === "assistant" && label(message.model)) {
@@ -106,7 +128,9 @@ export function parseConversationMetadata(text: string, source: ConversationResp
           // failed or aborted request out, which filled nothing
           const filled = message.stopReason === "error" || message.stopReason === "aborted" ? 0
             : count(usage.totalTokens) || count(usage.input) + count(usage.output) + count(usage.cacheRead) + count(usage.cacheWrite);
-          metadata.context = contextOf(filled, metadata.model, null, metadata.context, piProvider);
+          // the extension's window is pi's own, also for a provider no catalog on disk names
+          const known = metadata.models?.find((model) => model.id === `${piProvider}/${metadata.model}`)?.window ?? null;
+          metadata.context = contextOf(filled, metadata.model, known, metadata.context, piProvider);
         }
       }
     } else if (source === "claude-transcript") {

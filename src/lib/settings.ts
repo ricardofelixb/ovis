@@ -129,6 +129,8 @@ export interface Settings {
   /** a New tab with an agent… button in the chat's composer, in a mouse-driven window; off until chosen, so the
    *  composer's row stays minimal: the tab menu opens the same dialog either way */
   composerNewTabButton: boolean;
+  /** the ring beside the model pill that shows how full the model's context is */
+  contextCircle: boolean;
   /** on a touch screen, a chip above the message box offers the prompt the agent suggests next.
    * Not `showSuggestionChip`: that key was on by default until 0.4.9 and is still stored on phones */
   suggestionChip: boolean;
@@ -196,12 +198,12 @@ export type DiffStyle = (typeof DIFF_STYLES)[number];
 
 /** Raw custom text, key combinations and account keys are never copied. Requiring every other
  * Settings field in the projection makes a new field require an explicit collection decision.
- * fileOpen, webLinks, the launch modes, followHerdrFocus and composerNewTabButton are not collected: the
+ * fileOpen, webLinks, the launch modes, followHerdrFocus, composerNewTabButton and contextCircle are not collected: the
  * telemetry schema (shared/telemetry.ts) does not carry them. */
 type TelemetrySourceSettings = Omit<Settings,
   "keyBarExtras" | "keyBarItems" | "shortcutOverrides" | "terminalFontFamily" | "chatFontFamily"
   | "quickReplies" | "usageOrder" | "usageHidden" | "fileOpen" | "webLinks" | "claudeLaunchMode" | "codexLaunchMode"
-  | "followHerdrFocus" | "composerNewTabButton" | "speechVoice" | "enterKey" | "openLiveWork">;
+  | "followHerdrFocus" | "composerNewTabButton" | "contextCircle" | "speechVoice" | "enterKey" | "openLiveWork">;
 
 /** Compare structured custom settings by content against this app's built-in defaults. */
 function differsFromDefault(value: unknown, defaultValue: unknown): boolean {
@@ -283,6 +285,7 @@ export const SETTING_SCOPE = {
   chatFontSize: "device", chatFontFamily: "device", uiFontSize: "device", chatWidth: "device", enterKey: "device",
   // a desk's composer button: a phone never shows it
   composerNewTabButton: "device",
+  contextCircle: "shared",
   keepScreenOn: "device", alertsOn: "device", alertInput: "device", alertDone: "device", alertInApp: "device", alertSound: "device",
   paletteLight: "device", paletteDark: "device", statusIndicators: "device",
   voiceInput: "device", voiceLanguage: "device", voicePolishChat: "device", voicePolishTerminal: "device", speechVoice: "device",
@@ -326,6 +329,7 @@ export const DEFAULT_SETTINGS: Settings = {
   enterKey: "auto",
   autoSendQueued: true,
   composerNewTabButton: false,
+  contextCircle: true,
   suggestionChip: false,
   showThinking: false,
   openLiveWork: true,
@@ -504,6 +508,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     enterKey: ENTER_KEYS.find((key) => key === record["enterKey"]) ?? (record["enterSends"] === false ? "newline" : DEFAULT_SETTINGS.enterKey),
     autoSendQueued: typeof record["autoSendQueued"] === "boolean" ? record["autoSendQueued"] : DEFAULT_SETTINGS.autoSendQueued,
     composerNewTabButton: typeof record["composerNewTabButton"] === "boolean" ? record["composerNewTabButton"] : DEFAULT_SETTINGS.composerNewTabButton,
+    contextCircle: typeof record["contextCircle"] === "boolean" ? record["contextCircle"] : DEFAULT_SETTINGS.contextCircle,
     suggestionChip: typeof record["suggestionChip"] === "boolean" ? record["suggestionChip"] : DEFAULT_SETTINGS.suggestionChip,
     showThinking: typeof record["showThinking"] === "boolean" ? record["showThinking"] : DEFAULT_SETTINGS.showThinking,
     openLiveWork: typeof record["openLiveWork"] === "boolean" ? record["openLiveWork"] : DEFAULT_SETTINGS.openLiveWork,

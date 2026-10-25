@@ -56,7 +56,6 @@ export const WORKSPACE_ZH: Record<string, string> = {
   "Starting shell…": "正在启动 Shell…",
   "Directory not found": "找不到目录",
   "model, effort": "模型、推理强度",
-  "Model": "模型",
   "Empty: the agent's own model.": "留空则使用代理自身的模型。",
   "One model name, without spaces.": "填写一个不含空格的模型名称。",
   "Effort": "推理强度",

@@ -1871,22 +1871,72 @@ button {
   overflow: visible;
 }
 
+/* A phone's header names the pane's branch on a dim line under the title instead of the crumb
+   (HeaderBranch.tsx), lined up with the name: the two lines share the one-line header's height */
+.context.has-branch {
+  max-height: none;
+}
+
+.context.has-branch .context-title {
+  min-height: 0;
+}
+
+.context-title-stack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.context-branch {
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-regular);
+  letter-spacing: normal;
+  line-height: var(--lh-tight);
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-branch-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-branch-tip {
+  position: fixed;
+  z-index: 60;
+  max-width: calc(100vw - 16px);
+  padding: var(--space-1) var(--space-2);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-strong);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
 /* the switch keeps its size; the pane title (.context) is the header's one flexible item */
 .view-switch {
   flex: 0 0 auto;
 }
 
-/* From 769px the lens switch is its two words and nothing around them: no track, no glyphs, the
-   chosen lens on the hover fill. Files follows it as an action of its own, after a hairline. */
+/* From 769px the lens switch is its icons and nothing around them: no track, the chosen lens on
+   the hover fill. Files follows it as an action of its own, after a hairline. */
 @media (min-width: 769px) {
   .app-header .view-switch {
     padding: 0;
     background: transparent;
     border-color: transparent;
-  }
-
-  .app-header .view-switch > button svg {
-    display: none;
   }
 }
 
@@ -2771,11 +2821,6 @@ button {
   .header-desktop-only {
     display: none;
   }
-}
-
-/* just above phone width the lens labels would squeeze the pane title to a glyph: icons only */
-@media (max-width: 560px) {
-  .view-switch .header-desktop-only { display: none; }
 }
 
 /* phones: every header control is a full thumb target. The lens track draws smaller than the bar,
