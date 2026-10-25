@@ -1823,7 +1823,8 @@
 .chat-abandoned > summary { font-style: italic; }
 .chat-abandoned-note { margin: var(--space-2) 0 0; color: var(--text-dim); }
 
-/* a streaming reply's newest words, until the next update settles them (useFreshWords) */
-::highlight(live-fresh) {
-  color: var(--text-dim);
-}
+/* a streaming reply's newest words fade in, a step a reveal tick (useFadeIn in lib/liveTurn.ts) */
+::highlight(live-fade-1) { color: color-mix(in srgb, var(--text) 12%, transparent); }
+::highlight(live-fade-2) { color: color-mix(in srgb, var(--text) 38%, transparent); }
+::highlight(live-fade-3) { color: color-mix(in srgb, var(--text) 64%, transparent); }
+::highlight(live-fade-4) { color: color-mix(in srgb, var(--text) 86%, transparent); }
