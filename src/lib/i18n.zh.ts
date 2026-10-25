@@ -84,6 +84,8 @@ const BASE: Record<string, string> = {
   "Resize the PC": "调整 PC 大小",
   "Keep its size": "保持其大小",
   "Sharpness": "清晰度",
+  "Zoom": "缩放",
+  "Smaller shows more of the PC": "调小可显示更多 PC 内容",
   "Quality": "画质",
   "Low": "低",
   "Medium": "中",

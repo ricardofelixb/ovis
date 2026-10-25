@@ -2812,13 +2812,14 @@ button {
    up under itself by its own height (--header-over), and the stack gives that height back above
    everything in it, so a prompt card, the held messages and the composer never go under the bar:
    only the transcript reaches up into it (ChatView.css), its first line still below it, and the
-   banners start below it (PaneTerminal.css). The terminal lens keeps the bar in the flow as before. */
+   banners start below it (PaneTerminal.css). The terminal lens keeps the bar in the flow as before, and so does
+   the Computer view: a desktop under the bar would lose its top. */
 @media (max-width: 768px) {
-  .app:has(> .app-body > .pane-column.is-chat > .pane-split:first-child > .pane-slot > .terminal-host:first-child) {
+  .app:has(> .app-body > .pane-column.is-chat > .pane-split:first-child > .pane-slot > .terminal-host:first-child:not(:has(> .computer-view:not(.is-hidden)))) {
     --header-over: calc(var(--header-h) + env(safe-area-inset-top, 0px));
   }
 
-  .app:has(> .app-body > .pane-column.is-chat > .pane-split:first-child > .pane-slot > .terminal-host:first-child) > .app-header {
+  .app:has(> .app-body > .pane-column.is-chat > .pane-split:first-child > .pane-slot > .terminal-host:first-child:not(:has(> .computer-view:not(.is-hidden)))) > .app-header {
     z-index: var(--z-header);
     margin-bottom: calc(-1 * var(--header-over));
     background: var(--bar-bg);

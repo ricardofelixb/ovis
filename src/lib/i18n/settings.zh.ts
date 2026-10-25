@@ -70,6 +70,8 @@ export const SETTINGS_ZH: Record<string, string> = {
   "Every pane on this device. Switching a pane's lens keeps it there until this changes. Auto: chat for an agent on a touch screen, else the terminal.": "适用于此设备上的所有窗格。在窗格中切换视图后，在更改此设置之前都会以该视图打开。自动：触屏上的智能体为聊天，其余为终端。",
   "Auto": "自动",
   "Show thinking": "显示思考过程",
+  "Open work while the agent runs": "代理运行时展开工作",
+  "Off, a running turn shows only its Working… row until tapped": "关闭后，运行中的轮次在点按前只显示“工作中…”一行",
   "Include the agent's reasoning blocks": "一并显示 Agent 的推理块",
   "Chat width": "聊天宽度",
   "How wide the conversation and the message box run on a large screen": "大屏幕上对话和输入框的宽度",

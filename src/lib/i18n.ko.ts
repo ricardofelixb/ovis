@@ -80,6 +80,8 @@ const BASE: Record<string, string> = {
   "Resize the PC": "PC 크기 조정",
   "Keep its size": "크기 유지",
   "Sharpness": "선명도",
+  "Zoom": "확대/축소",
+  "Smaller shows more of the PC": "작게 하면 PC 화면이 더 많이 보입니다",
   "Quality": "화질",
   "Low": "낮음",
   "Medium": "보통",

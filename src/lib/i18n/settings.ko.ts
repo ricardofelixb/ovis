@@ -70,6 +70,8 @@ export const SETTINGS_KO: Record<string, string> = {
   "Every pane on this device. Switching a pane's lens keeps it there until this changes. Auto: chat for an agent on a touch screen, else the terminal.": "이 기기의 모든 패널에 적용됩니다. 패널에서 화면을 바꾸면 이 설정을 다시 바꿀 때까지 그 화면으로 열립니다. 자동: 터치 화면의 에이전트는 채팅, 그 밖에는 터미널.",
   "Auto": "자동",
   "Show thinking": "생각 표시",
+  "Open work while the agent runs": "에이전트 작업 중 작업 펼치기",
+  "Off, a running turn shows only its Working… row until tapped": "끄면 실행 중인 턴은 탭할 때까지 \"작업 중…\" 줄만 표시합니다",
   "Include the agent's reasoning blocks": "에이전트의 추론 블록을 함께 보여줍니다",
   "Chat width": "채팅 너비",
   "How wide the conversation and the message box run on a large screen": "큰 화면에서 대화와 입력창이 차지하는 너비",

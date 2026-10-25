@@ -70,6 +70,8 @@ export const SETTINGS_JA: Record<string, string> = {
   "Every pane on this device. Switching a pane's lens keeps it there until this changes. Auto: chat for an agent on a touch screen, else the terminal.": "この端末のすべてのペインに適用されます。ペインで表示を切り替えると、この設定を変えるまでその表示で開きます。自動: タッチ画面のエージェントはチャット、それ以外はターミナル。",
   "Auto": "自動",
   "Show thinking": "思考を表示",
+  "Open work while the agent runs": "作業中は作業を開く",
+  "Off, a running turn shows only its Working… row until tapped": "オフにすると、実行中のターンはタップするまで「作業中…」の行だけを表示します",
   "Include the agent's reasoning blocks": "エージェントの推論ブロックも表示します",
   "Chat width": "チャットの幅",
   "How wide the conversation and the message box run on a large screen": "大きな画面で会話と入力欄が広がる幅",
