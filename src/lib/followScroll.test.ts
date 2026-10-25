@@ -13,4 +13,7 @@ describe("followGlides", () => {
   test("a layout the reader changed stays instant", () => {
     expect(followGlides({ working: true, reducedMotion: false, manualLayout: true })).toBe(false);
   });
+  test("a reply streaming in is followed at once", () => {
+    expect(followGlides({ working: true, reducedMotion: false, streaming: true })).toBe(false);
+  });
 });

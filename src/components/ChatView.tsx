@@ -1019,7 +1019,6 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   // feedback only: sending, queuing and stopping retain the server's input authority.
   const activity = state.activity ?? (agentStatus === "working" ? "working" : "idle");
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const smoothFollow = followGlides({ working: activity !== "idle" && agentStatus !== "blocked", reducedMotion });
   const workStatus = state.activity !== undefined && agentStatus !== "blocked" ? activity === "idle" ? "idle" : "working" : agentStatus;
   const [error, setError] = useState<UserFailure | null>(null);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
@@ -1191,6 +1190,8 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     if (seenSent.current === sentKey) return;
     seenSent.current = sentKey;
     setPopFrom(shownCount.current);
+    // sending reads on from the end, as in any chat: the message pops in where the reader is
+    scrollToBottom();
     // sent into a run (a queued message sent now): that turn is the one running, not one to finish
     const page = heldPage.current;
     const last = page[page.length - 1];
@@ -1706,10 +1707,14 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   // the last turn is that very send — matching the terminal, which shows it only as typed text.
   const shownTurns = useMemo(() => {
     const last = turns[turns.length - 1];
+    // A reply under way shows from its first word, tool or shown thinking: until then the footer's
+    // Working stays put instead of moving into an empty turn for a moment.
+    const streamed = streamingLast && last?.role === "assistant" ? splitTurn(last.parts) : null;
+    if (streamed !== null && streamed.answer.length === 0 && visibleWorkParts(streamed.work, settings.showThinking).length === 0) return turns.slice(0, -1);
     if (restored === null || last?.role !== "user") return turns;
     const sent = last.parts.filter((part): part is Extract<ConversationPart, { kind: "text" }> => part.kind === "text").map((part) => part.text).join("\n");
     return sameMessage(sent, restored) ? turns.slice(0, -1) : turns;
-  }, [turns, restored]);
+  }, [turns, restored, streamingLast, settings.showThinking]);
   heldPage.current = state.turns;
   shownCount.current = shownTurns.length;
   const popRow = popFrom === null ? -1 : shownTurns.findIndex((turn, index) => index >= popFrom && turn.role === "user");
@@ -1922,7 +1927,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       scroller={scroller}
       listRef={timeline}
       following={stickToBottom}
-      smoothFollow={smoothFollow || (revealing && !reducedMotion)}
+      smoothFollow={followGlides({ working: activity !== "idle" && agentStatus !== "blocked", reducedMotion, streaming: streamingLast })}
       memories={rowMemories}
       header={header}
       footer={footer}

@@ -10,5 +10,8 @@
   (`conversation-live`) to a chat that watches the pane, and the finished message takes its
   place once the transcript holds it. The reveal steps at most about 15 times a second, nothing
   streams to a page that is hidden or on another tab, and reduced motion leaves out the fade.
+  The reply shows from its first word, tool or shown thinking, so Working stays in place until
+  then, and while it streams the chat follows its end at once instead of gliding.
 - A message sent from here comes out of the composer: its bubble fades in and settles once, as
-  it is first read. Reduced motion leaves it still.
+  it is first read. Reduced motion leaves it still. Sending scrolls the chat to its end, so the
+  message is seen arriving even from higher up.
