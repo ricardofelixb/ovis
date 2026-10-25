@@ -362,6 +362,9 @@ function ChatPage() {
         <SettingsRow label={t("Show thinking")} description={t("Include the agent's reasoning blocks")}>
           <Toggle label={t("Show thinking")} checked={settings.showThinking} onChange={(showThinking) => update({ showThinking })} />
         </SettingsRow>
+        <SettingsRow label={t("Open work while the agent runs")} description={t("Off, a running turn shows only its Working… row until tapped")}>
+          <Toggle label={t("Open work while the agent runs")} checked={settings.openLiveWork} onChange={(openLiveWork) => update({ openLiveWork })} />
+        </SettingsRow>
         <SettingsRow label={t("Chat width")} description={t("How wide the conversation and the message box run on a large screen")} wide>
           <Segmented label={t("Chat width")} value={settings.chatWidth} onChange={(chatWidth) => update({ chatWidth })} options={CHAT_WIDTHS.map((chatWidth) => ({ value: chatWidth, label: t(chatWidth === "narrow" ? "Narrow" : chatWidth === "wide" ? "Wide" : chatWidth === "full" ? "Full" : "Default") }))} />
         </SettingsRow>
