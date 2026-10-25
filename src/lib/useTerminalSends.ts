@@ -11,14 +11,12 @@ import type { PaneSubmitRetention } from "./paneSubmitRetention.ts";
 import type { Translate } from "./i18n.ts";
 import type { Terminal } from "@xterm/xterm";
 import type { InputDraft } from "./draft.ts";
-import type { Settings } from "./settings.ts";
 
 export interface TerminalSendsDeps {
   activeRef: RefObject<boolean>;
   agent: string | null;
   chatView: boolean;
   coarse: boolean;
-  composingRef: RefObject<boolean>;
   directTyping: boolean;
   draft: InputDraft;
   draftHeldForRef: RefObject<string | null>;
@@ -27,7 +25,6 @@ export interface TerminalSendsDeps {
   inputLine: boolean;
   inputRowNow: () => InputRowState | null;
   knownOutcomes: (pane: string | null) => readonly string[] | null;
-  lineComposingRef: RefObject<boolean>;
   machineId: string;
   modifiersRef: RefObject<StickyModifiers>;
   onChatSuggestion: (pane: string, value: string | null) => void;
@@ -50,11 +47,10 @@ export interface TerminalSendsDeps {
   submitRetention: PaneSubmitRetention | null;
   tRef: RefObject<Translate>;
   termRef: RefObject<Terminal | null>;
-  updateSettings: (patch: Partial<Settings>) => void;
 }
 
 export function useTerminalSends(deps: TerminalSendsDeps) {
-  const { activeRef, agent, chatView, coarse, composingRef, directTyping, draft, draftHeldForRef, heldRef, hostRef, inputLine, inputRowNow, knownOutcomes, lineComposingRef, machineId, modifiersRef, onChatSuggestion, paneId, paneRef, pendingEpochRef, pendingSubmissionsRef, reassertIfStaleRef, redrawGreeting, releaseRef, secretRef, sessionRef, setChatRefresh, setChatSent, setDraft, showSentCommand, socketRef, stillOpenNote, stillOpenRef, submitRetention, tRef, termRef, updateSettings } = deps;
+  const { activeRef, agent, chatView, coarse, directTyping, draft, draftHeldForRef, heldRef, hostRef, inputLine, inputRowNow, knownOutcomes, machineId, modifiersRef, onChatSuggestion, paneId, paneRef, pendingEpochRef, pendingSubmissionsRef, reassertIfStaleRef, redrawGreeting, releaseRef, secretRef, sessionRef, setChatRefresh, setChatSent, setDraft, showSentCommand, socketRef, stillOpenNote, stillOpenRef, submitRetention, tRef, termRef } = deps;
   const sendDraft = useCallback(() => {
     const socket = socketRef.current;
     const pane = paneRef.current;
@@ -177,11 +173,6 @@ export function useTerminalSends(deps: TerminalSendsDeps) {
     return sent;
   }, []);
 
-  const toggleDirect = useCallback(() => {
-    if (composingRef.current || lineComposingRef.current) return;
-    updateSettings({ terminalInputMode: directTyping ? "line" : "direct" });
-  }, [directTyping, updateSettings]);
-
   // the input line keeps a tapped grid from raising the keyboard; typing straight into it gives it
   // back. Only turning direct typing on raises it: a pane or lens picked with it on does not.
   const directTypingRef = useRef(directTyping);
@@ -200,5 +191,5 @@ export function useTerminalSends(deps: TerminalSendsDeps) {
     }
   }, [inputLine, coarse, chatView, directTyping, paneId]);
 
-  return { sendDraft, discardDraft, submitComposerMessage, sendComposerText, sendTerminalLine, reassertGrid, pressEnter, toggleDirect };
+  return { sendDraft, discardDraft, submitComposerMessage, sendComposerText, sendTerminalLine, reassertGrid, pressEnter };
 }

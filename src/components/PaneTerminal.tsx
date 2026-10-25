@@ -308,8 +308,7 @@ export function PaneTerminal({
   // a composition in the input line keeps the key bar live but blocks the switch to direct typing:
   // unmounting the line mid-composition could drop the word or replay it into the pane
   const lineComposingRef = useRef(false);
-  const [lineComposing, setLineComposingState] = useState(false);
-  const setLineComposing = useCallback((active: boolean) => { lineComposingRef.current = active; setLineComposingState(active); }, []);
+  const setLineComposing = useCallback((active: boolean) => { lineComposingRef.current = active; }, []);
   const compositionCommitPendingRef = useRef(false);
   const barKeyRef = useRef<{ key: string; chord: string | null } | null>(null);
   /** set while the composer's Stop types its ESC, so it goes out as a Stop (ClientMessage `input.stop`) */
@@ -588,7 +587,27 @@ export function PaneTerminal({
     socketRef.current?.setMode(role);
   }, [role]);
 
-  const { sendDraft, discardDraft, submitComposerMessage, sendComposerText, sendTerminalLine, reassertGrid, pressEnter, toggleDirect } = useTerminalSends({ activeRef, agent, chatView, coarse, composingRef, directTyping, draft, draftHeldForRef, heldRef, hostRef, inputLine, inputRowNow, knownOutcomes, lineComposingRef, machineId, modifiersRef, onChatSuggestion, paneId, paneRef, pendingEpochRef, pendingSubmissionsRef, reassertIfStaleRef, redrawGreeting, releaseRef, secretRef, sessionRef, setChatRefresh, setChatSent, setDraft, showSentCommand, socketRef, stillOpenNote, stillOpenRef, submitRetention, tRef, termRef, updateSettings });
+  // the key bar's keyboard key, as in the Computer view: it raises or drops the soft keyboard for
+  // the grid or the input line, whichever this device types in (Settings picks which)
+  const [keyboardUp, setKeyboardUp] = useState(false);
+  useEffect(() => {
+    const stack = stackRef.current;
+    if (!stack || !coarse) return;
+    const typed = (target: EventTarget | null) => target instanceof HTMLTextAreaElement && stack.contains(target) && target.getAttribute("inputmode") !== "none";
+    const onFocusIn = (event: FocusEvent) => setKeyboardUp(typed(event.target));
+    const onFocusOut = (event: FocusEvent) => setKeyboardUp(typed(event.relatedTarget));
+    stack.addEventListener("focusin", onFocusIn);
+    stack.addEventListener("focusout", onFocusOut);
+    return () => { stack.removeEventListener("focusin", onFocusIn); stack.removeEventListener("focusout", onFocusOut); };
+  }, [coarse]);
+  const toggleKeyboard = () => {
+    const stack = stackRef.current;
+    const focused = document.activeElement;
+    if (keyboardUp && focused instanceof HTMLElement && stack?.contains(focused)) { focused.blur(); return; }
+    if (directTyping) termRef.current?.focus();
+    else stack?.querySelector<HTMLTextAreaElement>(".terminal-input-slot textarea")?.focus();
+  };
+  const { sendDraft, discardDraft, submitComposerMessage, sendComposerText, sendTerminalLine, reassertGrid, pressEnter } = useTerminalSends({ activeRef, agent, chatView, coarse, directTyping, draft, draftHeldForRef, heldRef, hostRef, inputLine, inputRowNow, knownOutcomes, machineId, modifiersRef, onChatSuggestion, paneId, paneRef, pendingEpochRef, pendingSubmissionsRef, reassertIfStaleRef, redrawGreeting, releaseRef, secretRef, sessionRef, setChatRefresh, setChatSent, setDraft, showSentCommand, socketRef, stillOpenNote, stillOpenRef, submitRetention, tRef, termRef });
 
   const { pressKey, toggleModifier, abortTurn } = useTypedKeys({ agent, agentStatus, barKeyRef, coarseRef, compositionCommitPendingRef, composingRef, inputLineRef, modifiersRef, paneId, reassertIfStaleRef, setInputError, setModifiers, socketRef, stopKeyRef, tRef, termRef });
 
@@ -1168,7 +1187,7 @@ export function PaneTerminal({
       {presented && paneId !== null && !secretActive && !observing && !chatView && <KeyBar disabled={composing || !connected || !inputReady || held || ended} onKey={pressKey}
         holdScope={`${paneStorageId(machineId, paneId)}:${view}`}
         modifiers={modifiers} onToggleModifier={toggleModifier} items={settings.keyBarItems}
-        {...(coarse ? { directTyping, onToggleDirect: toggleDirect, directDisabled: lineComposing } : {})} />}
+        {...(coarse ? { directTyping: !keyboardUp, directLabel: t("Keyboard"), onToggleDirect: toggleKeyboard } : {})} />}
     </div>
   );
 }
