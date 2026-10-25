@@ -9,9 +9,19 @@ export const repo = join(import.meta.dir, "..");
 
 export const read = (file: string): string => readFileSync(join(repo, file), "utf8");
 
-/** Repository-relative paths matching a glob, sorted; `node_modules` is never included. */
+/**
+ * The files git keeps or would add (what .gitignore leaves out is not a source: a local Android
+ * build alone holds thousands of scripts), or null outside a git checkout.
+ */
+const sources = ((): Set<string> | null => {
+  const listed = Bun.spawnSync(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"], { cwd: repo });
+  return listed.success ? new Set(listed.stdout.toString().split("\0").filter(Boolean)) : null;
+})();
+
+/** Repository-relative paths matching a glob, sorted; `node_modules` and ignored files are never included. */
 export const files = (pattern: string): string[] =>
-  [...new Bun.Glob(pattern).scanSync({ cwd: repo })].filter((file) => !file.split("/").includes("node_modules")).sort();
+  [...new Bun.Glob(pattern).scanSync({ cwd: repo })]
+    .filter((file) => !file.split("/").includes("node_modules") && (sources === null || sources.has(file))).sort();
 
 /** Throws one message, the instruction first and then each offender, when there are offenders. */
 export function fail(offenders: string[], instruction: string): void {

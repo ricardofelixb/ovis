@@ -1,4 +1,4 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 /**
  * The Computer view's settings for one PC, kept in this browser only: a phone and a desktop want their own
@@ -81,4 +81,22 @@ export function useComputerSettings(machineId: string): [ComputerSettings, (patc
 /** The settings as the viewer takes them, in its address's #fragment and in each change posted to it. */
 export function viewerOptions(settings: ComputerSettings): Record<string, unknown> {
   return { fit: settings.fit, sharpness: Number(settings.sharpness), zoom: Number(settings.zoom) / 100, quality: settings.quality, cursor: settings.cursor, speed: settings.speed, sound: settings.sound };
+}
+
+/**
+ * Whether the Computer view is open, and whether it is kept connected out of sight: for the minutes its
+ * settings give after it closes (2 by default), so coming back within them needs no new connection.
+ */
+export function useComputerView(machineId: string): [open: boolean, setOpen: (open: boolean) => void, kept: boolean] {
+  const [open, setOpen] = useState(false);
+  const [kept, setKept] = useState(false);
+  useEffect(() => {
+    if (open) {
+      setKept(true);
+      return;
+    }
+    const timer = setTimeout(() => setKept(false), Number(readComputerSettings(machineId).keep) * 60_000);
+    return () => clearTimeout(timer);
+  }, [open, machineId]);
+  return [open, setOpen, kept];
 }

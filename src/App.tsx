@@ -56,27 +56,25 @@ import { SnapshotRequests } from "./lib/snapshotRequests.ts";
 import { ReorderCoordinator } from "./lib/workspaceOrder.ts";
 import { ReorderContext } from "./lib/machineContext.tsx";
 import { alertPrefs, useSettings } from "./lib/settings.ts";
-import { readComputerSettings } from "./lib/computerSettings.ts";
+import { useComputerView } from "./lib/computerSettings.ts";
 import { formatKeys, shortcutDisplayKeys, useShortcuts } from "./lib/shortcuts.ts";
 import { useMediaQuery } from "./lib/useMediaQuery.ts";
-import { DETACHED, usePaneBranch } from "./lib/paneBranch.ts";
+import { DETACHED, useHeaderBranch } from "./lib/paneBranch.ts";
 import { useAnnouncedText } from "./lib/useAnnouncedText.ts";
 import { PaneLenses } from "./lib/paneLens.ts";
 import { paneContextPress } from "./lib/paneCanvas.ts";
 import type { AppActions, PaneView, PaneControls } from "./lib/actions.ts";
 import {
   notificationState,
-  syncNotificationState,
+  useNotificationState,
   requestNotificationPermission,
   shouldNotifyStatus,
   alertStatus,
   alertsAllow,
   showPaneEndedNotification,
   showPaneStatusNotification,
-  type NotificationState,
 } from "./lib/notifications.ts";
 import { ensurePushSubscription, pushSupported, removePushSubscription } from "./lib/push.ts";
-import { nativeAlerts } from "./lib/nativeApp.ts";
 import { machineGone, notificationLanding, notificationTargetFromSearch, sameLink, notificationViewForPane, onNotificationTarget, type NotificationTarget } from "./lib/notificationTarget.ts";
 import { useUpdates } from "./lib/updates.ts";
 import { UpdateNotice } from "./components/UpdateControls.tsx";
@@ -433,18 +431,7 @@ export function App() {
   // the Files dialog, and the file open in the viewer (a path as the chat or the dialog gave it)
   const [filesOpen, setFilesOpen] = useState(false);
   // the Computer view (ComputerView) over the active half, until Chat or Terminal is picked again
-  const [computerOpen, setComputerOpen] = useState(false);
-  // and kept connected, out of sight, for the minutes its settings give after (2 by default): coming back within
-  // them needs no new connection
-  const [computerKept, setComputerKept] = useState(false);
-  useEffect(() => {
-    if (computerOpen) {
-      setComputerKept(true);
-      return;
-    }
-    const timer = setTimeout(() => setComputerKept(false), Number(readComputerSettings(selectedMachineId).keep) * 60_000);
-    return () => clearTimeout(timer);
-  }, [computerOpen, selectedMachineId]);
+  const [computerOpen, setComputerOpen, computerKept] = useComputerView(selectedMachineId);
   const { viewing, openFile, closeFile, setPresentation, releaseFile } = useFileViewer();
   // a repository diff from the Files dialog's Changes tab, an entry of its own like a file
   const { viewing: diffViewing, openDiff, closeDiff, releaseDiff } = useRepoDiffViewer();
@@ -515,16 +502,7 @@ export function App() {
   // the earlier sessions of a workspace's folder (components/SessionHistory.tsx), while open
   const [sessionHistory, setSessionHistory] = useState<{ machineId: string; workspaceId: string; agent: SessionHistoryAgent; paneId: string | null; askingPaneId: string | null; selectedPaneId: string | null } | null>(null);
   const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped } = useConnectionChip();
-  const [notifications, setNotifications] = useState<NotificationState>(() => notificationState());
-  // the Android app's answer comes later than the first frame
-  useEffect(() => { void syncNotificationState().then(setNotifications); }, []);
-  // alerts turned on elsewhere (they sync) or before a reinstall: the Android app asks once on load
-  const askedNativeAlerts = useRef(false);
-  useEffect(() => {
-    if (!alertsOn || notifications !== "default" || !nativeAlerts() || askedNativeAlerts.current) return;
-    askedNativeAlerts.current = true;
-    void requestNotificationPermission().then(setNotifications);
-  }, [alertsOn, notifications]);
+  const [notifications, setNotifications] = useNotificationState(alertsOn);
   // this device has a server-side push subscription: alerts come from the server, not the tab
   const [pushOn, setPushOn] = useState(false);
   const pushOnRef = useRef(pushOn);
@@ -997,9 +975,8 @@ export function App() {
     : null;
   const selectedLayout = snapshot?.layouts.find((layout) => layout.tab_id === selectedPane?.tab_id);
   // where the composer drops its folder-and-branch strip (Composer.tsx), the header says the branch
-  const branchInHeader = useMediaQuery("(max-width: 640px), (pointer: coarse)");
-  const paneBranch = usePaneBranch(selectedMachineId, selectedPane?.workspace_id ?? null);
-  const headerBranch = !branchInHeader || paneBranch === null ? null : paneBranch === DETACHED ? t("Detached HEAD") : paneBranch;
+  const paneBranch = useHeaderBranch(selectedMachineId, selectedPane?.workspace_id ?? null);
+  const headerBranch = paneBranch === null ? null : paneBranch === DETACHED ? t("Detached HEAD") : paneBranch;
   // Selection can precede rendering: in a zoomed tab the layout effect below redirects it,
   // but the sidebar's passive effect can still see that first selection. Only the selected
   // pane the canvas actually draws counts; paneInFront checks coverage at acknowledgement time.
