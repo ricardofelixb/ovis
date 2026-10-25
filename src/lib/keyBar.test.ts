@@ -20,7 +20,7 @@ describe("default key bar", () => {
   const caps = (items: KeyBarItem[]) => items.map(keyBarItemLabel);
 
   it("prioritizes core keys ahead of modifiers and navigation", () => {
-    expect(caps(DEFAULT_KEY_BAR_ITEMS)).toEqual(["Esc", "Tab", "^C", "Ctrl", "Alt", "Shift", "Enter", "↑", "↓", "←", "→"]);
+    expect(caps(DEFAULT_KEY_BAR_ITEMS)).toEqual(["Esc", "Tab", "^C", "Ctrl", "Alt", "Shift", "Super", "Enter", "↑", "↓", "←", "→"]);
     expect(caps(sanitizeKeyBarItems(undefined))).toEqual(caps(DEFAULT_KEY_BAR_ITEMS));
   });
 });

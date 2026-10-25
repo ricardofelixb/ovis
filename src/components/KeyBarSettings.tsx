@@ -3,13 +3,12 @@ import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 
 import "./KeyBarSettings.css";
 
-import { DEFAULT_KEY_BAR_ITEMS, KEY_BAR_ITEMS_MAX, KEY_BAR_KEYS, keyBarInputSequence, keyBarItemId, keyBarItemLabel, type KeyBarItem } from "../lib/keyBar.ts";
+import { DEFAULT_KEY_BAR_ITEMS, KEY_BAR_ITEMS_MAX, KEY_BAR_KEYS, MODIFIER_CAPS, keyBarInputSequence, keyBarItemId, keyBarItemLabel, type KeyBarItem } from "../lib/keyBar.ts";
 import { NO_STICKY_MODIFIERS, type StickyModifiers } from "../lib/keys.ts";
 import { useSettings } from "../lib/settings.ts";
 import { useT } from "../lib/i18n.ts";
 
-const MODIFIERS: readonly (keyof StickyModifiers)[] = ["ctrl", "alt", "shift"];
-const MODIFIER_CAPS: Record<keyof StickyModifiers, string> = { ctrl: "Ctrl", alt: "Alt", shift: "Shift" };
+const MODIFIERS: readonly (keyof StickyModifiers)[] = ["ctrl", "alt", "shift", "super"];
 const CHARACTER_KEY = "character";
 
 /** The phone's key row, edited in its display order without requiring a drag gesture. */
@@ -104,7 +103,7 @@ export function KeyBarSettings() {
           </label>}
         </div>
         <div className="key-bar-settings-modifiers" role="group" aria-label={t("Combination modifiers")}>
-          {MODIFIERS.map((modifier) => <button type="button" className="key-bar-settings-modifier" key={modifier} aria-pressed={comboModifiers[modifier]} onClick={() => setComboModifiers((current) => ({ ...current, [modifier]: !current[modifier] }))}>{MODIFIER_CAPS[modifier]}</button>)}
+          {MODIFIERS.map((modifier) => <button type="button" className="key-bar-settings-modifier" key={modifier} aria-pressed={!!comboModifiers[modifier]} onClick={() => setComboModifiers((current) => ({ ...current, [modifier]: !current[modifier] }))}>{MODIFIER_CAPS[modifier]}</button>)}
         </div>
         <div className="key-bar-settings-combo-actions">
           <span className="key-bar-settings-preview" aria-live="polite">{characterValid ? keyBarItemLabel(combo) : t("Enter one character.")}</span>
