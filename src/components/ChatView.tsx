@@ -923,7 +923,7 @@ const Turn = memo(function Turn({ paneId, turn, fresh = false, live, streaming =
     <SkillActivityList parts={turn.parts} />
     {goal !== null && <GoalActivity goal={goal} />}
     {/* the pending head stands only above no answer: one above words would leave a gap when the turn ends */}
-    {(work.length > 0 || (live && answer.length === 0)) && <WorkBlockView paneId={paneId} parts={work} duration={formatWorkDuration(turn.ts, turn.end_ts ?? null)} live={live} waiting={waiting} defaultOpen={live ? openLiveWork : workStartsOpen(false, turn.parts)} showThinking={showThinking} pendingHead={answer.length === 0} />}
+    {(work.length > 0 || (live && answer.length === 0)) && <WorkBlockView paneId={paneId} parts={work} duration={formatWorkDuration(turn.ts, turn.end_ts ?? null)} live={live} waiting={waiting} defaultOpen={live || streaming ? openLiveWork : workStartsOpen(false, turn.parts)} showThinking={showThinking} pendingHead={answer.length === 0} />}
     {answer.map((part, index) => <Markdown key={index} skills={skills}>{part.text}</Markdown>)}
     {answerText.length > 0 && <div className="chat-turn-meta chat-agent-meta">
       {/* a mouse reads one copy glyph and the words "Plain text"; touch reads the two formats */}

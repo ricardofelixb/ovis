@@ -10,6 +10,7 @@ import { paneCommands, rememberPaneCommands } from "./commands.ts";
 import { paneFiles } from "./files.ts";
 import { badRequest, conflictResponse, errorResponse, isCount, isJsonObject, jsonResponse, readJsonObject, setRequestRoute } from "./http.ts";
 import { conversationImage, ConversationUnavailable, forgetPaneTranscriptState, HistoryChanged, paneConversation, paneProcessRoots, paneTranscript, toolOutput } from "./conversation.ts";
+import { rememberSent, sentDelta } from "./conversation-delta.ts";
 import { OPENCODE_TOOL_REF } from "./opencode.ts";
 import { openCodeInstalledVersion } from "./opencode-service.ts";
 import { DevinHistoryChanged } from "./devin.ts";
@@ -263,7 +264,12 @@ export async function handlePaneRequest(request: Request, url: URL, pathname: st
       const etag = `W/"${version}"`;
       const headers = { etag, "cache-control": "no-store" };
       if (request.headers.get("if-none-match")?.replace(/^W\//, "") === etag.slice(2)) return new Response(null, { status: 304, headers });
-      return jsonResponse(conversation, 200, headers);
+      if (page.before !== undefined) return jsonResponse(conversation, 200, headers);
+      // a newest page is polled again as its turns change
+      rememberSent(version, conversation.turns);
+      // a chat that names the answer it holds (`delta`, its ETag) gets only what changed since
+      const delta = sentDelta(url.searchParams.get("delta"), conversation.turns);
+      return jsonResponse(delta === null ? conversation : { ...conversation, turns: conversation.turns.slice(delta.keep), delta }, 200, headers);
     } catch (error) {
       if (error instanceof HistoryChanged || error instanceof DevinHistoryChanged) return jsonResponse({ error: { code: "history_changed", message: error.message } }, 409);
       // an unrecognized pane is not an error: the client falls back to the
