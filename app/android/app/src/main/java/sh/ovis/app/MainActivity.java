@@ -4,7 +4,9 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Window;
 import android.webkit.CookieManager;
@@ -89,6 +91,7 @@ public class MainActivity extends BridgeActivity {
                 .create();
         }
         super.onCreate(savedInstanceState);
+        if (host != null) claimDrawerEdge(bridge.getWebView());
         String appOrigin = bridge.getScheme() + "://" + bridge.getHost();
         followThemeColor(host == null ? Collections.singleton(appOrigin) : new HashSet<>(Arrays.asList(appOrigin, origin)));
         if (host != null) {
@@ -216,6 +219,27 @@ public class MainActivity extends BridgeActivity {
             return; // Keep the default bars when WebView rejects an origin rule.
         }
         bridge.getWebView().evaluateJavascript(BAR_COLOR_SCRIPT, null);
+    }
+
+    /**
+     * The client opens its drawer on a swipe in from the left edge (src/lib/edgeSwipe.ts, within
+     * EDGE_PX of it, at a width of 768 CSS px or less), where Android's back gesture starts too.
+     * Android gives an app at most 200dp of an edge's height, so the middle of the edge opens the
+     * drawer and the rest of it still goes back.
+     */
+    private void claimDrawerEdge(WebView view) {
+        if (Build.VERSION.SDK_INT < 29) return;
+        view.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            float density = getResources().getDisplayMetrics().density;
+            int height = bottom - top;
+            if ((right - left) / density > 768) {
+                v.setSystemGestureExclusionRects(Collections.emptyList());
+                return;
+            }
+            int band = Math.min(height, Math.round(200 * density));
+            int start = (height - band) / 2;
+            v.setSystemGestureExclusionRects(Collections.singletonList(new Rect(0, start, Math.round(24 * density), start + band)));
+        });
     }
 
     /**

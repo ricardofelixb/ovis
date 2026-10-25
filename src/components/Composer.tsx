@@ -56,7 +56,7 @@ import { modelLabel } from "../lib/modelName.ts";
 import { useFacesArrived } from "../lib/fontFaces.ts";
 import { activeTrigger, applyCompletion, type ActiveTrigger } from "../lib/mentions.ts";
 import { resolveComposerMenuActiveItemId } from "../lib/composerMenuHighlight.ts";
-import { quickReplyButtons, useSettings } from "../lib/settings.ts";
+import { enterSends, quickReplyButtons, useSettings } from "../lib/settings.ts";
 import { composerUsage, formatPercent, formatResetIn, HIGH_PERCENT, meterPercent, meterText, providerForAgent, statusWindows, usageName, useUsage, windowLabel } from "../lib/usage.ts";
 import { AgentMark } from "./AgentMark.tsx";
 import { BackgroundTasks } from "./BackgroundTasks.tsx";
@@ -264,6 +264,7 @@ export function Composer({
   const { fetchPaneFiles } = useMachineApi();
   const { settings } = useSettings();
   const mobile = useMediaQuery("(max-width: 640px), (pointer: coarse)");
+  const sends = enterSends(settings.enterKey, useMediaQuery("(pointer: coarse)"));
   const usageEnabled = settings.showUsage && !mobile && machineId === "local" && providerForAgent(agent) !== null;
   const { report: usageReport } = useUsage(usageEnabled);
   const usage = usageEnabled && usageReport !== null ? composerUsage(usageReport.providers, agent, settings.usageOrder, settings.usageHidden) : undefined;
@@ -962,14 +963,14 @@ export function Composer({
         return;
       }
       if (event.key !== "Enter") return;
-      const shouldSend = settings.enterSends
+      const shouldSend = sends
         ? !event.shiftKey && !event.metaKey && !event.ctrlKey
         : (event.metaKey || event.ctrlKey) && !event.shiftKey;
       if (!shouldSend) return;
       event.preventDefault();
       send();
     },
-    [agentStatus, choices, connected, menuDismissed, menuOpen, offered, onAbort, selectCompletion, selectedIndex, send, setTextAndCaret, settings.enterSends, trigger],
+    [agentStatus, choices, connected, menuDismissed, menuOpen, offered, onAbort, selectCompletion, selectedIndex, send, setTextAndCaret, sends, trigger],
   );
 
   const onPaste = useCallback(
@@ -1288,6 +1289,7 @@ export function Composer({
           // and a disabled box would lose its focus and the dictated text with it
           onPaste={onPaste}
           onKeyDown={onKeyDown}
+          enterKeyHint={sends ? "send" : "enter"}
           onClick={(event) => {
             setCaret(event.currentTarget.selectionStart);
             setMenuDismissed(false);

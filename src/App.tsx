@@ -63,6 +63,7 @@ import { paneContextPress } from "./lib/paneCanvas.ts";
 import type { AppActions, PaneView, PaneControls } from "./lib/actions.ts";
 import {
   notificationState,
+  syncNotificationState,
   requestNotificationPermission,
   shouldNotifyStatus,
   alertStatus,
@@ -497,6 +498,8 @@ export function App() {
   const [sessionHistory, setSessionHistory] = useState<{ machineId: string; workspaceId: string; agent: SessionHistoryAgent; paneId: string | null; askingPaneId: string | null; selectedPaneId: string | null } | null>(null);
   const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped } = useConnectionChip();
   const [notifications, setNotifications] = useState<NotificationState>(() => notificationState());
+  // the Android app's answer comes later than the first frame
+  useEffect(() => { void syncNotificationState().then(setNotifications); }, []);
   // this device has a server-side push subscription: alerts come from the server, not the tab
   const [pushOn, setPushOn] = useState(false);
   const pushOnRef = useRef(pushOn);

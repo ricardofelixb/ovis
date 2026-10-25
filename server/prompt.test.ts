@@ -6159,3 +6159,53 @@ describe("omp's model picker", () => {
     expect(parseInteractivePrompt("pi", wide)).toBeNull();
   });
 });
+
+describe("pi's ask_user_question dialog", () => {
+  const ask = {
+    id: "call-1",
+    questions: [{
+      header: "Test",
+      question: "Test question for the Ovis chat view: which item should we build first?",
+      multiSelect: false,
+      options: [
+        { label: "Enter adds a new line (Recommended)", description: "Smallest change, and you'd feel it right away on the fold." },
+        { label: "Notifications", description: "Real Android notifications for agent alerts." },
+        { label: "Questions in chat", description: null },
+      ],
+    }],
+  };
+  // a narrow pane: the question wraps, and the key hint runs onto a second line
+  const screen = (cursor: number) => [
+    " Test",
+    " Test question for the Ovis chat view: which",
+    " item should we build first?",
+    "",
+    ...["Enter adds a new line (Recommended)", "Notifications", "Questions in chat", "Type something."]
+      .map((label, index) => ` ${index === cursor ? "\u276f" : " "} ${index + 1}. ${label}`),
+    "",
+    " Enter to select \u00b7 \u2191/\u2193 to navigate \u00b7 n to add notes \u00b7 Esc to",
+    " cancel",
+  ].join("\n");
+
+  test("reads the question whole from the call, with the cursor from the screen", () => {
+    const prompt = parseInteractivePrompt("pi", screen(1), ask, true, [ask]);
+    expect(prompt?.question).toBe(ask.questions[0]!.question);
+    expect(prompt?.title).toBe("Test");
+    expect(prompt?.options.map((option) => option.label)).toEqual(["Enter adds a new line (Recommended)", "Notifications", "Questions in chat", "Type something."]);
+    expect(prompt?.custom_option_index).toBe(3);
+    expect(answerKeys(prompt!, { option_index: 0 })).toEqual([{ keys: ["up"] }, { keys: ["enter"] }]);
+    expect(answerKeys(prompt!, { option_index: 2 })).toEqual([{ keys: ["down"] }, { keys: ["enter"] }]);
+  });
+
+  test("types an own answer into the Type something. row, with no enter before it", () => {
+    const prompt = parseInteractivePrompt("pi", screen(0), ask, true, [ask]);
+    expect(answerKeys(prompt!, { custom_text: "Something else" })).toEqual([
+      { keys: ["down"] }, { keys: ["down"] }, { keys: ["down"] }, { text: "Something else" }, { keys: ["enter"] },
+    ]);
+  });
+
+  test("leaves a multi-question call to the terminal", () => {
+    const two = { ...ask, questions: [ask.questions[0]!, ask.questions[0]!] };
+    expect(parseInteractivePrompt("pi", screen(0), two, true, [two])?.question).not.toBe(ask.questions[0]!.question);
+  });
+});
