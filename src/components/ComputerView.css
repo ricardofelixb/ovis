@@ -127,11 +127,10 @@
   padding: 0 var(--space-2);
 }
 
-/* the phone's keyboard types here; nothing of it shows. Fixed at the top of the screen, so the keyboard never covers it
-   and no box around it can scroll to reveal it: Android scrolled Ovis's pane up to show it, and the pane stayed up */
+/* the phone's keyboard types here; nothing of it shows */
 .computer-view-field {
-  position: fixed;
-  top: 0;
+  position: absolute;
+  bottom: 0;
   left: 0;
   width: 1px;
   height: 1px;
