@@ -2,6 +2,8 @@ import "./adopt-legacy-env.ts";
 import { handleWorkspaceRequest } from "./workspace-routes.ts";
 import { connectionData, createCore, type SocketData } from "./core/index.ts";
 import { handleScreenOpen, handleScreenRequest, isScreenPath, withScreenSockets, type ScreenSocketData } from "./screen.ts";
+import { handlePiVoiceRequest, PiVoiceHub, type PiVoiceSocketData, withPiVoiceSockets } from "./pi-voice.ts";
+import { PI_VOICE_PATH, PI_VOICE_STATUS_PATH } from "../shared/pi-voice.ts";
 import { ClientConnectionLog } from "./client-connection-log.ts";
 import { RequestLog } from "./request-log.ts";
 import { handlePaneRequest } from "./pane-routes.ts";
@@ -243,7 +245,8 @@ export function createServer(
 
   const envPort = process.env["PORT"];
   const clientConnectionLog = new ClientConnectionLog();
-  const server = Bun.serve<SocketData | ScreenSocketData>({
+  const piVoice = new PiVoiceHub({ onRevoke: (id, close) => devices.onRevoke(id, close) });
+  const server = Bun.serve<SocketData | ScreenSocketData | PiVoiceSocketData>({
     port: options.port ?? (envPort ? Number(envPort) : DEFAULT_PORT),
     hostname,
     maxRequestBodySize: BUN_BODY_CEILING,
@@ -284,7 +287,7 @@ export function createServer(
         return errorResponse(error);
       }
       const requestShape = { loopback, forwarded, funnel, tailscaleLogin, forwardedFor, serveOnly };
-      const identity = await identityOf(token === "" && pairedDevice === null && isServeOwnerRequest(requestShape) && (pathname === "/ws" || pathname.startsWith("/api/")), requestHost);
+      const identity = await identityOf(token === "" && pairedDevice === null && isServeOwnerRequest(requestShape) && (pathname === "/ws" || pathname === PI_VOICE_PATH || pathname.startsWith("/api/")), requestHost);
       const access = decideAccess({
         ...requestShape,
         host: requestHost,
@@ -299,9 +302,9 @@ export function createServer(
       if (requiresAuth(pathname) && !authenticated) {
         setRequestRoute("auth-refusal");
         // a script's Bearer guess is told to wait; a browser's cookie gets the usual 401 and its sign-in form
-        if (presented === "held" && pathname !== "/ws" && request.headers.has("authorization")) return presentedTokenHeld(client);
+        if (presented === "held" && pathname !== "/ws" && pathname !== PI_VOICE_PATH && request.headers.has("authorization")) return presentedTokenHeld(client);
         // The WS client never parses a body, so the upgrade refusal stays plain text.
-        return pathname === "/ws" ? new Response("unauthorized", { status: 401 }) : unauthorizedJson(access.level === "none" ? access.reason : "token_required");
+        return pathname === "/ws" || pathname === PI_VOICE_PATH ? new Response("unauthorized", { status: 401 }) : unauthorizedJson(access.level === "none" ? access.reason : "token_required");
       }
 
       const readOnly = access.level === "full" && access.role === "watch";
@@ -402,6 +405,12 @@ export function createServer(
         const upgraded = bunServer.upgrade(request, { headers, data: connectionData({ deviceId, readOnly }) });
         if (upgraded) return undefined;
         return new Response("websocket upgrade required", { status: 426 });
+      }
+
+      // a live voice call with the Pi in a pane (server/pi-voice.ts), and whether the pane can take one
+      if (pathname === PI_VOICE_PATH || pathname === PI_VOICE_STATUS_PATH) {
+        const deviceId = access.level === "full" ? access.device?.id : undefined;
+        return handlePiVoiceRequest(request, url, bunServer, piVoice, { readOnly, deviceId, headers });
       }
 
       if (pathname === "/api/auth") {
@@ -562,7 +571,7 @@ export function createServer(
       });
     },
 
-    websocket: withScreenSockets(core.websocket),
+    websocket: withPiVoiceSockets(withScreenSockets(core.websocket), piVoice),
   });
 
   const requestLog = new RequestLog(options.stateDir ?? defaultStateDir());

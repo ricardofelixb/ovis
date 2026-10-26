@@ -631,6 +631,18 @@
   --composer-action-fill: var(--primary);
 }
 
+/* a live call where there is nothing to send: Send's circle with a waveform, as in the agents app */
+.composer-voice {
+  --composer-action-fill: var(--primary);
+}
+
+/* during this pane's call, the empty box's circle hangs it up: Stop's colours, as the agents
+   app's hang-up is the text colour with the background's glyph */
+.composer-hangup {
+  --composer-action-fill: var(--text-strong);
+  color: var(--bg);
+}
+
 /* the one round button: Stop is Send's circle in the text colour, in the same place at the same
    size, so only the glyph changes when the agent starts and ends a turn */
 .composer-stop {
@@ -671,7 +683,8 @@
 }
 
 @media (hover: hover) {
-  .composer-send:hover:not(:disabled) {
+  .composer-send:hover:not(:disabled),
+  .composer-voice:hover {
     --composer-action-fill: var(--primary-hover);
   }
 

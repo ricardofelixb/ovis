@@ -276,8 +276,17 @@ pieces are the Java twins of the iOS ones, in `app/android/app/src/main/java/sh/
   script, which `app/scripts/build-web.ts` inlines.
 - The manifest allows cleartext http to any host (see the connect screen's warning above).
   `minSdkVersion` is 26 (Android 8), which the QR scanner's library needs. The merged manifest
-  asks for INTERNET, ACCESS_NETWORK_STATE, CAMERA (the QR scanner) and androidx's own
+  asks for INTERNET, ACCESS_NETWORK_STATE, CAMERA (the QR scanner), RECORD_AUDIO and
+  MODIFY_AUDIO_SETTINGS (the page's microphone, for dictation and live voice),
+  FOREGROUND_SERVICE and FOREGROUND_SERVICE_MICROPHONE (below) and androidx's own
   `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`.
+- Android stops a hidden app's microphone, so a live call would go quiet once the app is out of
+  sight or the screen locks. `LiveCallService`, a foreground service of the microphone type,
+  keeps it going under an ongoing notification: the page starts it once the call has the
+  microphone and stops it when the call lets go (`nativeLiveCall` in `src/lib/nativeApp.ts`). A
+  page loading anew, the activity going or the app being swiped away stops it too. Google Play
+  asks for a declaration of this service type on upload. On Android 12 and later the service also
+  plays the call on the loudspeaker rather than the earpiece while no headset is connected.
 - Backups are off (`allowBackup="false"`, and `data_extraction_rules.xml` for a move to a new
   phone on Android 12 and later): the WebView's store holds each PC's device cookie, so a restored
   copy would be signed in without pairing.

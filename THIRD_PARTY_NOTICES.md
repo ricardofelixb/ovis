@@ -11,6 +11,23 @@ validation approach from
 The MIT license text below applies. Ovis uses independent server IDs,
 bounded private storage and absent-only response defaults.
 
+## Agents app orb
+
+The live voice call's orb adapts the agents app's `agent-orb` package, written by the same author as
+this fork, in three files:
+
+- `src/lib/orbShader.ts` is the glass-liquid fragment shader and the frost palette, ported from SkSL
+  to GLSL ES 1.0 (`packages/agent-orb/src/effects/glass-liquid/shader.ts` and
+  `packages/agent-orb/src/identity.ts`, the `glass-frost` preset).
+- `src/lib/orbMotion.ts` is the orb's swell, rest and flow from the microphone and reply levels
+  (`packages/agent-orb/src/motion.ts`).
+- `src/components/VoiceOrb.tsx` draws them on a WebGL canvas, as the agents app's
+  `apps/desktop/src/components/orb/DesktopAgentOrb.tsx` does with CanvasKit.
+
+Copyright (c) 2026 Ricardo Felix. The agents app is proprietary ("All rights reserved"), so the
+license these files carry here is **pending the author's confirmation**: it must be settled before
+this branch is pushed.
+
 ## Theme palettes
 
 The CSS theme colors adapt herdr's pinned palettes, with readability adjustments recorded in

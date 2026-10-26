@@ -1,0 +1,313 @@
+/* the full-screen live voice call with a Pi pane (PiVoiceView.tsx); a drag down on its orb moves
+   it with the finger through --pi-voice-pull (0..1, src/lib/orbDrag.ts) */
+.pi-voice {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) + 1);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: var(--app-height, 100dvh);
+  padding: calc(env(safe-area-inset-top, 0px) + var(--space-4)) calc(env(safe-area-inset-right, 0px) + var(--space-4))
+    calc(env(safe-area-inset-bottom, 0px) + var(--space-4)) calc(env(safe-area-inset-left, 0px) + var(--space-4));
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  transform: translateY(calc(var(--pi-voice-pull, 0) * 40vh));
+  opacity: calc(1 - var(--pi-voice-pull, 0) * 0.5);
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  animation: pi-voice-rise var(--dur-base) var(--ease-out);
+}
+
+.pi-voice.is-dragging,
+.pi-voice-dock.is-dragging .pi-voice-dock-orb {
+  transition: none;
+}
+
+@keyframes pi-voice-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12vh);
+  }
+}
+
+.pi-voice-header {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch-target);
+  text-align: center;
+}
+
+.pi-voice-collapse {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+}
+
+.pi-voice-collapse svg {
+  width: var(--space-6);
+  height: var(--space-6);
+}
+
+.pi-voice-label {
+  font-size: var(--fs-lg);
+  color: var(--text-strong);
+}
+
+.pi-voice-status {
+  min-height: 1.2em;
+  font-size: var(--fs-md);
+  color: var(--text-dim);
+}
+
+.pi-voice-stage {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  /* a stroke on the orb is the drag's, not a scroll */
+  touch-action: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* the orb's square: the shader's sphere is 72% of it, which leaves the room its swell takes */
+.pi-voice-orb {
+  width: min(86vw, 52dvh, 380px);
+  aspect-ratio: 1;
+}
+
+.pi-voice-orb-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* where WebGL draws nothing: a disc in the theme's colors that swells the same way */
+.pi-voice-orb-disc {
+  width: 72%;
+  height: 72%;
+  margin: 14%;
+  border-radius: var(--radius-pill);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--primary-hover) 90%, var(--text-strong)), var(--primary) 55%, color-mix(in srgb, var(--primary) 55%, var(--bg)));
+  box-shadow: 0 0 var(--space-8) color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+.pi-voice-stage.is-error .pi-voice-orb-disc {
+  background: var(--status-blocked);
+}
+
+.pi-voice-transcript {
+  width: min(100%, 36rem);
+  min-height: calc(var(--space-8) * 3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.pi-voice-line {
+  margin: 0;
+  font-size: var(--fs-chat);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  /* the last words, not an essay: a long turn scrolls off the top */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pi-voice-line.is-user {
+  color: var(--text-dim);
+}
+
+.pi-voice-line.is-assistant {
+  color: var(--text-strong);
+}
+
+.pi-voice-end {
+  margin: 0 0 var(--space-4);
+  max-width: 28rem;
+  text-align: center;
+  color: var(--danger-text);
+}
+
+.pi-voice-controls {
+  display: flex;
+  gap: var(--space-6);
+  padding-top: var(--space-4);
+}
+
+.pi-voice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--touch-target) * 1.5);
+  height: calc(var(--touch-target) * 1.5);
+  padding: 0;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-strong);
+}
+
+.pi-voice-button svg {
+  width: var(--space-6);
+  height: var(--space-6);
+}
+
+.pi-voice-button[aria-pressed="true"] {
+  background: var(--text-strong);
+  color: var(--bg);
+}
+
+.pi-voice-button.is-end {
+  border-color: transparent;
+  background: var(--status-blocked);
+  color: var(--bg);
+}
+
+.pi-voice-button:disabled {
+  opacity: 0.5;
+}
+
+.pi-voice-button.is-compact {
+  width: var(--touch-target);
+  height: var(--touch-target);
+}
+
+.pi-voice-button.is-compact svg {
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+/* the call's orb over the composer of its pane (PiVoiceDock), as in the agents app: the chat stays
+   in view and usable under it, and only a stroke that starts on the orb is the orb's. A drag up
+   grows it toward the full call; Mute fades as it goes. The composer's button hangs up, so End
+   shows only at the screen's foot. The orb keeps the middle with or without End beside it */
+.pi-voice-dock {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-3));
+  left: 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-5);
+  pointer-events: none;
+}
+
+.pi-voice-dock > * {
+  pointer-events: auto;
+}
+
+.pi-voice-dock > .pi-voice-button:not(.is-end) {
+  justify-self: end;
+}
+
+.pi-voice-dock > .pi-voice-button.is-end {
+  justify-self: start;
+}
+
+/* no composer of the call's pane in view: the dock keeps to the screen's foot */
+.pi-voice-dock.is-floating {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-4));
+  z-index: var(--z-modal);
+}
+
+.pi-voice-dock-orb {
+  width: calc(var(--touch-target) * 2.25);
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  touch-action: none;
+  transform: translateY(calc(var(--pi-voice-pull, 0) * -30vh)) scale(calc(1 + var(--pi-voice-pull, 0) * 1.5));
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.pi-voice-dock-orb .pi-voice-orb {
+  width: 100%;
+}
+
+.pi-voice-dock.is-dragging .pi-voice-button {
+  opacity: calc(1 - var(--pi-voice-pull, 0));
+}
+
+/* the orb shrinking away once its call ends takes no taps */
+.pi-voice-dock.is-leaving > * {
+  pointer-events: none;
+}
+
+/* a call opens on the orb growing out over the composer, a little past its size and back, and
+   closes on it shrinking away: the agents app's timing. `scale` rather than `transform`, which
+   the drag holds */
+@media (prefers-reduced-motion: no-preference) {
+  .pi-voice-dock.is-entering .pi-voice-dock-orb {
+    animation: pi-voice-orb-fade-in 394ms cubic-bezier(0.33, 1, 0.68, 1), pi-voice-orb-grow 680ms;
+  }
+
+  .pi-voice-dock.is-entering .pi-voice-button {
+    animation: pi-voice-control-in 520ms cubic-bezier(0.16, 1, 0.3, 1) 140ms backwards;
+  }
+
+  .pi-voice-dock.is-leaving .pi-voice-dock-orb {
+    animation: pi-voice-orb-out 240ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+  }
+
+  .pi-voice-dock.is-leaving .pi-voice-button {
+    opacity: 0;
+    transition: opacity 140ms ease;
+  }
+}
+
+@keyframes pi-voice-orb-fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes pi-voice-orb-grow {
+  0% { scale: 0.46; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+  58% { scale: 1.05; animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1); }
+  100% { scale: 1; }
+}
+
+@keyframes pi-voice-control-in {
+  from { opacity: 0; }
+}
+
+@keyframes pi-voice-orb-out {
+  to { opacity: 0; scale: 0.28; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-voice,
+  .pi-voice-dock-orb {
+    animation: none;
+    transition: none;
+  }
+
+  .pi-voice-dock.is-leaving {
+    visibility: hidden;
+  }
+}

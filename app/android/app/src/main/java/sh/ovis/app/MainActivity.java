@@ -175,6 +175,8 @@ public class MainActivity extends BridgeActivity {
                     @Override
                     public void onPageStarted(WebView webView) {
                         pageFailed = false;
+                        // a page loading anew has no call going
+                        LiveCallService.stop(MainActivity.this);
                     }
 
                     @Override
@@ -261,6 +263,13 @@ public class MainActivity extends BridgeActivity {
         // Capacitor's SystemBars puts the theme's bars back on a change (dark mode, rotation)
         super.onConfigurationChanged(newConfig);
         if (barColor != null) paintBars(barColor);
+    }
+
+    @Override
+    public void onDestroy() {
+        // the page, and any call it had going, goes with the activity
+        LiveCallService.stop(this);
+        super.onDestroy();
     }
 
     @Override
