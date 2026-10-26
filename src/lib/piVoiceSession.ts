@@ -2,7 +2,9 @@ import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "reac
 
 import { encodePiVoiceFrame, parsePiFrame, PI_VOICE_PATH, type PhoneToPiFrame, type PiToPhoneFrame, type PiVoice, type PiVoiceEndCode, type PiVoicePhase } from "../../shared/pi-voice.ts";
 import { fetchPiVoiceStatus } from "./api.ts";
+import { t } from "./i18n.ts";
 import { useMachineId } from "./machineContext.tsx";
+import { nativeLiveCall } from "./nativeApp.ts";
 import { BrowserLiveMedia } from "./piVoiceMedia.ts";
 import { micErrorReason } from "./voice.ts";
 import { playVoiceChime, primeVoiceChime } from "./voiceChime.ts";
@@ -109,6 +111,7 @@ function finish(end: PiVoiceEnd | null): void {
       // a call that never got as far as its media still holds what the tap asked for
       for (const track of over.stream?.getTracks() ?? []) track.stop();
       void over.audioContext?.close().catch(() => undefined);
+      if (over.stream) nativeLiveCall(null);
     }, RELEASE_AFTER_MS);
   }
   // what went wrong is read in the full call, which has the room for it
@@ -233,6 +236,7 @@ export function startPiVoice({ paneId, label, voice }: { paneId: string; label: 
         return;
       }
       started.stream = stream;
+      nativeLiveCall({ title: t("Live voice"), body: label });
       connect(started, paneId, voice);
     },
     (error: unknown) => {

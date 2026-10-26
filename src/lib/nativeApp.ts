@@ -24,9 +24,21 @@ export async function changePc(): Promise<void> {
   await bridge()?.nativePromise?.("HerdrShell", "disconnect", {});
 }
 
+const inAndroidApp = (): boolean => inNativeApp() && bridge()?.getPlatform?.() === "android";
+
 /** The Android app shows alerts itself (HerdrShellPlugin.java): its WebView has no Web Notifications. */
 export function nativeAlerts(): boolean {
-  return inNativeApp() && bridge()?.getPlatform?.() === "android";
+  return inAndroidApp();
+}
+
+/**
+ * Android stops a hidden app's microphone: the Android app keeps a live call going out of sight
+ * under an ongoing notification (LiveCallService.java). An app without it stays as it was.
+ */
+export function nativeLiveCall(notice: { title: string; body: string } | null): void {
+  if (!inAndroidApp()) return;
+  const answer = bridge()?.nativePromise?.("HerdrShell", notice ? "liveCallStarted" : "liveCallEnded", notice ?? {});
+  void answer?.catch(() => undefined);
 }
 
 export type NativeAlertsState = "granted" | "denied" | "default";

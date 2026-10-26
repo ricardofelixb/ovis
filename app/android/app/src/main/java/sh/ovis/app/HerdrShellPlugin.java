@@ -109,6 +109,23 @@ public class HerdrShellPlugin extends Plugin {
         NotificationManagerCompat.from(getContext()).notify(tag, 0, notification.build());
         call.resolve();
     }
+
+    /** A live call has the microphone: keep it going out of sight, under a notification of title and body. */
+    @PluginMethod
+    public void liveCallStarted(PluginCall call) {
+        try {
+            LiveCallService.start(getContext(), call.getString("title", "Ovis"), call.getString("body", ""));
+        } catch (RuntimeException outOfSight) {
+            // the app left view before the microphone was allowed: the call goes on only while it is in view
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void liveCallEnded(PluginCall call) {
+        LiveCallService.stop(getContext());
+        call.resolve();
+    }
     @PluginMethod
     public void getState(PluginCall call) {
         JSObject state = new JSObject();
