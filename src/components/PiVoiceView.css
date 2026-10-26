@@ -44,43 +44,30 @@
   justify-content: center;
 }
 
-/* a plain disc that swells with the voice; the shader orb replaces it where WebGL draws one */
+/* the orb's square: the shader's sphere is 72% of it, which leaves the room its swell takes */
 .pi-voice-orb {
-  --orb-level: 0;
-  width: min(60vw, 40dvh, 280px);
+  width: min(86vw, 52dvh, 380px);
   aspect-ratio: 1;
+}
+
+.pi-voice-orb-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* where WebGL draws nothing: a disc in the theme's colors that swells the same way */
+.pi-voice-orb-disc {
+  width: 72%;
+  height: 72%;
+  margin: 14%;
   border-radius: var(--radius-pill);
   background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--primary-hover) 90%, var(--text-strong)), var(--primary) 55%, color-mix(in srgb, var(--primary) 55%, var(--bg)));
-  box-shadow: 0 0 calc(var(--space-8) + var(--orb-level) * var(--space-8)) color-mix(in srgb, var(--primary) 45%, transparent);
-  transform: scale(calc(1 + var(--orb-level) * 0.15));
-  opacity: 0.9;
-  transition: opacity var(--dur-fast) var(--ease-out);
+  box-shadow: 0 0 var(--space-8) color-mix(in srgb, var(--primary) 45%, transparent);
 }
 
-.pi-voice-stage.is-connecting .pi-voice-orb,
-.pi-voice-stage.is-standby .pi-voice-orb,
-.pi-voice-stage.is-working .pi-voice-orb {
-  animation: pi-voice-breathe 1.8s ease-in-out infinite;
-}
-
-.pi-voice-stage.is-muted .pi-voice-orb,
-.pi-voice-stage.is-over .pi-voice-orb {
-  opacity: 0.35;
-}
-
-.pi-voice-stage.is-error .pi-voice-orb {
+.pi-voice-stage.is-error .pi-voice-orb-disc {
   background: var(--status-blocked);
-}
-
-@keyframes pi-voice-breathe {
-  50% { opacity: 0.55; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pi-voice-stage .pi-voice-orb {
-    animation: none;
-    transform: none;
-  }
 }
 
 .pi-voice-transcript {

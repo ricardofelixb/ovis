@@ -1,10 +1,11 @@
 import { Mic, MicOff, PhoneOff } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 
 import { useT } from "../lib/i18n.ts";
 import { dismissPiVoice, endPiVoice, piVoiceLevels, setPiVoiceMuted, usePiVoice, type PiVoiceEnd, type PiVoiceState } from "../lib/piVoiceSession.ts";
 import { usePhoneSheetBack } from "../lib/sheetHistory.ts";
 import { useFocusTrap } from "../lib/useFocusTrap.ts";
+import { VoiceOrb } from "./VoiceOrb.tsx";
 import "./PiVoiceView.css";
 
 /**
@@ -26,20 +27,6 @@ function PiVoiceDialog({ voice }: { voice: PiVoiceState }) {
   const surface = useFocusTrap<HTMLDivElement>(true, { initialFocus: primary });
   // the phone's Back is the way out of a call, as it is out of any sheet
   usePhoneSheetBack(over ? dismissPiVoice : endPiVoice);
-  const orb = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    let frame = 0;
-    let level = 0;
-    const tick = () => {
-      const { input, output } = piVoiceLevels();
-      const target = Math.min(1, Math.max(input, output) * 4);
-      level += (target - level) * (target > level ? 0.5 : 0.12);
-      orb.current?.style.setProperty("--orb-level", level.toFixed(3));
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, []);
   const status = over ? "" : phaseText(voice, t);
   return (
     <div className="pi-voice" role="dialog" aria-modal="true" aria-label={t("Live voice")} ref={surface} tabIndex={-1}
@@ -49,7 +36,7 @@ function PiVoiceDialog({ voice }: { voice: PiVoiceState }) {
         <span className="pi-voice-status" aria-live="polite">{status}</span>
       </header>
       <div className={`pi-voice-stage is-${over ? "over" : voice.phase}`}>
-        <div className="pi-voice-orb" ref={orb} aria-hidden="true" />
+        <VoiceOrb phase={over ? "ended" : voice.phase} levels={piVoiceLevels} />
       </div>
       {over ? (
         <>
