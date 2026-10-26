@@ -31,6 +31,21 @@
 
 .machine-list > .tree-state { padding-left: calc(var(--side-gutter) + var(--side-box)); }
 
+/* the PCs Tailscale says are offline, behind one quiet row (MachineSidebar) */
+.machine-offline-toggle {
+  margin: var(--space-4) 0 0 var(--side-gutter);
+  gap: var(--space-2);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+.machine-offline-toggle + .machine-group { margin-top: var(--space-2); }
+
+.machine-offline-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
 .machine-group {
   --machine-indent: calc(var(--side-gutter) + var(--side-box));
 }

@@ -140,8 +140,6 @@ export const COMPOSER_JA: Record<string, string> = {
   "Working on it": "作業中",
   "Speaking": "話しています",
   "Muted": "ミュート中",
-  "Mute": "ミュート",
-  "Unmute": "ミュート解除",
   "End call": "通話を終了",
   "Open call": "通話を開く",
   "Minimize call": "通話を最小化",

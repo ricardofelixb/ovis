@@ -294,6 +294,8 @@ const BASE: Record<string, string> = {
   "Change PC": "切换电脑",
   "Read aloud": "朗读",
   "Live voice": "实时语音",
+  "Mute": "静音",
+  "Unmute": "取消静音",
 };
 
 /** The parts ZH is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */

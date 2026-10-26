@@ -19,6 +19,7 @@ import { validateTarget } from "./machine-security.ts";
 import { detectHost, HERDR_INSTALL_CMD } from "./remote-host.ts";
 import { discard, readCappedJson, REMOTE_LIMITS } from "./remote-json.ts";
 import { SshConnection } from "./ssh.ts";
+import { TailnetPresence } from "./tailnet.ts";
 
 interface StoredMachine { id: string; name: string; target: SshTarget; enabled: boolean; snapshot?: SessionSnapshot | null }
 interface Runtime {
@@ -183,6 +184,7 @@ export class MachineManager {
   private discoveryTimer?: ReturnType<typeof setTimeout>;
   private discoveryStarted = false;
   private settingsPath: string;
+  private tailnet?: TailnetPresence;
   private preferences: MachineSettings = { ...DEFAULT_SETTINGS };
   /** automatic bridge updates run one at a time: they share one bundle download */
   private autoChain: Promise<void> = Promise.resolve();
@@ -331,7 +333,17 @@ export class MachineManager {
     }
   }
   private runtime(machine: Machine): Runtime { return { machine, attempts: 0, generation: 0, refreshing: false, refreshQueued: false, snapshotRevision: 0, terminals: new Set() }; }
-  list(): Machine[] { return [this.local, ...[...this.machines.values()].map((r) => r.machine)]; }
+  list(): Machine[] { return [this.local, ...[...this.machines.values()].map((r) => this.withPresence(r.machine))]; }
+  /** Marks the PCs Tailscale says are offline, which the sidebar keeps out of the way (server/tailnet.ts). */
+  watchTailnet(presence = new TailnetPresence(() => this.emit())): void {
+    if (this.tailnet || this.stopped) return;
+    this.tailnet = presence;
+    presence.start();
+  }
+  // a PC this server reaches is online, whatever Tailscale last said
+  private withPresence(machine: Machine): Machine {
+    return machine.state !== "connected" && this.tailnet?.offline(machine.target?.destination) ? { ...machine, tailnet_offline: true } : machine;
+  }
   subscribe(listener: (event: MachineEvent) => void): () => void {
     this.listeners.add(listener);
     listener({ type: "machines", machines: this.list() });
@@ -1005,6 +1017,7 @@ export class MachineManager {
   }
   stop(): void {
     this.stopped = true; clearTimeout(this.discoveryTimer); clearInterval(this.localTimer); clearTimeout(this.saveTimer);
+    this.tailnet?.stop();
     for (const id of this.jobs.keys()) this.cancelJob(id);
     for (const runtime of this.machines.values()) this.disconnect(runtime);
     this.listeners.clear();

@@ -292,6 +292,8 @@ const BASE: Record<string, string> = {
   "Change PC": "PCを切り替え",
   "Read aloud": "読み上げ",
   "Live voice": "ライブ音声",
+  "Mute": "ミュート",
+  "Unmute": "ミュート解除",
 };
 
 /** The parts JA is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */

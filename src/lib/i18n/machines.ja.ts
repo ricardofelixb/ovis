@@ -81,4 +81,6 @@ export const MACHINES_JA: Record<string, string> = {
   "Settings (⌘⇧,)": "設定 (⌘⇧,)",
   "The computer this app runs on": "このアプリが動作しているコンピューター",
   "Host": "ホスト",
+  "Show offline ({count})": "オフラインを表示 ({count})",
+  "Hide offline PCs": "オフラインのPCを隠す",
 };

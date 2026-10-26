@@ -81,4 +81,6 @@ export const MACHINES_ZH: Record<string, string> = {
   "Settings (⌘⇧,)": "设置 (⌘⇧,)",
   "The computer this app runs on": "运行此应用的计算机",
   "Host": "主机",
+  "Show offline ({count})": "显示离线 ({count})",
+  "Hide offline PCs": "隐藏离线电脑",
 };

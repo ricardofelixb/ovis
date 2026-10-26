@@ -140,8 +140,6 @@ export const COMPOSER_ZH: Record<string, string> = {
   "Working on it": "正在处理",
   "Speaking": "正在说话",
   "Muted": "已静音",
-  "Mute": "静音",
-  "Unmute": "取消静音",
   "End call": "结束通话",
   "Open call": "打开通话",
   "Minimize call": "最小化通话",
