@@ -276,7 +276,8 @@ pieces are the Java twins of the iOS ones, in `app/android/app/src/main/java/sh/
   script, which `app/scripts/build-web.ts` inlines.
 - The manifest allows cleartext http to any host (see the connect screen's warning above).
   `minSdkVersion` is 26 (Android 8), which the QR scanner's library needs. The merged manifest
-  asks for INTERNET, ACCESS_NETWORK_STATE, CAMERA (the QR scanner) and androidx's own
+  asks for INTERNET, ACCESS_NETWORK_STATE, CAMERA (the QR scanner), RECORD_AUDIO and
+  MODIFY_AUDIO_SETTINGS (the page's microphone, for dictation and live voice) and androidx's own
   `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`.
 - Backups are off (`allowBackup="false"`, and `data_extraction_rules.xml` for a move to a new
   phone on Android 12 and later): the WebView's store holds each PC's device cookie, so a restored

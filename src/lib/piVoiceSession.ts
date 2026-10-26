@@ -4,6 +4,7 @@ import { encodePiVoiceFrame, parsePiFrame, PI_VOICE_PATH, type PhoneToPiFrame, t
 import { fetchPiVoiceStatus } from "./api.ts";
 import { useMachineId } from "./machineContext.tsx";
 import { BrowserLiveMedia } from "./piVoiceMedia.ts";
+import { micErrorReason } from "./voice.ts";
 
 /**
  * The live voice call with the Pi in a pane, one per tab, kept outside React so the composer
@@ -17,7 +18,7 @@ import { BrowserLiveMedia } from "./piVoiceMedia.ts";
 /** why a call is over, when it did not end by a tap on End or by Pi's own account of a normal end */
 export type PiVoiceEnd =
   | { kind: PiVoiceEndCode }
-  | { kind: "denied" | "unsupported" | "failed" }
+  | { kind: "denied" | "no_mic" | "unsupported" | "failed" }
   /** Pi's own words: why it could not start or keep the call */
   | { kind: "error"; message: string };
 
@@ -199,8 +200,10 @@ export function startPiVoice({ paneId, label }: { paneId: string; label: string 
       started.stream = stream;
       connect(started, paneId);
     },
-    () => {
-      if (call === started) finish({ kind: "denied" });
+    (error: unknown) => {
+      // a refusal reads as one, a missing or busy microphone as that, as dictation tells them apart
+      const reason = error instanceof DOMException ? micErrorReason(error.name) : "no_mic";
+      if (call === started) finish({ kind: reason === "permission" ? "denied" : "no_mic" });
     },
   );
 }

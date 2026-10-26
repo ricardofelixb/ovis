@@ -81,6 +81,7 @@ function endText(end: PiVoiceEnd | null, t: ReturnType<typeof useT>): string {
   switch (end?.kind) {
     case "error": return end.message;
     case "denied": return t("Microphone access was denied.");
+    case "no_mic": return t("No microphone found");
     case "unsupported": return t("This browser cannot make a voice call.");
     case "failed": return t("The call stopped working.");
     case "not_pi": return t("This pane is not running Pi.");

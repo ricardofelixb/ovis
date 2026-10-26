@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { ArrowUp, ChevronDown, Cpu, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
+import { ArrowUp, AudioLines, ChevronDown, Cpu, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
 
 import "./Composer.css";
 
@@ -1510,7 +1510,9 @@ export function Composer({
               // the tap is the gesture that lets the browser open the microphone and play the reply
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => startPiVoice({ paneId, label: cwd?.split("/").filter(Boolean).at(-1) ?? "Pi" })}
-            />
+            >
+              <AudioLines aria-hidden="true" />
+            </button>
           ) : (
             <button
               type="button"

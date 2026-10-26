@@ -51,7 +51,7 @@ beforeEach(() => {
             tracks.push({ stopped: false, enabled: true, stop() { this.stopped = true; } });
             resolve(stream);
           };
-          deny = () => reject(new Error("NotAllowedError"));
+          deny = () => reject(new DOMException("Permission denied", "NotAllowedError"));
         }),
     },
   });
