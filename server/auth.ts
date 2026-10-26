@@ -18,6 +18,7 @@ import { timingSafeEqual } from "node:crypto";
 import { isLoopbackAddress } from "./access.ts";
 import { PAGE_MEDIA_ROUTE } from "./file-view.ts";
 import { badRequest, jsonResponse } from "./http.ts";
+import { PI_VOICE_PATH } from "../shared/pi-voice.ts";
 
 export const TOKEN_COOKIE = "ovis_token";
 /** a paired device's own credential; the same flags as the token cookie */
@@ -108,7 +109,7 @@ export function bearerMatches(request: Request, token: string): boolean {
 
 /** /api/health, /api/auth and /api/devices/pair stay open so a client can discover the gate and pass it. */
 export function requiresAuth(pathname: string): boolean {
-  if (pathname === "/ws") return true;
+  if (pathname === "/ws" || pathname === PI_VOICE_PATH) return true;
   // the Computer view's pages and sockets (server/screen.ts)
   if (pathname.startsWith("/screen/")) return true;
   if (!pathname.startsWith("/api/")) return false;

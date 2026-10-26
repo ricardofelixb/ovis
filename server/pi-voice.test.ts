@@ -330,6 +330,8 @@ describe("the relay between a phone and a Pi", () => {
     expect(revokes).toHaveLength(1);
     revokes[0]!();
     expect(phone.closed).toBe(true);
+    // a real socket reports its own close; the fake is told
+    hub.close(phone);
     await until(() => pi.closed(), "Pi closed");
   });
 });

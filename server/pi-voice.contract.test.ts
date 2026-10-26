@@ -42,8 +42,9 @@ const url = (base: string, path = "/ws/pi-voice", pane: string | null = PANE) =>
 
 describe("GET /ws/pi-voice", () => {
   it("refuses a request that is not signed in, in plain text like /ws", async () => {
-    // as if `tailscale serve` had forwarded a stranger: the test client is on loopback, like a proxy
-    const response = await fetch(url(ownBase), { headers: { "x-forwarded-for": "100.64.0.9" } });
+    // as if `tailscale serve` had forwarded a stranger to a server that has paired devices: the test client
+    // is on loopback, like a proxy
+    const response = await fetch(url(watchBase), { headers: { "x-forwarded-for": "100.64.0.9" } });
     expect(response.status).toBe(401);
     expect(await response.text()).toBe("unauthorized");
   });
@@ -90,7 +91,7 @@ describe("GET /api/pane/pi-voice", () => {
   });
 
   it("needs sign-in", async () => {
-    const response = await fetch(url(ownBase, "/api/pane/pi-voice"), { headers: { "x-forwarded-for": "100.64.0.9" } });
+    const response = await fetch(url(watchBase, "/api/pane/pi-voice"), { headers: { "x-forwarded-for": "100.64.0.9" } });
     expect(response.status).toBe(401);
   });
 });

@@ -176,3 +176,55 @@ export async function piTranscriptPath(
   const unwritten = unwrittenSession(session.value, matches[0]!);
   return unwritten === null ? null : { unwritten };
 }
+
+/**
+ * The agent directory a Pi process runs with: where `PI_CODING_AGENT_DIR` in its environment points,
+ * else `.pi/agent` in its home. Null when a relative one has no working directory to resolve from.
+ */
+function piAgentDirForProcess(environ: readonly string[], home: string, cwd: string): string | null {
+  const value = (name: string) => environ.find((word) => word.startsWith(`${name}=`))?.slice(name.length + 1) || null;
+  const processHome = value("HOME") ?? value("USERPROFILE") ?? home;
+  const configured = value("PI_CODING_AGENT_DIR");
+  if (!configured) return join(processHome, ".pi", "agent");
+  const expanded = configured === "~" ? processHome : configured.startsWith("~/") ? join(processHome, configured.slice(2)) : configured;
+  if (isAbsolute(expanded)) return expanded;
+  return cwd ? resolve(cwd, expanded) : null;
+}
+
+export type PiVoiceCandidate = { pid: number; path: string };
+type PiVoiceOptions = PiTranscriptOptions & {
+  /** the agent directory to try where a process's environment cannot be read; the server's own by default */
+  agentDir?: string;
+};
+
+/**
+ * The sockets on which the Pi in a pane may take a live voice call (pi-better-openai's
+ * src/live/bridge/socket.ts: `<agent dir>/live-bridge/<pid>.sock`, one per Pi process), or null
+ * when the pane is not Pi's. Every foreground process is tried, as a wrapper may sit in front of
+ * the node process that is Pi; only a socket of this user counts, and the caller still has to ask
+ * the socket whose it is.
+ */
+export async function piVoiceSocketCandidates(paneId: string, options: PiVoiceOptions = {}): Promise<PiVoiceCandidate[] | null> {
+  const agent = options.agent === undefined ? await agentGet(paneId).catch(() => null) : options.agent;
+  if (agent?.agent !== "pi") return null;
+  const info = options.processes === undefined
+    ? await paneProcessInfo(paneId).catch(() => undefined)
+    : { foreground_processes: [...options.processes] };
+  const home = options.home ?? process.env["HOME"] ?? process.env["USERPROFILE"] ?? "";
+  const environOf = options.environOf ?? processEnviron;
+  const uid = process.getuid?.();
+  const found: PiVoiceCandidate[] = [];
+  for (const entry of info?.foreground_processes ?? []) {
+    if (typeof entry.pid !== "number") continue;
+    const environ = environOf(entry.pid);
+    const dir = environ === null ? options.agentDir ?? piAgentDir() : piAgentDirForProcess(environ, home, entry.cwd ?? "");
+    if (dir === null) continue;
+    const path = join(dir, "live-bridge", `${entry.pid}.sock`);
+    try {
+      const stat = lstatSync(path);
+      if (!stat.isSocket() || (uid !== undefined && stat.uid !== uid) || found.some((candidate) => candidate.path === path)) continue;
+    } catch { continue; }
+    found.push({ pid: entry.pid, path });
+  }
+  return found;
+}
