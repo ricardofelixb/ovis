@@ -42,6 +42,8 @@ interface Call {
   audio: HTMLAudioElement;
   audioContext: AudioContext | null;
   wakeLock: WakeLockSentinel | null;
+  /** the browser lets go of the wake lock when the page is hidden: it asks again when it is back */
+  keepAwake: () => void;
   /** the tap on End: the socket closing after it is not a loss */
   userEnded: boolean;
 }
@@ -82,6 +84,7 @@ function finish(end: PiVoiceEnd | null): void {
     for (const track of over.stream?.getTracks() ?? []) track.stop();
     over.audio.pause();
     void over.audioContext?.close().catch(() => undefined);
+    document.removeEventListener("visibilitychange", over.keepAwake);
     void over.wakeLock?.release().catch(() => undefined);
     over.socket.close();
   }
@@ -168,12 +171,17 @@ export function startPiVoice({ paneId, label }: { paneId: string; label: string 
   const audio = new Audio();
   audio.autoplay = true;
   void audio.play().catch(() => undefined);
-  const started: Call = { socket: new WebSocket(callUrl(paneId)), media: null, stream: null, audio, audioContext, wakeLock: null, userEnded: false };
+  const started: Call = { socket: new WebSocket(callUrl(paneId)), media: null, stream: null, audio, audioContext, wakeLock: null, keepAwake: () => {}, userEnded: false };
   call = started;
-  void navigator.wakeLock?.request("screen").then((lock) => {
-    if (call === started) started.wakeLock = lock;
-    else void lock.release().catch(() => undefined);
-  }, () => undefined);
+  started.keepAwake = () => {
+    if (call !== started || document.visibilityState !== "visible" || (started.wakeLock && !started.wakeLock.released)) return;
+    void navigator.wakeLock?.request("screen").then((lock) => {
+      if (call === started) started.wakeLock = lock;
+      else void lock.release().catch(() => undefined);
+    }, () => undefined);
+  };
+  started.keepAwake();
+  document.addEventListener("visibilitychange", started.keepAwake);
   getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }).then(
     (stream) => {
       if (call !== started) {
