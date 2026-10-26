@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 
 import { encodePiVoiceFrame, parsePiFrame, PI_VOICE_PATH, type PhoneToPiFrame, type PiToPhoneFrame, type PiVoiceEndCode, type PiVoicePhase } from "../../shared/pi-voice.ts";
 import { fetchPiVoiceStatus } from "./api.ts";
@@ -32,9 +32,11 @@ export interface PiVoiceState {
   userText: string;
   assistantText: string;
   end: PiVoiceEnd | null;
+  /** the full-screen call; otherwise the orb sits over the composer and the chat stays in view */
+  expanded: boolean;
 }
 
-const IDLE: PiVoiceState = { status: "idle", paneId: "", label: "", phase: "connecting", muted: false, userText: "", assistantText: "", end: null };
+const IDLE: PiVoiceState = { status: "idle", paneId: "", label: "", phase: "connecting", muted: false, userText: "", assistantText: "", end: null, expanded: false };
 
 interface Call {
   /** opened only once the microphone is allowed (see `connect`) */
@@ -63,6 +65,10 @@ const listeners = new Set<() => void>();
 
 function update(patch: Partial<PiVoiceState>): void {
   state = { ...state, ...patch };
+  notify();
+}
+
+function notify(): void {
   for (const listener of listeners) listener();
 }
 
@@ -90,7 +96,8 @@ function finish(end: PiVoiceEnd | null): void {
     void over.wakeLock?.release().catch(() => undefined);
     over.socket?.close();
   }
-  update(end ? { status: "ended", end } : { ...IDLE });
+  // what went wrong is read in the full call, which has the room for it
+  update(end ? { status: "ended", end, expanded: true } : { ...IDLE });
 }
 
 function showPhase(phase: PiVoicePhase): void {
@@ -217,6 +224,31 @@ export function endPiVoice(): void {
   call.userEnded = true;
   send({ type: "stop" });
   finish(null);
+}
+
+/** Opens the full-screen call, or puts it back over the composer. */
+export function setPiVoiceExpanded(expanded: boolean): void {
+  if (state.status !== "idle" && state.expanded !== expanded) update({ expanded });
+}
+
+/** Composers showing the call's orb over them; with none in view, the orb sits at the screen's foot. */
+let docks = 0;
+
+/** Counts this composer as showing the orb while `shown`, before the screen paints. */
+export function usePiVoiceDock(shown: boolean): void {
+  useLayoutEffect(() => {
+    if (!shown) return;
+    docks += 1;
+    notify();
+    return () => {
+      docks -= 1;
+      notify();
+    };
+  }, [shown]);
+}
+
+export function usePiVoiceDocked(): boolean {
+  return useSyncExternalStore(subscribe, () => docks > 0);
 }
 
 /** Closes the account of a call that ended with something to read. */

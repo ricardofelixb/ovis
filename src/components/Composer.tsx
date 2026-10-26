@@ -20,6 +20,7 @@ import type { AgentStatus, ClientRole, ConversationMetadata, PlanSummary, SlashC
 import { skillSyntax } from "../../shared/skill-syntax.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { startPiVoice, usePiVoiceAvailable } from "../lib/piVoiceSession.ts";
+import { PiVoiceDockHost } from "./PiVoiceView.tsx";
 import { composerDrafts } from "../lib/composerDraft.ts";
 import { paneStorageId } from "../../shared/machines.ts";
 import {
@@ -1107,6 +1108,7 @@ export function Composer({
 
   return (
     <div className={`composer${notices ? " has-notices" : ""}`} role="group" aria-label={t("Message composer")} data-dictating={dictation.voice.state !== "idle" ? "" : undefined} inert={inert || undefined}>
+      <PiVoiceDockHost paneId={paneId} />
       {greeting}
       {notices}
       {/* no Tab key on a phone: the suggestion can be a chip there that fills the box, when Settings asks for it */}

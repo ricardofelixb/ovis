@@ -1,4 +1,5 @@
-/* the full-screen live voice call with a Pi pane (PiVoiceView.tsx) */
+/* the full-screen live voice call with a Pi pane (PiVoiceView.tsx); a drag down on its orb moves
+   it with the finger through --pi-voice-pull (0..1, src/lib/orbDrag.ts) */
 .pi-voice {
   position: fixed;
   inset: 0;
@@ -13,15 +14,53 @@
   background: var(--bg);
   color: var(--text);
   outline: none;
+  transform: translateY(calc(var(--pi-voice-pull, 0) * 40vh));
+  opacity: calc(1 - var(--pi-voice-pull, 0) * 0.5);
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  animation: pi-voice-rise var(--dur-base) var(--ease-out);
+}
+
+.pi-voice.is-dragging,
+.pi-voice-dock.is-dragging .pi-voice-dock-orb {
+  transition: none;
+}
+
+@keyframes pi-voice-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12vh);
+  }
 }
 
 .pi-voice-header {
+  position: relative;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-1);
   min-height: var(--touch-target);
   text-align: center;
+}
+
+.pi-voice-collapse {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-dim);
+}
+
+.pi-voice-collapse svg {
+  width: var(--space-6);
+  height: var(--space-6);
 }
 
 .pi-voice-label {
@@ -36,6 +75,12 @@
 }
 
 .pi-voice-stage {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  /* a stroke on the orb is the drag's, not a scroll */
+  touch-action: none;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
@@ -143,4 +188,68 @@
 
 .pi-voice-button:disabled {
   opacity: 0.5;
+}
+
+.pi-voice-button.is-compact {
+  width: var(--touch-target);
+  height: var(--touch-target);
+}
+
+.pi-voice-button.is-compact svg {
+  width: var(--space-5);
+  height: var(--space-5);
+}
+
+/* the call's orb over the composer of its pane (PiVoiceDock), as in the agents app: the chat stays
+   in view and usable under it, and only a stroke that starts on the orb is the orb's. A drag up
+   grows it toward the full call; Mute and End fade as it goes */
+.pi-voice-dock {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-3));
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  pointer-events: none;
+}
+
+.pi-voice-dock > * {
+  pointer-events: auto;
+}
+
+/* no composer of the call's pane in view: the dock keeps to the screen's foot */
+.pi-voice-dock.is-floating {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-4));
+  z-index: var(--z-modal);
+}
+
+.pi-voice-dock-orb {
+  width: calc(var(--touch-target) * 2.25);
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  background: none;
+  touch-action: none;
+  transform: translateY(calc(var(--pi-voice-pull, 0) * -30vh)) scale(calc(1 + var(--pi-voice-pull, 0) * 1.5));
+  transition: transform var(--dur-base) var(--ease-out);
+}
+
+.pi-voice-dock-orb .pi-voice-orb {
+  width: 100%;
+}
+
+.pi-voice-dock.is-dragging .pi-voice-button {
+  opacity: calc(1 - var(--pi-voice-pull, 0));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-voice,
+  .pi-voice-dock-orb {
+    animation: none;
+    transition: none;
+  }
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { dismissPiVoice, endPiVoice, piVoiceState, startPiVoice } from "./piVoiceSession.ts";
+import { dismissPiVoice, endPiVoice, piVoiceState, setPiVoiceExpanded, startPiVoice } from "./piVoiceSession.ts";
 
 /** What the call touches of the browser: a microphone whose permission prompt the test settles, and sockets it can drive. */
 class FakeSocket {
@@ -95,6 +95,21 @@ describe("starting a call from the phone", () => {
     await flush();
     expect(piVoiceState()).toMatchObject({ status: "ended", end: { kind: "denied" } });
     expect(FakeSocket.all).toHaveLength(0);
+  });
+
+  it("starts over the composer, opens full-screen when asked, and shows what went wrong full-screen", async () => {
+    startPiVoice({ paneId: "w1:p1", label: "cwd" });
+    expect(piVoiceState().expanded).toBe(false);
+    setPiVoiceExpanded(true);
+    expect(piVoiceState().expanded).toBe(true);
+    setPiVoiceExpanded(false);
+    expect(piVoiceState().expanded).toBe(false);
+    deny?.();
+    await flush();
+    expect(piVoiceState()).toMatchObject({ status: "ended", expanded: true });
+    dismissPiVoice();
+    setPiVoiceExpanded(true);
+    expect(piVoiceState()).toMatchObject({ status: "idle", expanded: false });
   });
 
   it("lets go of a microphone that is allowed after the call was ended", async () => {

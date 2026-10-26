@@ -144,6 +144,8 @@ export const COMPOSER_KO: Record<string, string> = {
   "Mute": "음소거",
   "Unmute": "음소거 해제",
   "End call": "통화 종료",
+  "Open call": "통화 열기",
+  "Minimize call": "통화 최소화",
   "You said": "내가 한 말",
   "Pi said": "Pi의 말",
   "Microphone access was denied.": "마이크 접근이 거부되었습니다.",

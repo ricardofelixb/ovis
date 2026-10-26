@@ -144,6 +144,8 @@ export const COMPOSER_JA: Record<string, string> = {
   "Mute": "ミュート",
   "Unmute": "ミュート解除",
   "End call": "通話を終了",
+  "Open call": "通話を開く",
+  "Minimize call": "通話を最小化",
   "You said": "あなたの発言",
   "Pi said": "Piの発言",
   "Microphone access was denied.": "マイクへのアクセスが拒否されました。",

@@ -144,6 +144,8 @@ export const COMPOSER_ZH: Record<string, string> = {
   "Mute": "静音",
   "Unmute": "取消静音",
   "End call": "结束通话",
+  "Open call": "打开通话",
+  "Minimize call": "最小化通话",
   "You said": "你说的",
   "Pi said": "Pi 说的",
   "Microphone access was denied.": "麦克风权限被拒绝。",

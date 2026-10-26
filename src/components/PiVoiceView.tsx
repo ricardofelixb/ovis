@@ -1,23 +1,72 @@
-import { Mic, MicOff, PhoneOff } from "lucide-react";
+import { ChevronDown, Mic, MicOff, PhoneOff } from "lucide-react";
 import { useRef } from "react";
 
 import { useT } from "../lib/i18n.ts";
-import { dismissPiVoice, endPiVoice, piVoiceLevels, setPiVoiceMuted, usePiVoice, type PiVoiceEnd, type PiVoiceState } from "../lib/piVoiceSession.ts";
+import { useOrbDrag } from "../lib/orbDrag.ts";
+import {
+  dismissPiVoice,
+  endPiVoice,
+  piVoiceLevels,
+  setPiVoiceExpanded,
+  setPiVoiceMuted,
+  usePiVoice,
+  usePiVoiceDock,
+  usePiVoiceDocked,
+  type PiVoiceEnd,
+  type PiVoiceState,
+} from "../lib/piVoiceSession.ts";
 import { usePhoneSheetBack } from "../lib/sheetHistory.ts";
 import { useFocusTrap } from "../lib/useFocusTrap.ts";
 import { VoiceOrb } from "./VoiceOrb.tsx";
 import "./PiVoiceView.css";
 
+const expand = () => setPiVoiceExpanded(true);
+const collapse = () => setPiVoiceExpanded(false);
+
 /**
- * The full-screen live voice call with a Pi pane: the orb, what was said, Mute and End. It
- * follows the ChatGPT app's voice mode for the layout (one orb, mute and end within thumb reach)
- * and the agents app for the orb. It is a call, not a floating dock, so Mute and End are always
- * there and the last words of both sides stay on screen. Mounted once in App; shown while a call
- * is starting, on, or over with something to read.
+ * The live voice call with a Pi pane. Like the agents app, its orb sits over the composer while
+ * the chat stays in view and usable (PiVoiceDock); a drag up on the orb, or a tap, opens the
+ * full-screen call, which follows the ChatGPT app's voice mode (one orb, what was said, Mute and
+ * End within thumb reach), and a drag down puts it back. Mounted once in App, which shows the
+ * full call, and the dock at the screen's foot when no composer of the call's pane is in view.
  */
 export function PiVoiceView() {
   const voice = usePiVoice();
-  return voice.status === "idle" ? null : <PiVoiceDialog voice={voice} />;
+  const docked = usePiVoiceDocked();
+  if (voice.status === "idle") return null;
+  if (voice.expanded) return <PiVoiceDialog voice={voice} />;
+  return docked ? null : <PiVoiceDock floating />;
+}
+
+/** The call's orb over the composer of its pane, while the call is not full-screen. */
+export function PiVoiceDockHost({ paneId }: { paneId: string }) {
+  const voice = usePiVoice();
+  const shown = voice.status !== "idle" && !voice.expanded && voice.paneId === paneId;
+  usePiVoiceDock(shown);
+  return shown ? <PiVoiceDock /> : null;
+}
+
+function PiVoiceDock({ floating = false }: { floating?: boolean }) {
+  const t = useT();
+  const voice = usePiVoice();
+  const surface = useRef<HTMLDivElement>(null);
+  const orb = useRef<HTMLButtonElement>(null);
+  useOrbDrag(orb, surface, "up", expand);
+  return (
+    <div className={`pi-voice-dock${floating ? " is-floating" : ""}`} ref={surface} role="group" aria-label={t("Live voice")}>
+      <span className="visually-hidden" aria-live="polite">{phaseText(voice, t)}</span>
+      <button type="button" className="pi-voice-button is-compact" aria-pressed={voice.muted} aria-label={voice.muted ? t("Unmute") : t("Mute")}
+        title={voice.muted ? t("Unmute") : t("Mute")} disabled={voice.status !== "live"} onClick={() => setPiVoiceMuted(!voice.muted)}>
+        {voice.muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+      </button>
+      <button type="button" className={`pi-voice-dock-orb is-${voice.phase}`} ref={orb} aria-label={t("Open call")} title={t("Open call")} onClick={expand}>
+        <VoiceOrb phase={voice.phase} levels={piVoiceLevels} />
+      </button>
+      <button type="button" className="pi-voice-button is-compact is-end" aria-label={t("End call")} title={t("End call")} onClick={endPiVoice}>
+        <PhoneOff aria-hidden="true" />
+      </button>
+    </div>
+  );
 }
 
 function PiVoiceDialog({ voice }: { voice: PiVoiceState }) {
@@ -25,19 +74,32 @@ function PiVoiceDialog({ voice }: { voice: PiVoiceState }) {
   const over = voice.status === "ended";
   const primary = useRef<HTMLButtonElement>(null);
   const surface = useFocusTrap<HTMLDivElement>(true, { initialFocus: primary });
-  // the phone's Back is the way out of a call, as it is out of any sheet
-  usePhoneSheetBack(over ? dismissPiVoice : endPiVoice);
+  const stage = useRef<HTMLButtonElement>(null);
+  useOrbDrag(stage, surface, "down", collapse);
+  // the phone's Back puts the call back over the composer, as it closes any sheet
+  usePhoneSheetBack(over ? dismissPiVoice : collapse);
   const status = over ? "" : phaseText(voice, t);
   return (
     <div className="pi-voice" role="dialog" aria-modal="true" aria-label={t("Live voice")} ref={surface} tabIndex={-1}
-      onKeyDown={(event) => { if (event.key === "Escape") (over ? dismissPiVoice : endPiVoice)(); }}>
+      onKeyDown={(event) => { if (event.key === "Escape") (over ? dismissPiVoice : collapse)(); }}>
       <header className="pi-voice-header">
+        {!over && (
+          <button type="button" className="pi-voice-collapse" aria-label={t("Minimize call")} title={t("Minimize call")} onClick={collapse}>
+            <ChevronDown aria-hidden="true" />
+          </button>
+        )}
         <span className="pi-voice-label">{voice.label}</span>
         <span className="pi-voice-status" aria-live="polite">{status}</span>
       </header>
-      <div className={`pi-voice-stage is-${over ? "over" : voice.phase}`}>
-        <VoiceOrb phase={over ? "ended" : voice.phase} levels={piVoiceLevels} />
-      </div>
+      {over ? (
+        <div className="pi-voice-stage is-over">
+          <VoiceOrb phase="ended" levels={piVoiceLevels} />
+        </div>
+      ) : (
+        <button type="button" className={`pi-voice-stage is-${voice.phase}`} ref={stage} tabIndex={-1} aria-label={t("Minimize call")} onClick={collapse}>
+          <VoiceOrb phase={voice.phase} levels={piVoiceLevels} />
+        </button>
+      )}
       {over ? (
         <>
           <p className="pi-voice-end" role="alert">{endText(voice.end, t)}</p>
