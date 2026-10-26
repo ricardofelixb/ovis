@@ -9,8 +9,10 @@ import type { PhoneToPiFrame, PiToPhoneFrame, PiVoiceRequest } from "../../share
  * a Linux audio computer over SSH; here the "computer" is a browser (see
  * src/live/remote/README.md in pi-better-openai).
  *
- * The reply plays through an <audio> element and never through the Web Audio graph's output, so
- * the browser's echo cancellation can hear it and take it out of the microphone.
+ * The reply arrives about 8 dB quieter than Read aloud, so it plays through the Web Audio graph,
+ * raised and limited. Chrome's browser-wide echo cancellation, and Android's own, hear that
+ * output too. The <audio> element still holds the stream, muted: without it Chrome gives a
+ * remote stream's Web Audio source silence.
  */
 
 /** Pi pings every 5 s; the same silence after which Pi itself would give up on a vanished host */
@@ -18,6 +20,8 @@ const LEASE_MS = 20_000;
 const LEVELS_MS = 100;
 const DEFAULT_OPEN_WAIT_MS = 60_000;
 const MAX_ERROR = 500;
+/** +8 dB: the reply's speech level measured against Read aloud's */
+const REPLY_GAIN = 2.5;
 
 export interface PiVoiceTimers {
   every(run: () => void, ms: number): () => void;
@@ -205,6 +209,7 @@ export class BrowserLiveMedia {
     peer.ontrack = (event) => {
       const remote = event.streams[0] ?? new MediaStream([event.track]);
       audio.srcObject = remote;
+      audio.muted = this.#playLouder(remote);
       void audio.play().catch(() => undefined);
       this.#remoteAnalyser = this.#analyserOf(remote);
     };
@@ -248,13 +253,33 @@ export class BrowserLiveMedia {
     }, LEVELS_MS);
   }
 
+  /** Plays the reply raised, with a limiter so its loudest moments can't clip; false where there is no Web Audio. */
+  #playLouder(stream: MediaStream): boolean {
+    const context = this.#deps.audioContext;
+    if (!context) return false;
+    try {
+      const gain = context.createGain();
+      gain.gain.value = REPLY_GAIN;
+      const limiter = context.createDynamicsCompressor();
+      limiter.threshold.value = -3;
+      limiter.knee.value = 0;
+      limiter.ratio.value = 20;
+      limiter.attack.value = 0.003;
+      limiter.release.value = 0.25;
+      context.createMediaStreamSource(stream).connect(gain).connect(limiter).connect(context.destination);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   #analyserOf(stream: MediaStream): AnalyserNode | undefined {
     const context = this.#deps.audioContext;
     if (!context) return undefined;
     try {
       const analyser = context.createAnalyser();
       analyser.fftSize = this.#samples.length;
-      // the analyser is a tap: it is never connected to the speakers, which the <audio> element feeds
+      // the analyser is a tap on the reply as it arrives, before it is raised
       context.createMediaStreamSource(stream).connect(analyser);
       return analyser;
     } catch {
