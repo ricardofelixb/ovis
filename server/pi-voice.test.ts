@@ -207,6 +207,16 @@ describe("the relay between a phone and a Pi", () => {
     expect(pi.received).toEqual([{ v: 1, type: "start" }, { v: 1, type: "hello" }]);
   });
 
+  it("starts the call in the voice the phone chose", async () => {
+    const pi = await fakePi(join(root, "agent"), 77);
+    const { hub } = hubFor([{ pid: 77, path: pi.path }]);
+    const phone = fakePhone();
+    phone.data.piVoice.voice = "vale";
+    await hub.open(phone);
+    await until(() => pi.received.length >= 1, "start");
+    expect(pi.received[0]).toEqual({ v: 1, type: "start", voice: "vale" });
+  });
+
   it("passes Pi's frames to the phone and the phone's answers to Pi", async () => {
     const { hub, pi, phone } = await connected();
     pi.send({ type: "request", id: 1, method: "open" });

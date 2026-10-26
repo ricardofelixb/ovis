@@ -135,7 +135,6 @@ export const COMPOSER_ZH: Record<string, string> = {
   "Notices": "提示",
   "Working folder": "工作文件夹",
   "Worktree": "工作树",
-  "Live voice": "实时语音",
   "Start live voice": "开始实时语音",
   "Listening": "正在聆听",
   "Working on it": "正在处理",

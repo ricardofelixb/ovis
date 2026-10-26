@@ -7,6 +7,7 @@
 
 import type { TelemetrySettings } from "../../shared/telemetry.ts";
 import { SPEECH_DEFAULT_VOICE, SPEECH_VOICES, type SpeechVoice } from "../../shared/speech.ts";
+import { isPiVoice, type PiVoice } from "../../shared/pi-voice.ts";
 import { mirrorPalette, SHARED_SETTING_KEYS, type SharedSettingKey } from "../../shared/preferences.ts";
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DEFAULT_THEME, terminalColors, themeColor as themeTableColor, type ThemeId, type ThemeEntry } from "./themes.ts";
@@ -175,6 +176,8 @@ export interface Settings {
   voicePolishTerminal: boolean;
   /** the Kokoro voice an agent's reply is read aloud in (shared/speech.ts) */
   speechVoice: SpeechVoice;
+  /** the voice a live call with a Pi pane speaks in; "pi": the one set in Pi's /openai-settings */
+  liveVoice: PiVoice | "pi";
   /** the file viewer wraps long lines instead of scrolling sideways */
   wrapCode: boolean;
   /** the width of a Markdown preview: the chat's lane (--chat-w), centered, or the viewer's width */
@@ -203,7 +206,7 @@ export type DiffStyle = (typeof DIFF_STYLES)[number];
 type TelemetrySourceSettings = Omit<Settings,
   "keyBarExtras" | "keyBarItems" | "shortcutOverrides" | "terminalFontFamily" | "chatFontFamily"
   | "quickReplies" | "usageOrder" | "usageHidden" | "fileOpen" | "webLinks" | "claudeLaunchMode" | "codexLaunchMode"
-  | "followHerdrFocus" | "composerNewTabButton" | "contextCircle" | "speechVoice" | "enterKey" | "openLiveWork">;
+  | "followHerdrFocus" | "composerNewTabButton" | "contextCircle" | "speechVoice" | "liveVoice" | "enterKey" | "openLiveWork">;
 
 /** Compare structured custom settings by content against this app's built-in defaults. */
 function differsFromDefault(value: unknown, defaultValue: unknown): boolean {
@@ -288,7 +291,7 @@ export const SETTING_SCOPE = {
   contextCircle: "shared",
   keepScreenOn: "device", alertsOn: "device", alertInput: "device", alertDone: "device", alertInApp: "device", alertSound: "device",
   paletteLight: "device", paletteDark: "device", statusIndicators: "device",
-  voiceInput: "device", voiceLanguage: "device", voicePolishChat: "device", voicePolishTerminal: "device", speechVoice: "device",
+  voiceInput: "device", voiceLanguage: "device", voicePolishChat: "device", voicePolishTerminal: "device", speechVoice: "device", liveVoice: "device",
   // Viewer layout follows this screen, as chatWidth does.
   wrapCode: "device", markdownWidth: "device", diffStyle: "device", fileOpen: "device", webLinks: "device",
   // a new agent starts the same way whichever device opened it
@@ -353,6 +356,7 @@ export const DEFAULT_SETTINGS: Settings = {
   voicePolishChat: true,
   voicePolishTerminal: false,
   speechVoice: SPEECH_DEFAULT_VOICE,
+  liveVoice: "pi",
   wrapCode: false,
   markdownWidth: "readable",
   diffStyle: "unified",
@@ -535,6 +539,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     voicePolishChat: typeof record["voicePolishChat"] === "boolean" ? record["voicePolishChat"] : DEFAULT_SETTINGS.voicePolishChat,
     voicePolishTerminal: typeof record["voicePolishTerminal"] === "boolean" ? record["voicePolishTerminal"] : DEFAULT_SETTINGS.voicePolishTerminal,
     speechVoice: SPEECH_VOICES.includes(record["speechVoice"] as SpeechVoice) ? record["speechVoice"] as SpeechVoice : DEFAULT_SETTINGS.speechVoice,
+    liveVoice: isPiVoice(record["liveVoice"]) ? record["liveVoice"] : DEFAULT_SETTINGS.liveVoice,
     wrapCode: typeof record["wrapCode"] === "boolean" ? record["wrapCode"] : DEFAULT_SETTINGS.wrapCode,
     markdownWidth: MARKDOWN_WIDTHS.find((width) => width === record["markdownWidth"]) ?? DEFAULT_SETTINGS.markdownWidth,
     diffStyle: DIFF_STYLES.find((style) => style === record["diffStyle"]) ?? DEFAULT_SETTINGS.diffStyle,

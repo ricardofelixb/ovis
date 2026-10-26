@@ -2,11 +2,13 @@ import net from "node:net";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import {
   encodePiVoiceFrame,
+  isPiVoice,
   MAX_PI_VOICE_FRAME_BYTES,
   parsePhoneFrame,
   parsePiFrame,
   PI_VOICE_STATUS_PATH,
   type PiReady,
+  type PiVoice,
   type PiVoiceEndCode,
   type PiVoiceStatus,
 } from "../shared/pi-voice.ts";
@@ -39,6 +41,8 @@ export interface PiVoiceSocketData {
   piVoice: {
     paneId: string;
     deviceId: string | undefined;
+    /** the voice the phone chose for this call; Pi's own otherwise */
+    voice?: PiVoice;
     /** frames the phone sent while Pi was still being reached */
     waiting?: string[];
     relay?: PiVoiceRelay;
@@ -82,7 +86,7 @@ export class PiVoiceRelay {
   #lastSeen: number;
   #done = false;
 
-  constructor(phone: PiVoiceSocket, pi: PiEnd, options: { every: (run: () => void, ms: number) => () => void; now: () => number; onEnd: () => void }) {
+  constructor(phone: PiVoiceSocket, pi: PiEnd, options: { every: (run: () => void, ms: number) => () => void; now: () => number; onEnd: () => void; voice?: PiVoice }) {
     this.#phone = phone;
     this.#pi = pi;
     this.#now = options.now;
@@ -94,7 +98,7 @@ export class PiVoiceRelay {
       if (this.#now() - this.#lastSeen > LEASE_MS) this.#end("closed", true);
       else this.#phone.ping();
     }, PING_MS);
-    this.#send(pi, encodePiVoiceFrame({ type: "start" }));
+    this.#send(pi, encodePiVoiceFrame(options.voice ? { type: "start", voice: options.voice } : { type: "start" }));
   }
 
   /** The phone's WebSocket answered a ping. */
@@ -212,6 +216,7 @@ export class PiVoiceHub {
     const relay = new PiVoiceRelay(ws, { write: (text) => socket.write(text), end: () => socket.end(), destroy: () => socket.destroy() }, {
       every: this.#options.every,
       now: this.#options.now,
+      voice: state.voice,
       onEnd: () => this.#release(state),
     });
     state.relay = relay;
@@ -380,6 +385,8 @@ export async function handlePiVoiceRequest(
   if (!sameOrigin(request)) return jsonResponse({ error: { code: "invalid_origin", message: "Use controls from this app" } }, 403);
   if (!paneId) return badRequest("missing_pane_id", "pane_id query parameter is required");
   if (!PANE_ID.test(paneId)) return badRequest("invalid_pane_id", "pane_id is not a pane id");
-  if (server.upgrade(request, { headers: caller.headers, data: { piVoice: { paneId, deviceId: caller.deviceId } } })) return undefined;
+  const voice = url.searchParams.get("voice");
+  if (voice !== null && !isPiVoice(voice)) return badRequest("invalid_voice", "voice is not a live voice");
+  if (server.upgrade(request, { headers: caller.headers, data: { piVoice: { paneId, deviceId: caller.deviceId, ...(voice ? { voice } : {}) } } })) return undefined;
   return new Response("websocket upgrade required", { status: 426 });
 }

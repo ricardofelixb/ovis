@@ -31,6 +31,7 @@ import type { AgentIntegration, HealthAuth, PluginActions, RemoteAccess } from "
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { loadIntegrations, outcomeFor, type IntegrationsResult } from "../lib/integrations.ts";
 import { SPEECH_VOICES, type SpeechVoice } from "../../shared/speech.ts";
+import { isPiVoice, PI_VOICES } from "../../shared/pi-voice.ts";
 import type { VoiceStatus } from "../../shared/voice.ts";
 import { dictationLocale, VOICE_CONFIG_EVENT } from "../lib/voice.ts";
 import { DevicesPanel } from "./DevicesPanel.tsx";
@@ -597,6 +598,15 @@ function VoicePage() {
         <SettingsRow label={t("Voice")} description={t("The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.")} htmlFor="settings-speech-voice">
           <select id="settings-speech-voice" className="select settings-select" value={settings.speechVoice} onChange={(event) => update({ speechVoice: event.target.value as SpeechVoice })}>
             {SPEECH_VOICES.map((voice) => <option key={voice} value={voice}>{`${voice.charAt(3).toUpperCase()}${voice.slice(4)} · ${voice.startsWith("a") ? t("American") : t("British")}`}</option>)}
+          </select>
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("Live voice")} section="live-voice">
+        <SettingsRow label={t("Voice")} description={t("The voice of a live call with a Pi pane, from the next call on. Same as Pi uses the voice set in Pi's /openai-settings.")} htmlFor="settings-live-voice">
+          <select id="settings-live-voice" className="select settings-select" value={settings.liveVoice} onChange={(event) => update({ liveVoice: isPiVoice(event.target.value) ? event.target.value : "pi" })}>
+            <option value="pi">{t("Same as Pi")}</option>
+            {PI_VOICES.map((voice) => <option key={voice} value={voice}>{`${voice.charAt(0).toUpperCase()}${voice.slice(1)}`}</option>)}
           </select>
         </SettingsRow>
       </SettingsGroup>

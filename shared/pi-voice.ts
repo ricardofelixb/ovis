@@ -49,8 +49,16 @@ export type PhoneToPiFrame =
   | { type: "stop" }
   | { type: "set-muted"; muted: boolean };
 
-/** The relay's own frame to Pi, once it holds the connection. */
-export type RelayToPiFrame = { type: "start" };
+/** The voices a live call can speak in: Pi's `LIVE_VOICE_OPTIONS` (src/live/voices.ts). */
+export const PI_VOICES = ["arbor", "breeze", "cove", "ember", "juniper", "maple", "sol", "spruce", "vale"] as const;
+export type PiVoice = (typeof PI_VOICES)[number];
+
+export function isPiVoice(value: unknown): value is PiVoice {
+  return typeof value === "string" && (PI_VOICES as readonly string[]).includes(value);
+}
+
+/** The relay's own frame to Pi, once it holds the connection: the voice the phone chose, if any. */
+export type RelayToPiFrame = { type: "start"; voice?: PiVoice };
 
 export type PiVoiceStatus = { available: boolean; busy: boolean };
 

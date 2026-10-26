@@ -1511,7 +1511,7 @@ export function Composer({
               title={t("Start live voice")}
               // the tap is the gesture that lets the browser open the microphone and play the reply
               onPointerDown={(event) => event.preventDefault()}
-              onClick={() => startPiVoice({ paneId, label: cwd?.split("/").filter(Boolean).at(-1) ?? "Pi" })}
+              onClick={() => startPiVoice({ paneId, label: cwd?.split("/").filter(Boolean).at(-1) ?? "Pi", ...(settings.liveVoice !== "pi" ? { voice: settings.liveVoice } : {}) })}
             >
               <AudioLines aria-hidden="true" />
             </button>

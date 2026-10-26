@@ -292,4 +292,6 @@ export const SETTINGS_JA: Record<string, string> = {
   "American": "アメリカ英語",
   "British": "イギリス英語",
   "The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.": "返信の下のスピーカーボタンで、このデバイスで読み上げます。音声はサーバー上の Kokoro が無料・オフラインで作ります。初回は準備に数分かかります。",
+  "Same as Pi": "Piと同じ",
+  "The voice of a live call with a Pi pane, from the next call on. Same as Pi uses the voice set in Pi's /openai-settings.": "Piペインとのライブ通話の声です。次の通話から使われます。「Piと同じ」はPiの/openai-settingsで設定した声を使います。",
 };

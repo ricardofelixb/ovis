@@ -292,4 +292,6 @@ export const SETTINGS_ZH: Record<string, string> = {
   "American": "美式",
   "British": "英式",
   "The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.": "点回复下方的扬声器按钮，即在此设备上朗读。语音由服务器上的 Kokoro 免费离线生成，首次使用需要几分钟准备。",
+  "Same as Pi": "与 Pi 相同",
+  "The voice of a live call with a Pi pane, from the next call on. Same as Pi uses the voice set in Pi's /openai-settings.": "与 Pi 窗格实时通话时使用的声音，从下一次通话开始生效。“与 Pi 相同”使用 Pi 的 /openai-settings 中设置的声音。",
 };

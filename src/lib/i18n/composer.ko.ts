@@ -135,7 +135,6 @@ export const COMPOSER_KO: Record<string, string> = {
   "Notices": "알림 메시지",
   "Working folder": "작업 폴더",
   "Worktree": "워크트리",
-  "Live voice": "실시간 음성",
   "Start live voice": "실시간 음성 시작",
   "Listening": "듣는 중",
   "Working on it": "작업 중",
