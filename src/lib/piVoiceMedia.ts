@@ -1,4 +1,5 @@
 import type { PhoneToPiFrame, PiToPhoneFrame, PiVoiceRequest } from "../../shared/pi-voice.ts";
+import { nativeCallAudio } from "./nativeApp.ts";
 
 /**
  * The phone as the audio device of a Pi pane's live voice call. Pi (pi-better-openai) keeps the
@@ -256,7 +257,7 @@ export class BrowserLiveMedia {
   /** Plays the reply raised, with a limiter so its loudest moments can't clip; false where there is no Web Audio. */
   #playLouder(stream: MediaStream): boolean {
     const context = this.#deps.audioContext;
-    if (!context) return false;
+    if (!context || nativeCallAudio()) return false;
     try {
       const gain = context.createGain();
       gain.gain.value = REPLY_GAIN;
