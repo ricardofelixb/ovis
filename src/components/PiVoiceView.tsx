@@ -33,9 +33,9 @@ const collapse = () => setPiVoiceExpanded(false);
 export function PiVoiceView() {
   const voice = usePiVoice();
   const docked = usePiVoiceDocked();
-  const floating = voice.status !== "idle" && !voice.expanded && !docked;
+  const floating = voice.status === "live" && !voice.expanded && !docked;
   const leaving = useDockExit(floating, voice);
-  if (voice.status !== "idle" && voice.expanded) return <PiVoiceDialog voice={voice} />;
+  if ((voice.status === "live" || voice.status === "ended") && voice.expanded) return <PiVoiceDialog voice={voice} />;
   if (floating) return <PiVoiceDock voice={voice} floating />;
   return leaving ? <PiVoiceDock voice={leaving} floating leaving /> : null;
 }
@@ -43,7 +43,8 @@ export function PiVoiceView() {
 /** The call's orb over the composer of its pane, while the call is not full-screen. */
 export function PiVoiceDockHost({ paneId }: { paneId: string }) {
   const voice = usePiVoice();
-  const shown = voice.status !== "idle" && !voice.expanded && voice.paneId === paneId;
+  // only once the call is ready to talk, as in the agents app: while it connects, the composer's button shows it
+  const shown = voice.status === "live" && !voice.expanded && voice.paneId === paneId;
   const leaving = useDockExit(shown, voice);
   usePiVoiceDock(shown || leaving !== null);
   if (shown) return <PiVoiceDock voice={voice} />;
@@ -52,6 +53,9 @@ export function PiVoiceDockHost({ paneId }: { paneId: string }) {
 
 /** How long the orb takes to shrink away once its call ends: the agents app's exit wait. */
 const DOCK_EXIT_MS = 280;
+
+/** A dock showing this soon after its call became ready is the call opening. */
+const ENTER_WINDOW_MS = 400;
 
 /**
  * The call as the dock last showed it, for the moment its orb shrinks away once the call ends.
@@ -81,7 +85,7 @@ function useDockExit(shown: boolean, voice: PiVoiceState): PiVoiceState | null {
 function PiVoiceDock({ voice, floating = false, leaving = false }: { voice: PiVoiceState; floating?: boolean; leaving?: boolean }) {
   const t = useT();
   // a call opens on the orb growing in; putting the full call back is no opening
-  const [entering] = useState(() => voice.status === "starting");
+  const [entering] = useState(() => Date.now() - voice.readyAt < ENTER_WINDOW_MS);
   const surface = useRef<HTMLDivElement>(null);
   const orb = useRef<HTMLButtonElement>(null);
   useOrbDrag(orb, surface, "up", expand);

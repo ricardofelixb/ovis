@@ -1042,6 +1042,8 @@ export function Composer({
   const voiceAvailable = usePiVoiceAvailable(paneId, agent);
   const voice = usePiVoice();
   const inCall = (voice.status === "starting" || voice.status === "live") && voice.paneId === paneId;
+  // the orb shows once the call is ready to talk; until then the hang-up turns, and still cancels it
+  const callConnecting = inCall && voice.status === "starting";
   // an orb where there is nothing to send: a live call with the Pi in this pane, from a phone or a PC alike
   const primaryAction = composerPrimaryAction({ sending, working: isWorking, text, hasAttachments: attachments.length > 0, canStartVoice: voiceAvailable && role !== "observe" && connected && machineId === "local", inCall });
   const hint = composerStatusHint({ uploading, connected, text, noRoom: roomless !== undefined });
@@ -1524,9 +1526,10 @@ export function Composer({
               aria-label={t("End call")}
               title={t("End call")}
               onPointerDown={(event) => event.preventDefault()}
+              aria-busy={callConnecting || undefined}
               onClick={endPiVoice}
             >
-              <X aria-hidden="true" />
+              {callConnecting ? <LoaderCircle className="composer-send-progress" aria-hidden="true" /> : <X aria-hidden="true" />}
             </button>
           ) : (
             <button

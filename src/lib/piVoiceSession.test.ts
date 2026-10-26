@@ -85,8 +85,11 @@ describe("starting a call from the phone", () => {
     socket.receive({ type: "ready", pid: 1, busy: false });
     socket.receive({ type: "ended", error: "Live voice is already on in this Pi." });
     expect(piVoiceState()).toMatchObject({ status: "ended", end: { kind: "error", message: "Live voice is already on in this Pi." } });
-    expect(tracks.every((track) => track.stopped)).toBe(true);
     expect(socket.closed).toBe(true);
+    // the microphone goes quiet at once, and is let go once the close chime has played
+    expect(tracks.every((track) => !track.enabled && !track.stopped)).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    expect(tracks.every((track) => track.stopped)).toBe(true);
   });
 
   it("opens nothing when the microphone is refused", async () => {

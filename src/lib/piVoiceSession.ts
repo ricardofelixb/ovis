@@ -5,7 +5,7 @@ import { fetchPiVoiceStatus } from "./api.ts";
 import { useMachineId } from "./machineContext.tsx";
 import { BrowserLiveMedia } from "./piVoiceMedia.ts";
 import { micErrorReason } from "./voice.ts";
-import { playVoiceChime } from "./voiceChime.ts";
+import { playVoiceChime, primeVoiceChime } from "./voiceChime.ts";
 
 /**
  * The live voice call with the Pi in a pane, one per tab, kept outside React so the composer
@@ -35,9 +35,17 @@ export interface PiVoiceState {
   end: PiVoiceEnd | null;
   /** the full-screen call; otherwise the orb sits over the composer and the chat stays in view */
   expanded: boolean;
+  /** when the call became ready to talk (`Date.now()`), 0 before: the orb grows in then */
+  readyAt: number;
 }
 
-const IDLE: PiVoiceState = { status: "idle", paneId: "", label: "", phase: "connecting", muted: false, userText: "", assistantText: "", end: null, expanded: false };
+const IDLE: PiVoiceState = { status: "idle", paneId: "", label: "", phase: "connecting", muted: false, userText: "", assistantText: "", end: null, expanded: false, readyAt: 0 };
+
+/**
+ * How long the microphone stays open once a call ends: the close chime's length. Letting go of it
+ * turns the phone's sound back from a call's, which would cut the chime off.
+ */
+const RELEASE_AFTER_MS = 500;
 
 interface Call {
   /** opened only once the microphone is allowed (see `connect`) */
@@ -90,14 +98,18 @@ function finish(end: PiVoiceEnd | null): void {
   clearTimeout(settling);
   if (over) {
     playVoiceChime("close");
-    over.media?.close();
-    // a call that never got as far as its media still holds what the tap asked for
-    for (const track of over.stream?.getTracks() ?? []) track.stop();
+    // both sides go quiet at once; the microphone itself is let go once the chime has played
     over.audio.pause();
-    void over.audioContext?.close().catch(() => undefined);
+    for (const track of over.stream?.getTracks() ?? []) track.enabled = false;
     document.removeEventListener("visibilitychange", over.keepAwake);
     void over.wakeLock?.release().catch(() => undefined);
     over.socket?.close();
+    setTimeout(() => {
+      over.media?.close();
+      // a call that never got as far as its media still holds what the tap asked for
+      for (const track of over.stream?.getTracks() ?? []) track.stop();
+      void over.audioContext?.close().catch(() => undefined);
+    }, RELEASE_AFTER_MS);
   }
   // what went wrong is read in the full call, which has the room for it
   update(end ? { status: "ended", end, expanded: true } : { ...IDLE });
@@ -109,7 +121,14 @@ function showPhase(phase: PiVoicePhase): void {
     settling = setTimeout(() => update({ phase }), SPEAKING_HOLD_MS);
     return;
   }
-  update({ phase, ...(phase !== "connecting" && state.status === "starting" ? { status: "live" as const } : {}) });
+  if (phase === "connecting" || state.status !== "starting") {
+    update({ phase });
+    return;
+  }
+  // ready to talk: the orb grows in on the opening chime, as in the agents app. The phone's sound
+  // is a call's by now, so the chime is not cut off switching to it
+  playVoiceChime("open");
+  update({ phase, status: "live", readyAt: Date.now() });
 }
 
 function onFrame(frame: PiToPhoneFrame): void {
@@ -151,7 +170,10 @@ function connect(active: Call, paneId: string, voice: PiVoice | undefined): void
     audioContext,
     createPeer: () => new RTCPeerConnection(),
     send,
-    onFailed: () => finish({ kind: "failed" }),
+    // a call that has ended still holds its media for a moment: its failing then is not this call's
+    onFailed: () => {
+      if (call === active) finish({ kind: "failed" });
+    },
   });
   active.media = media;
   socket.onopen = () => media.hello();
@@ -180,8 +202,8 @@ function connect(active: Call, paneId: string, voice: PiVoice | undefined): void
 export function startPiVoice({ paneId, label, voice }: { paneId: string; label: string; voice?: PiVoice }): void {
   if (state.status === "starting" || state.status === "live") return;
   update({ ...IDLE, status: "starting", paneId, label });
-  // on the tap, which lets it play, and before the microphone turns the phone's sound to a call's
-  playVoiceChime("open");
+  // the opening chime plays once the call is ready to talk; only a tap lets sound start
+  primeVoiceChime();
   const getUserMedia = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
   if (!getUserMedia || typeof RTCPeerConnection === "undefined") {
     finish({ kind: "unsupported" });

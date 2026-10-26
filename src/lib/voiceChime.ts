@@ -28,16 +28,26 @@ function samples(kind: VoiceChimeKind): Float32Array<ArrayBuffer> {
   return out;
 }
 
-// made on the tap that opens a call, so the close can still play when Pi or the network ends it
+// made on the tap that opens a call, so the chimes can play later with no tap of their own
 let context: AudioContext | null = null;
 const buffers = new Map<VoiceChimeKind, AudioBuffer>();
 
+function chimeContext(): AudioContext | null {
+  const AudioContextClass = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) return null;
+  context ??= new AudioContextClass();
+  return context;
+}
+
+/** Readies the chimes on a tap, so the opening one can play once the call is ready to talk. */
+export function primeVoiceChime(): void {
+  void chimeContext()?.resume().catch(() => undefined);
+}
+
 /** Plays a chime; a browser without Web Audio stays quiet. */
 export function playVoiceChime(kind: VoiceChimeKind): void {
-  const AudioContextClass = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!AudioContextClass) return;
-  context ??= new AudioContextClass();
-  const target = context;
+  const target = chimeContext();
+  if (!target) return;
   let buffer = buffers.get(kind);
   if (!buffer) {
     const data = samples(kind);
