@@ -32,6 +32,18 @@ public class HerdrShellPlugin extends Plugin {
     @Override
     public void load() {
         deliverTap(getActivity().getIntent());
+        // Hang up or Mute on the live call's notification, for the page's call to act on
+        LiveCallService.onAction = action -> {
+            JSObject event = new JSObject();
+            event.put("action", action);
+            notifyListeners("liveCallAction", event);
+        };
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        LiveCallService.onAction = null;
+        super.handleOnDestroy();
     }
 
     @Override
@@ -114,7 +126,8 @@ public class HerdrShellPlugin extends Plugin {
     @PluginMethod
     public void liveCallStarted(PluginCall call) {
         try {
-            LiveCallService.start(getContext(), call.getString("title", "Ovis"), call.getString("body", ""));
+            LiveCallService.start(getContext(), call.getString("title", "Ovis"), call.getString("body", ""),
+                call.getString("mute", "Mute"), call.getString("unmute", "Unmute"));
         } catch (RuntimeException outOfSight) {
             // the app left view before the microphone was allowed: the call goes on only while it is in view
         }
@@ -124,6 +137,12 @@ public class HerdrShellPlugin extends Plugin {
     @PluginMethod
     public void liveCallEnded(PluginCall call) {
         LiveCallService.stop(getContext());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void liveCallMuted(PluginCall call) {
+        LiveCallService.setMuted(call.getBoolean("muted", false));
         call.resolve();
     }
     @PluginMethod

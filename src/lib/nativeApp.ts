@@ -35,10 +35,29 @@ export function nativeAlerts(): boolean {
  * Android stops a hidden app's microphone: the Android app keeps a live call going out of sight
  * under an ongoing notification (LiveCallService.java). An app without it stays as it was.
  */
-export function nativeLiveCall(notice: { title: string; body: string } | null): void {
+export function nativeLiveCall(notice: { title: string; body: string; mute: string; unmute: string } | null): void {
   if (!inAndroidApp()) return;
   const answer = bridge()?.nativePromise?.("HerdrShell", notice ? "liveCallStarted" : "liveCallEnded", notice ?? {});
   void answer?.catch(() => undefined);
+}
+
+/** The call's notification shows Mute or Unmute as the call is. */
+export function nativeLiveCallMuted(muted: boolean): void {
+  if (!inAndroidApp()) return;
+  void bridge()?.nativePromise?.("HerdrShell", "liveCallMuted", { muted })?.catch(() => undefined);
+}
+
+let liveCallActions = false;
+
+/** Hang up or Mute tapped on the call's notification, the lock screen's included. Listens once. */
+export function onNativeLiveCallAction(act: (action: "hangup" | "mute") => void): void {
+  const callback = bridge()?.nativeCallback;
+  if (liveCallActions || !inAndroidApp() || !callback) return;
+  liveCallActions = true;
+  callback("HerdrShell", "addListener", { eventName: "liveCallAction" }, (data) => {
+    const action = (data as { action?: string } | undefined)?.action;
+    if (action === "hangup" || action === "mute") act(action);
+  });
 }
 
 export type NativeAlertsState = "granted" | "denied" | "default";
