@@ -140,8 +140,6 @@ export const COMPOSER_KO: Record<string, string> = {
   "Working on it": "작업 중",
   "Speaking": "말하는 중",
   "Muted": "음소거됨",
-  "Mute": "음소거",
-  "Unmute": "음소거 해제",
   "End call": "통화 종료",
   "Open call": "통화 열기",
   "Minimize call": "통화 최소화",

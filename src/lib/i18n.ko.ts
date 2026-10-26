@@ -290,6 +290,8 @@ const BASE: Record<string, string> = {
   "Change PC": "PC 바꾸기",
   "Read aloud": "소리 내어 읽기",
   "Live voice": "실시간 음성",
+  "Mute": "음소거",
+  "Unmute": "음소거 해제",
 };
 
 /** The parts KO is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */

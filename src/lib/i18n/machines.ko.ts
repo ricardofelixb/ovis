@@ -81,4 +81,6 @@ export const MACHINES_KO: Record<string, string> = {
   "Settings (⌘⇧,)": "설정 (⌘⇧,)",
   "The computer this app runs on": "이 앱이 실행되는 컴퓨터",
   "Host": "호스트",
+  "Show offline ({count})": "오프라인 표시 ({count})",
+  "Hide offline PCs": "오프라인 PC 숨기기",
 };

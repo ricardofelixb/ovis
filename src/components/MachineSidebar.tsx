@@ -35,10 +35,18 @@ export function MachineSidebar(props: Props) {
   // the roster's wait is a live region that is in the list from its first render, clipped while empty (never
   // display: none), and its words land a frame after it (lib/useAnnouncedText.ts)
   const loadingWords = useAnnouncedText(props.machines.length === 0 ? t("Loading PCs…") : null);
+  // PCs Tailscale says are offline wait behind one row, unless one of them is the PC in view
+  const [showOffline, setShowOffline] = useState(false);
+  const offline = props.machines.filter((machine) => machine.tailnet_offline && machine.id !== props.selectedMachineId);
+  const shown = showOffline ? props.machines : props.machines.filter((machine) => !offline.includes(machine));
   // no top bar: a workspace starts from its PC's header, and Add PC lives in Settings → Remote PCs
   return <SidebarActivityProvider value={activity}><div className="sidebar-shell">
     <div className="machine-list" aria-label={t("PCs and workspaces")}>
-      {props.machines.map((machine) => <MachineGroup key={machine.id} {...props} machine={machine} />)}
+      {shown.map((machine) => <MachineGroup key={machine.id} {...props} machine={machine} />)}
+      {offline.length > 0 && <button className="btn btn-ghost machine-offline-toggle" aria-expanded={showOffline} onClick={() => setShowOffline(!showOffline)}>
+        {showOffline ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+        {showOffline ? t("Hide offline PCs") : t("Show offline ({count})", { count: offline.length })}
+      </button>}
       <p className={loadingWords === null ? "visually-hidden" : "tree-state"} role="status">{loadingWords}</p>
     </div>
     <AgentSidebar machines={props.machines} selectedMachineId={props.selectedMachineId} selectedPaneId={props.selectedPaneId} stateWord={(machine) => t(STATE_WORD[machine.state])} onSelect={props.onSelect} />

@@ -24,6 +24,8 @@ export interface Machine {
   enabled: boolean;
   state: MachineState;
   error: string | null;
+  /** Tailscale says this PC is offline (server/tailnet.ts): the sidebar keeps it out of the way */
+  tailnet_offline?: boolean;
   /** set when retrying cannot help: the user has to update the remote bridge or approve setup */
   action_required?: MachineAction | null;
   /** a bridge update running for this PC right now (in the background, or from its dialog) */
