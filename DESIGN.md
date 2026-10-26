@@ -2197,6 +2197,26 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
 - The recording pill shows Cancel, a **Recording** label, the level bars, a mono timer and Done.
   Amber only; `--danger` stays for errors.
 
+### Live voice (Pi panes)
+- Design followed: the ChatGPT app's full-screen voice mode for the layout (one orb, Mute and End
+  within thumb reach) and the agents app for the orb and its motion. It differs from the agents app's
+  144 px floating voice dock: a call with a coding agent needs an explicit Mute and End and the last
+  words of both sides in view, so it is a full-screen dialog, not a dock.
+- Where the orb is offered: the composer's Send becomes a small orb (`.composer-voice`) while the
+  box is empty, on a Pi pane of this PC that the viewer may drive and whose Pi has the live bridge
+  (`GET /api/pane/pi-voice`). Typing brings Send back; a working agent keeps Stop. The mic button
+  for dictation stays as it is.
+- The call (`.pi-voice`, mounted once in App): a full-screen dialog (focus trapped, the phone's Back
+  ends the call) with the pane's folder and the phase (Connecting, Listening, Working on it,
+  Speaking, Muted), the orb, the last thing each side said (a polite live region, four lines at
+  most), and two round buttons: Mute (pressed state) and End (`--status-blocked`). A call that cannot
+  start or was cut off says why, with Close.
+- The orb is the WebGL glass-liquid sphere (`VoiceOrb.tsx`); where WebGL is missing it is a disc in
+  `--primary`. It swells with the reply, draws in while the user speaks, dims when muted, and with
+  reduced motion it is drawn once and only swells.
+- The reply plays through an `<audio>` element, never through the audio graph's output, so the
+  browser's echo cancellation can hear it.
+
 ### Command palette
 - At `<=480px` the header has no palette button: the More menu's first item, **Search panes and
   actions**, opens it by touch, and a connected keyboard still opens it with `Mod+Shift+K` (or
