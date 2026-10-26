@@ -222,6 +222,16 @@ export function composerSendShown(state: { working: boolean; text: string }): bo
   return !state.working || state.text.trim().length > 0;
 }
 
+/**
+ * The composer's big button: Stop for the working agent, Send for a message, and a voice call
+ * where there is nothing to send and one can start (the orb replaces Send in an empty box, as in
+ * the agents app's composer).
+ */
+export function composerPrimaryAction(state: { sending: boolean; working: boolean; text: string; hasAttachments: boolean; canStartVoice: boolean }): "send" | "stop" | "voice" {
+  if (!state.sending && !composerSendShown(state)) return "stop";
+  return !state.sending && state.text.trim().length === 0 && !state.hasAttachments && state.canStartVoice ? "voice" : "send";
+}
+
 /** While an agent works, Send accepts a follow-up for its next turn. A shell sends immediately. */
 export function composerDelivery(agent: string | null, status?: AgentStatus): "queue" | "immediate" {
   return agent !== null && status === "working" ? "queue" : "immediate";
