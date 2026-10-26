@@ -1,0 +1,159 @@
+/* the full-screen live voice call with a Pi pane (PiVoiceView.tsx) */
+.pi-voice {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) + 1);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: var(--app-height, 100dvh);
+  padding: calc(env(safe-area-inset-top, 0px) + var(--space-4)) calc(env(safe-area-inset-right, 0px) + var(--space-4))
+    calc(env(safe-area-inset-bottom, 0px) + var(--space-4)) calc(env(safe-area-inset-left, 0px) + var(--space-4));
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.pi-voice-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--touch-target);
+  text-align: center;
+}
+
+.pi-voice-label {
+  font-size: var(--fs-lg);
+  color: var(--text-strong);
+}
+
+.pi-voice-status {
+  min-height: 1.2em;
+  font-size: var(--fs-md);
+  color: var(--text-dim);
+}
+
+.pi-voice-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* a plain disc that swells with the voice; the shader orb replaces it where WebGL draws one */
+.pi-voice-orb {
+  --orb-level: 0;
+  width: min(60vw, 40dvh, 280px);
+  aspect-ratio: 1;
+  border-radius: var(--radius-pill);
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--primary-hover) 90%, var(--text-strong)), var(--primary) 55%, color-mix(in srgb, var(--primary) 55%, var(--bg)));
+  box-shadow: 0 0 calc(var(--space-8) + var(--orb-level) * var(--space-8)) color-mix(in srgb, var(--primary) 45%, transparent);
+  transform: scale(calc(1 + var(--orb-level) * 0.15));
+  opacity: 0.9;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.pi-voice-stage.is-connecting .pi-voice-orb,
+.pi-voice-stage.is-standby .pi-voice-orb,
+.pi-voice-stage.is-working .pi-voice-orb {
+  animation: pi-voice-breathe 1.8s ease-in-out infinite;
+}
+
+.pi-voice-stage.is-muted .pi-voice-orb,
+.pi-voice-stage.is-over .pi-voice-orb {
+  opacity: 0.35;
+}
+
+.pi-voice-stage.is-error .pi-voice-orb {
+  background: var(--status-blocked);
+}
+
+@keyframes pi-voice-breathe {
+  50% { opacity: 0.55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-voice-stage .pi-voice-orb {
+    animation: none;
+    transform: none;
+  }
+}
+
+.pi-voice-transcript {
+  width: min(100%, 36rem);
+  min-height: calc(var(--space-8) * 3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.pi-voice-line {
+  margin: 0;
+  font-size: var(--fs-chat);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  /* the last words, not an essay: a long turn scrolls off the top */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pi-voice-line.is-user {
+  color: var(--text-dim);
+}
+
+.pi-voice-line.is-assistant {
+  color: var(--text-strong);
+}
+
+.pi-voice-end {
+  margin: 0 0 var(--space-4);
+  max-width: 28rem;
+  text-align: center;
+  color: var(--danger-text);
+}
+
+.pi-voice-controls {
+  display: flex;
+  gap: var(--space-6);
+  padding-top: var(--space-4);
+}
+
+.pi-voice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--touch-target) * 1.5);
+  height: calc(var(--touch-target) * 1.5);
+  padding: 0;
+  border: var(--hairline) solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elevated);
+  color: var(--text-strong);
+}
+
+.pi-voice-button svg {
+  width: var(--space-6);
+  height: var(--space-6);
+}
+
+.pi-voice-button[aria-pressed="true"] {
+  background: var(--text-strong);
+  color: var(--bg);
+}
+
+.pi-voice-button.is-end {
+  border-color: transparent;
+  background: var(--status-blocked);
+  color: var(--bg);
+}
+
+.pi-voice-button:disabled {
+  opacity: 0.5;
+}

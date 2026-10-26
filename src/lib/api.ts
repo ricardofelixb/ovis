@@ -75,6 +75,7 @@ import { SUPPORTED_AGENT_KINDS } from "../../shared/supported-agents.ts";
 import type { PaneScrollInfo } from "../../shared/herdr-api.generated.ts";
 import { readInstalledNotes, readUpdateNotes, type HerdrUpdateStatus, type InstalledNotes, type UpdateNotes, type UpdateRequest, type UpdateStatus } from "../../shared/update.ts";
 import type { AlertPrefs } from "../../shared/notify-policy.ts";
+import type { PiVoiceStatus } from "../../shared/pi-voice.ts";
 import type { TelemetryChange, TelemetryStatus } from "../../shared/telemetry.ts";
 import type { VoiceConfigUpdate, VoiceStatus } from "../../shared/voice.ts";
 import { MAX_ATTACHMENT_BYTES } from "../../shared/attachments.ts";
@@ -802,6 +803,11 @@ export async function removeWorktree(request: RemoveWorktreeRequest, machineId =
 /** GET /api/pane/commands: the slash commands the pane's agent understands (built-in + custom). */
 export async function fetchPaneCommands(paneId: string, machineId = "local"): Promise<SlashCommand[]> {
   return (await getJson<{ commands: SlashCommand[] }>(machinePath(machineId, `pane/commands?pane_id=${encodeURIComponent(paneId)}`))).commands;
+}
+
+/** GET /api/pane/pi-voice: whether the pane's Pi can take a live voice call from this phone, and whether one is on. */
+export async function fetchPiVoiceStatus(paneId: string): Promise<PiVoiceStatus> {
+  return getJson<PiVoiceStatus>(`/api/pane/pi-voice?pane_id=${encodeURIComponent(paneId)}`);
 }
 
 /**

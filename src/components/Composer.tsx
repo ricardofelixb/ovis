@@ -19,6 +19,7 @@ import "./Composer.css";
 import type { AgentStatus, ClientRole, ConversationMetadata, PlanSummary, SlashCommand } from "../../shared/protocol.ts";
 import { skillSyntax } from "../../shared/skill-syntax.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
+import { startPiVoice, usePiVoiceAvailable } from "../lib/piVoiceSession.ts";
 import { composerDrafts } from "../lib/composerDraft.ts";
 import { paneStorageId } from "../../shared/machines.ts";
 import {
@@ -30,7 +31,7 @@ import {
   commandGroup,
   commandsForTrigger,
   composerModelDraw,
-  composerSendShown,
+  composerPrimaryAction,
   composerStatusCompact,
   composerStatusHint,
   composerStatusWord,
@@ -1037,7 +1038,9 @@ export function Composer({
   // what the status line says; what may be sent, queued or stopped goes by the agent's own status
   const shownStatus = paneStatus({ agent_status: agentStatus, ...(backgroundWait ? { background_wait: true as const } : {}) });
   const statusCompact = composerStatusCompact(cardWidth);
-  const sendShown = sending || composerSendShown({ working: isWorking, text });
+  const voiceAvailable = usePiVoiceAvailable(paneId, agent);
+  // an orb where there is nothing to send: a live call with the Pi in this pane, from a phone or a PC alike
+  const primaryAction = composerPrimaryAction({ sending, working: isWorking, text, hasAttachments: attachments.length > 0, canStartVoice: voiceAvailable && role !== "observe" && connected && machineId === "local" });
   const hint = composerStatusHint({ uploading, connected, text, noRoom: roomless !== undefined });
   const models = agent === "pi" && role !== "observe" && metadata?.models?.length ? metadata.models : undefined;
   // a switch shows at once: pi applies it in a moment, but its transcript reaches the pill a read later
@@ -1487,7 +1490,7 @@ export function Composer({
           )}
         </div>
         <div className="composer-controls composer-controls-right">
-          {!sendShown ? (
+          {primaryAction === "stop" ? (
             <button
               type="button"
               className="composer-action composer-stop"
@@ -1498,6 +1501,16 @@ export function Composer({
             >
               <Square aria-hidden="true" />
             </button>
+          ) : primaryAction === "voice" ? (
+            <button
+              type="button"
+              className="composer-action composer-voice"
+              aria-label={t("Start live voice")}
+              title={t("Start live voice")}
+              // the tap is the gesture that lets the browser open the microphone and play the reply
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => startPiVoice({ paneId, label: cwd?.split("/").filter(Boolean).at(-1) ?? "Pi" })}
+            />
           ) : (
             <button
               type="button"
