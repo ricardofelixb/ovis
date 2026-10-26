@@ -4,7 +4,7 @@ import { encodePiVoiceFrame, parsePiFrame, PI_VOICE_PATH, type PhoneToPiFrame, t
 import { fetchPiVoiceStatus } from "./api.ts";
 import { t } from "./i18n.ts";
 import { useMachineId } from "./machineContext.tsx";
-import { nativeLiveCall } from "./nativeApp.ts";
+import { nativeLiveCall, nativeLiveCallMuted, onNativeLiveCallAction } from "./nativeApp.ts";
 import { BrowserLiveMedia } from "./piVoiceMedia.ts";
 import { micErrorReason } from "./voice.ts";
 import { playVoiceChime, primeVoiceChime } from "./voiceChime.ts";
@@ -141,6 +141,7 @@ function onFrame(frame: PiToPhoneFrame): void {
       break;
     case "mute":
       update({ muted: frame.muted });
+      nativeLiveCallMuted(frame.muted);
       break;
     case "transcript":
       // only the reply shows; what was said to it is in the chat once the call ends
@@ -236,7 +237,8 @@ export function startPiVoice({ paneId, label, voice }: { paneId: string; label: 
         return;
       }
       started.stream = stream;
-      nativeLiveCall({ title: t("Live voice"), body: label });
+      onNativeLiveCallAction((action) => action === "hangup" ? endPiVoice() : setPiVoiceMuted(!state.muted));
+      nativeLiveCall({ title: t("Live voice"), body: label, mute: t("Mute"), unmute: t("Unmute") });
       connect(started, paneId, voice);
     },
     (error: unknown) => {

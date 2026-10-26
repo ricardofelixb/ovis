@@ -15,8 +15,12 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
 import androidx.core.app.ServiceCompat;
+import androidx.core.graphics.drawable.IconCompat;
+import java.util.function.Consumer;
 
 /**
  * Keeps a live call (src/lib/piVoiceSession.ts) going once the app is out of sight or the screen
@@ -29,12 +33,26 @@ import androidx.core.app.ServiceCompat;
  * its microphone included. Android before 12 keeps its own choice.
  */
 public class LiveCallService extends Service {
-    private static final String CHANNEL = "live-call";
+    private static final String CHANNEL = "live-call-ongoing";
     private static final int ID = 1;
+    private static final String HANG_UP = "sh.ovis.app.LIVE_CALL_HANG_UP";
+    private static final String TOGGLE_MUTE = "sh.ovis.app.LIVE_CALL_TOGGLE_MUTE";
+
+    /** What the notification's buttons ask of the page's call, "hangup" or "mute" (HerdrShellPlugin). */
+    static Consumer<String> onAction;
+    // the service whose notification is up, which the page's mute updates
+    private static LiveCallService shown;
+    private String title = "Ovis";
+    private String body = "";
+    private String muteLabel = "Mute";
+    private String unmuteLabel = "Unmute";
+    private boolean muted;
 
     // the call that holds the loudspeaker, which one ending a moment ago must not take back
     private static LiveCallService current;
     private AudioManager audio;
+    // Android's own phone call for this one, which routes its sound instead (TelecomCall)
+    private TelecomCall call;
     // a headset plugged in or taken out mid-call
     private final AudioDeviceCallback devices = new AudioDeviceCallback() {
         @Override
@@ -66,7 +84,7 @@ public class LiveCallService extends Service {
 
     /** The loudspeaker, unless a headset is there to take the call. */
     private void route() {
-        if (Build.VERSION.SDK_INT < 31) return;
+        if (Build.VERSION.SDK_INT < 31 || call != null) return;
         AudioDeviceInfo speaker = null;
         for (AudioDeviceInfo device : audio.getAvailableCommunicationDevices()) {
             int type = device.getType();
@@ -82,6 +100,7 @@ public class LiveCallService extends Service {
 
     @Override
     public void onDestroy() {
+        if (shown == this) shown = null;
         if (Build.VERSION.SDK_INT >= 31) {
             audio.unregisterAudioDeviceCallback(devices);
             // the WebView lets go of a call's sound a moment after the call ends: letting go of the
@@ -112,6 +131,11 @@ public class LiveCallService extends Service {
     }
 
     private void release() {
+        // ended only now, so the close chime is still a call's sound on the loudspeaker
+        if (call != null) {
+            call.end();
+            call = null;
+        }
         audio.removeOnCommunicationDeviceChangedListener(changed);
         // a call started since then has the loudspeaker now
         if (current == this) {
@@ -121,8 +145,17 @@ public class LiveCallService extends Service {
     }
 
     /** Throws when the app is no longer in view, where Android starts no service. */
-    static void start(Context context, String title, String body) {
-        context.startService(new Intent(context, LiveCallService.class).putExtra("title", title).putExtra("body", body));
+    static void start(Context context, String title, String body, String mute, String unmute) {
+        context.startService(new Intent(context, LiveCallService.class).putExtra("title", title).putExtra("body", body)
+            .putExtra("mute", mute).putExtra("unmute", unmute));
+    }
+
+    /** The page's call muted or unmuted: the notification's button turns to match. */
+    static void setMuted(boolean muted) {
+        LiveCallService service = shown;
+        if (service == null || service.muted == muted) return;
+        service.muted = muted;
+        service.post();
     }
 
     static void stop(Context context) {
@@ -131,31 +164,100 @@ public class LiveCallService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        String title = intent == null ? null : intent.getStringExtra("title");
-        String body = intent == null ? null : intent.getStringExtra("body");
-        if (title == null) title = "Ovis";
-        getSystemService(NotificationManager.class).createNotificationChannel(
-            new NotificationChannel(CHANNEL, title, NotificationManager.IMPORTANCE_LOW)
-        );
+        String action = intent == null ? null : intent.getAction();
+        if (HANG_UP.equals(action) || TOGGLE_MUTE.equals(action)) {
+            Consumer<String> page = onAction;
+            if (page != null) page.accept(HANG_UP.equals(action) ? "hangup" : "mute");
+            // no page left to end the call: the notification goes at least
+            else if (HANG_UP.equals(action)) stopSelf();
+            return START_NOT_STICKY;
+        }
+        if (intent != null) {
+            title = or(intent.getStringExtra("title"), "Ovis");
+            body = or(intent.getStringExtra("body"), "");
+            muteLabel = or(intent.getStringExtra("mute"), "Mute");
+            unmuteLabel = or(intent.getStringExtra("unmute"), "Unmute");
+        }
+        NotificationManager notifications = getSystemService(NotificationManager.class);
+        // the first channel was silent, and so hidden from the lock screen; a channel keeps its importance
+        notifications.deleteNotificationChannel("live-call");
+        NotificationChannel channel = new NotificationChannel(CHANNEL, title, NotificationManager.IMPORTANCE_DEFAULT);
+        channel.setSound(null, null);
+        channel.enableVibration(false);
+        channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+        notifications.createNotificationChannel(channel);
+        shown = this;
+        post();
+        if (Build.VERSION.SDK_INT >= 34 && call == null) startCall();
+        return START_NOT_STICKY;
+    }
+
+    @RequiresApi(34)
+    private void startCall() {
+        try {
+            call = new TelecomCall(this, title, action -> {
+                Consumer<String> page = onAction;
+                if (page != null) page.accept(action);
+            }, () -> {
+                call = null;
+                route();
+            });
+            // Telecom routes the call's sound from here
+            audio.clearCommunicationDevice();
+        } catch (RuntimeException refused) {
+            call = null;
+        }
+    }
+
+    /**
+     * A phone call's notification, as ChatGPT's voice shows: on the lock screen with Hang up and
+     * Mute, and in the status bar's call chip where the phone has one. Android takes a call's style
+     * only from a foreground service, so a change posts it through startForeground again.
+     */
+    private void post() {
         // a tap goes back to the app as its launcher icon does
         Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());
+        Person caller = new Person.Builder().setName(title).setIcon(IconCompat.createWithResource(this, R.mipmap.ic_launcher)).setImportant(true).build();
         Notification notification = new NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(sh.ovis.push.R.drawable.ic_stat_ovis)
-            .setColor(0xFF2E3A59)
-            .setContentTitle(title)
             .setContentText(body)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            // as ChatGPT's voice: a live update, the call card on the lock screen and the status bar's
+            // chip, with no banner over the app the call started in
+            .setRequestPromotedOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setContentIntent(open == null ? null : PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE))
+            .setStyle(NotificationCompat.CallStyle.forOngoingCall(caller, button(HANG_UP)))
+            .addAction(new NotificationCompat.Action.Builder(
+                IconCompat.createWithResource(this, muted ? R.drawable.ic_call_mic : R.drawable.ic_call_mic_off),
+                muted ? unmuteLabel : muteLabel, button(TOGGLE_MUTE)).build())
             .build();
+        int microphone = Build.VERSION.SDK_INT >= 30 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0;
         try {
-            ServiceCompat.startForeground(this, ID, notification, Build.VERSION.SDK_INT >= 30 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0);
+            try {
+                // a phone call's service, for the phone call it is to Android (TelecomCall)
+                ServiceCompat.startForeground(this, ID, notification, Build.VERSION.SDK_INT >= 34 ? microphone | ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL : microphone);
+            } catch (SecurityException noCall) {
+                ServiceCompat.startForeground(this, ID, notification, microphone);
+            }
         } catch (RuntimeException refused) {
             // no microphone permission, or no longer in view: the call goes on only while the app is
             stopSelf();
         }
-        return START_NOT_STICKY;
+    }
+
+    private PendingIntent button(String action) {
+        Intent intent = new Intent(this, LiveCallService.class).setAction(action);
+        return PendingIntent.getService(this, HANG_UP.equals(action) ? 1 : 2, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    private static String or(String value, String fallback) {
+        return value == null ? fallback : value;
     }
 
     /** Swiped away from the recent apps: the page, and its call, are gone. */
