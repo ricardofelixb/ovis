@@ -15,6 +15,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import androidx.annotation.RequiresApi;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.Person;
 import androidx.core.app.ServiceCompat;
@@ -50,6 +51,8 @@ public class LiveCallService extends Service {
     // the call that holds the loudspeaker, which one ending a moment ago must not take back
     private static LiveCallService current;
     private AudioManager audio;
+    // Android's own phone call for this one, which routes its sound instead (TelecomCall)
+    private TelecomCall call;
     // a headset plugged in or taken out mid-call
     private final AudioDeviceCallback devices = new AudioDeviceCallback() {
         @Override
@@ -81,7 +84,7 @@ public class LiveCallService extends Service {
 
     /** The loudspeaker, unless a headset is there to take the call. */
     private void route() {
-        if (Build.VERSION.SDK_INT < 31) return;
+        if (Build.VERSION.SDK_INT < 31 || call != null) return;
         AudioDeviceInfo speaker = null;
         for (AudioDeviceInfo device : audio.getAvailableCommunicationDevices()) {
             int type = device.getType();
@@ -128,6 +131,11 @@ public class LiveCallService extends Service {
     }
 
     private void release() {
+        // ended only now, so the close chime is still a call's sound on the loudspeaker
+        if (call != null) {
+            call.end();
+            call = null;
+        }
         audio.removeOnCommunicationDeviceChangedListener(changed);
         // a call started since then has the loudspeaker now
         if (current == this) {
@@ -180,7 +188,25 @@ public class LiveCallService extends Service {
         notifications.createNotificationChannel(channel);
         shown = this;
         post();
+        if (Build.VERSION.SDK_INT >= 34 && call == null) startCall();
         return START_NOT_STICKY;
+    }
+
+    @RequiresApi(34)
+    private void startCall() {
+        try {
+            call = new TelecomCall(this, title, action -> {
+                Consumer<String> page = onAction;
+                if (page != null) page.accept(action);
+            }, () -> {
+                call = null;
+                route();
+            });
+            // Telecom routes the call's sound from here
+            audio.clearCommunicationDevice();
+        } catch (RuntimeException refused) {
+            call = null;
+        }
     }
 
     /**
@@ -194,10 +220,14 @@ public class LiveCallService extends Service {
         Person caller = new Person.Builder().setName(title).setIcon(IconCompat.createWithResource(this, R.mipmap.ic_launcher)).setImportant(true).build();
         Notification notification = new NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(sh.ovis.push.R.drawable.ic_stat_ovis)
-            .setColor(0xFF2E3A59)
             .setContentText(body)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            // as ChatGPT's voice: a live update, the call card on the lock screen and the status bar's
+            // chip, with no banner over the app the call started in
+            .setRequestPromotedOngoing(true)
+            .setSilent(true)
+            .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
@@ -207,8 +237,14 @@ public class LiveCallService extends Service {
                 IconCompat.createWithResource(this, muted ? R.drawable.ic_call_mic : R.drawable.ic_call_mic_off),
                 muted ? unmuteLabel : muteLabel, button(TOGGLE_MUTE)).build())
             .build();
+        int microphone = Build.VERSION.SDK_INT >= 30 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0;
         try {
-            ServiceCompat.startForeground(this, ID, notification, Build.VERSION.SDK_INT >= 30 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE : 0);
+            try {
+                // a phone call's service, for the phone call it is to Android (TelecomCall)
+                ServiceCompat.startForeground(this, ID, notification, Build.VERSION.SDK_INT >= 34 ? microphone | ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL : microphone);
+            } catch (SecurityException noCall) {
+                ServiceCompat.startForeground(this, ID, notification, microphone);
+            }
         } catch (RuntimeException refused) {
             // no microphone permission, or no longer in view: the call goes on only while the app is
             stopSelf();
