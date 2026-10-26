@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { useMediaQuery } from "./useMediaQuery.ts";
 import type { WorkspaceBranch } from "./worktreeBranches.ts";
 
 /**
@@ -43,4 +44,11 @@ function subscribe(listener: () => void): () => void {
 
 export function usePaneBranch(machineId: string, workspaceId: string | null): string | null {
   return useSyncExternalStore(subscribe, () => publishedBranch(machineId, workspaceId));
+}
+
+/** The branch the header shows: only where the composer drops its folder-and-branch strip (Composer.tsx). */
+export function useHeaderBranch(machineId: string, workspaceId: string | null): string | null {
+  const inHeader = useMediaQuery("(max-width: 640px), (pointer: coarse)");
+  const branch = usePaneBranch(machineId, workspaceId);
+  return inHeader ? branch : null;
 }

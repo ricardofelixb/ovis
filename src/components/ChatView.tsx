@@ -34,7 +34,7 @@ import { speak, stopSpeech, toggleSpeechPause, useSpeechStatus } from "../lib/sp
 import { attachmentFileName, mentionFileName, type GalleryImage } from "../lib/imageViewer.ts";
 import { useMachineApi } from "../lib/machineContext.tsx";
 import { toTranscriptMessages, type TranscriptMessage } from "../lib/transcript.ts";
-import { isLiveWorkTurn, isWaitingWorkTurn, formatWorkDuration, splitTurn, visibleWorkParts, workFailed, workStartsOpen, workSummary, type ToolPart as ToolPartType } from "../lib/workBlocks.ts";
+import { isLiveWorkTurn, isWaitingWorkTurn, formatWorkDuration, runCounts, splitTurn, visibleWorkParts, workFailed, workItems, workStartsOpen, workSummary, type RunCount, type ThinkingPart, type ToolPart as ToolPartType } from "../lib/workBlocks.ts";
 import { phaseRows, planRows, taskRows, todoRows, type ChecklistRow } from "../lib/checklist.ts";
 import { isTodoTool, parseTodoAnswer, todoCallSummary, type TodoItem, type TodoStatus } from "../lib/todos.ts";
 import { formatGoalTime, turnGoal, type GoalState, type GoalStatus } from "../lib/goals.ts";
@@ -520,6 +520,30 @@ function ThinkingRow({ text, stateKey }: { text: string; stateKey: string }) {
 }
 
 /**
+ * One stretch of calls and thinking as one line, the way pi-minimalist folds pi's transcript:
+ * `✓ think ×3, bash ×2 · ✗ bash ×1 · • bash ×1`. A tap opens the usual row for each.
+ */
+function WorkRunRow({ paneId, run, parts, start, live }: { paneId: string; run: (ToolPartType | ThinkingPart)[]; parts: ConversationPart[]; start: number; live: boolean }) {
+  const [chosen, setOpen] = useChatRowToggle(`run:${start}`, false);
+  const open = chosen === true;
+  const { done, failed, running } = runCounts(run, live);
+  const counts = (list: RunCount[]) => list.map(({ name, count }) => `${name} ×${count}`).join(", ");
+  const groups = [["done", "✓", done], ["failed", "✗", failed], ["running", "•", running]] as const;
+  return <div className="work-row work-run">
+    <button type="button" className="work-row-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <span className="work-row-caret" aria-hidden="true">{open ? <ChevronDown /> : <ChevronRight />}</span>
+      <span className="work-run-counts">{groups.filter(([, , list]) => list.length > 0).map(([outcome, mark, list], index) =>
+        <span key={outcome} className={`work-run-${outcome}`}>{index > 0 && " · "}<span className="work-run-mark">{mark}</span> {counts(list)}</span>)}</span>
+    </button>
+    {open && <div className="work-run-rows">{run.map((part) => {
+      const index = parts.indexOf(part);
+      return part.kind === "thinking" ? <ThinkingRow key={index} stateKey={`thinking:${index}`} text={part.text} />
+        : <WorkRow key={index} stateKey={`tool:${index}`} paneId={paneId} part={part} />;
+    })}</div>}
+  </div>;
+}
+
+/**
  * Everything the agent did on the way — tool calls, reasoning and the narration
  * between them — under one header ("Worked for 7s · 1 edit"). Rows stay one line
  * each until opened; the narration between them is answer prose while the turn runs, dim after.
@@ -559,10 +583,9 @@ function WorkBlockView({ paneId, parts, duration, live, waiting, defaultOpen, sh
     </button>
     {/* the rows open and fold at the block's measured height; folded and settled, they are not drawn */}
     <AnimatedHeight open={open} animateContent={false}>
-      <div className="work-block-rows" onFocus={keepOpen} onClick={keepOpen}>{visible.map((part, index) =>
-        part.kind === "thinking" ? <ThinkingRow key={index} stateKey={`thinking:${parts.indexOf(part)}`} text={part.text} />
-          : part.kind === "text" ? <div key={index} className="work-narration"><Markdown>{part.text}</Markdown></div>
-            : part.kind === "tool" ? <WorkRow key={index} stateKey={`tool:${parts.indexOf(part)}`} paneId={paneId} part={part} /> : null)}
+      <div className="work-block-rows" onFocus={keepOpen} onClick={keepOpen}>{workItems(visible, parts).map((item) =>
+        item.kind === "run" ? <WorkRunRow key={`run:${item.start}`} paneId={paneId} run={item.parts} parts={parts} start={item.start} live={live} />
+          : item.part.kind === "text" ? <div key={parts.indexOf(item.part)} className="work-narration"><Markdown>{item.part.text}</Markdown></div> : null)}
       </div>
     </AnimatedHeight>
   </section>;

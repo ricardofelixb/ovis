@@ -869,6 +869,38 @@
   color: var(--text-dim);
 }
 
+/* a run of calls as one line of counts, as pi-minimalist draws pi's transcript */
+.work-run-counts {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.work-run-mark {
+  font-weight: var(--fw-semibold);
+}
+
+.work-run-done .work-run-mark {
+  color: var(--status-done);
+}
+
+.work-run-failed .work-run-mark {
+  color: var(--status-blocked);
+}
+
+.work-run-running .work-run-mark {
+  color: var(--status-working);
+}
+
+/* the run's own rows hang under its line */
+.work-run-rows {
+  display: flex;
+  flex-direction: column;
+  padding-left: var(--space-3);
+}
+
 /* what the agent said mid-work: once the turn settles, a quiet row again (dim, --fs-sm) */
 .work-narration {
   padding: var(--space-1) 0 var(--space-2);

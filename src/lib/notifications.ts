@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { AgentStatus } from "../../shared/protocol.ts";
 import { ENDED_NOTIFICATION_BODY, paneNotificationTag, statusNotificationBody } from "../../shared/notify-policy.ts";
 import { nativeAlerts, nativeAlertsState, requestNativeAlerts, showNativeAlert } from "./nativeApp.ts";
@@ -35,6 +36,22 @@ export async function requestNotificationPermission(): Promise<NotificationState
   if (typeof globalThis.Notification === "undefined") return "unsupported";
   const permission = await globalThis.Notification.requestPermission();
   return permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default";
+}
+
+/**
+ * This browser's alert permission. The Android app's answer comes later than the first frame, and the
+ * app asks once on load when alerts are on (they sync, or were on before a reinstall) and nobody asked yet.
+ */
+export function useNotificationState(alertsOn: boolean): [NotificationState, (state: NotificationState) => void] {
+  const [state, setState] = useState<NotificationState>(() => notificationState());
+  const asked = useRef(false);
+  useEffect(() => { void syncNotificationState().then(setState); }, []);
+  useEffect(() => {
+    if (!alertsOn || state !== "default" || !nativeAlerts() || asked.current) return;
+    asked.current = true;
+    void requestNotificationPermission().then(setState);
+  }, [alertsOn, state]);
+  return [state, setState];
 }
 
 /**
