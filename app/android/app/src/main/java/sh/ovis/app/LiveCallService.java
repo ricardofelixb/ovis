@@ -32,6 +32,8 @@ public class LiveCallService extends Service {
     private static final String CHANNEL = "live-call";
     private static final int ID = 1;
 
+    // the call that holds the loudspeaker, which one ending a moment ago must not take back
+    private static LiveCallService current;
     private AudioManager audio;
     // a headset plugged in or taken out mid-call
     private final AudioDeviceCallback devices = new AudioDeviceCallback() {
@@ -52,6 +54,7 @@ public class LiveCallService extends Service {
     public void onCreate() {
         super.onCreate();
         if (Build.VERSION.SDK_INT < 31) return;
+        current = this;
         audio = getSystemService(AudioManager.class);
         changed = device -> {
             if (device != null && device.getType() == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) route();
@@ -81,10 +84,40 @@ public class LiveCallService extends Service {
     public void onDestroy() {
         if (Build.VERSION.SDK_INT >= 31) {
             audio.unregisterAudioDeviceCallback(devices);
-            audio.removeOnCommunicationDeviceChangedListener(changed);
-            audio.clearCommunicationDevice();
+            // the WebView lets go of a call's sound a moment after the call ends: letting go of the
+            // loudspeaker before it sends that moment, and the close chime in it, to the earpiece
+            if (audio.getMode() == AudioManager.MODE_IN_COMMUNICATION) releaseAfterCall();
+            else release();
         }
         super.onDestroy();
+    }
+
+    private void releaseAfterCall() {
+        Handler main = new Handler(Looper.getMainLooper());
+        AudioManager.OnModeChangedListener[] ended = new AudioManager.OnModeChangedListener[1];
+        Runnable done = () -> {
+            if (ended[0] == null) return;
+            audio.removeOnModeChangedListener(ended[0]);
+            ended[0] = null;
+            release();
+        };
+        ended[0] = mode -> {
+            if (mode == AudioManager.MODE_IN_COMMUNICATION) return;
+            main.removeCallbacks(done);
+            done.run();
+        };
+        audio.addOnModeChangedListener(getMainExecutor(), ended[0]);
+        // a WebView that keeps the call's sound
+        main.postDelayed(done, 5000);
+    }
+
+    private void release() {
+        audio.removeOnCommunicationDeviceChangedListener(changed);
+        // a call started since then has the loudspeaker now
+        if (current == this) {
+            current = null;
+            audio.clearCommunicationDevice();
+        }
     }
 
     /** Throws when the app is no longer in view, where Android starts no service. */

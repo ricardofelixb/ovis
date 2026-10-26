@@ -145,7 +145,6 @@ export const COMPOSER_ZH: Record<string, string> = {
   "End call": "结束通话",
   "Open call": "打开通话",
   "Minimize call": "最小化通话",
-  "You said": "你说的",
   "Pi said": "Pi 说的",
   "Microphone access was denied.": "麦克风权限被拒绝。",
   "This browser cannot make a voice call.": "此浏览器无法进行语音通话。",

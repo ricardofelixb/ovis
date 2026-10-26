@@ -32,7 +32,6 @@ export interface PiVoiceState {
   label: string;
   phase: PiVoicePhase;
   muted: boolean;
-  userText: string;
   assistantText: string;
   end: PiVoiceEnd | null;
   /** the full-screen call; otherwise the orb sits over the composer and the chat stays in view */
@@ -41,7 +40,7 @@ export interface PiVoiceState {
   readyAt: number;
 }
 
-const IDLE: PiVoiceState = { status: "idle", paneId: "", label: "", phase: "connecting", muted: false, userText: "", assistantText: "", end: null, expanded: false, readyAt: 0 };
+const IDLE: PiVoiceState = { status: "idle", paneId: "", label: "", phase: "connecting", muted: false, assistantText: "", end: null, expanded: false, readyAt: 0 };
 
 /**
  * How long the microphone stays open once a call ends: the close chime's length. Letting go of it
@@ -144,10 +143,11 @@ function onFrame(frame: PiToPhoneFrame): void {
       update({ muted: frame.muted });
       break;
     case "transcript":
-      update(frame.role === "user" ? { userText: frame.text } : { assistantText: frame.text });
+      // only the reply shows; what was said to it is in the chat once the call ends
+      if (frame.role === "assistant") update({ assistantText: frame.text });
       break;
     case "transcript-clear":
-      update({ userText: "", assistantText: "" });
+      update({ assistantText: "" });
       break;
     case "ended":
       finish(frame.error ? { kind: "error", message: frame.error } : frame.code ? { kind: frame.code } : null);
