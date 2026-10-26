@@ -8,8 +8,13 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.media.AudioDeviceCallback;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 
@@ -18,10 +23,69 @@ import androidx.core.app.ServiceCompat;
  * is locked: Android lets only a foreground service of the microphone type go on recording, and
  * keeps its process and network up meanwhile. The page starts it once the call has the
  * microphone and stops it when the call lets go of it.
+ *
+ * It also plays the call on the loudspeaker when no headset is connected: Android sends a call's
+ * sound to the earpiece, which is held to the ear. A headset, wired or Bluetooth, keeps the call,
+ * its microphone included. Android before 12 keeps its own choice.
  */
 public class LiveCallService extends Service {
     private static final String CHANNEL = "live-call";
     private static final int ID = 1;
+
+    private AudioManager audio;
+    // a headset plugged in or taken out mid-call
+    private final AudioDeviceCallback devices = new AudioDeviceCallback() {
+        @Override
+        public void onAudioDevicesAdded(AudioDeviceInfo[] added) {
+            route();
+        }
+
+        @Override
+        public void onAudioDevicesRemoved(AudioDeviceInfo[] removed) {
+            route();
+        }
+    };
+    // the WebView starting its call's sound puts it back on the earpiece
+    private AudioManager.OnCommunicationDeviceChangedListener changed;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        if (Build.VERSION.SDK_INT < 31) return;
+        audio = getSystemService(AudioManager.class);
+        changed = device -> {
+            if (device != null && device.getType() == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) route();
+        };
+        audio.addOnCommunicationDeviceChangedListener(getMainExecutor(), changed);
+        audio.registerAudioDeviceCallback(devices, new Handler(Looper.getMainLooper()));
+        route();
+    }
+
+    /** The loudspeaker, unless a headset is there to take the call. */
+    private void route() {
+        if (Build.VERSION.SDK_INT < 31) return;
+        AudioDeviceInfo speaker = null;
+        for (AudioDeviceInfo device : audio.getAvailableCommunicationDevices()) {
+            int type = device.getType();
+            if (type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) speaker = device;
+            else if (type != AudioDeviceInfo.TYPE_BUILTIN_EARPIECE) {
+                // wired, USB or Bluetooth: Android's own choice is the headset
+                audio.clearCommunicationDevice();
+                return;
+            }
+        }
+        if (speaker != null) audio.setCommunicationDevice(speaker);
+    }
+
+    @Override
+    public void onDestroy() {
+        if (Build.VERSION.SDK_INT >= 31) {
+            audio.unregisterAudioDeviceCallback(devices);
+            audio.removeOnCommunicationDeviceChangedListener(changed);
+            audio.clearCommunicationDevice();
+        }
+        super.onDestroy();
+    }
 
     /** Throws when the app is no longer in view, where Android starts no service. */
     static void start(Context context, String title, String body) {

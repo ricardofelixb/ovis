@@ -285,7 +285,8 @@ pieces are the Java twins of the iOS ones, in `app/android/app/src/main/java/sh/
   keeps it going under an ongoing notification: the page starts it once the call has the
   microphone and stops it when the call lets go (`nativeLiveCall` in `src/lib/nativeApp.ts`). A
   page loading anew, the activity going or the app being swiped away stops it too. Google Play
-  asks for a declaration of this service type on upload.
+  asks for a declaration of this service type on upload. On Android 12 and later the service also
+  plays the call on the loudspeaker rather than the earpiece while no headset is connected.
 - Backups are off (`allowBackup="false"`, and `data_extraction_rules.xml` for a move to a new
   phone on Android 12 and later): the WebView's store holds each PC's device cookie, so a restored
   copy would be signed in without pairing.
