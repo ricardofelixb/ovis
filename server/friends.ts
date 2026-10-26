@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { FRIENDS, type Friend, type FriendsResponse } from "../shared/friends.ts";
+import { FRIENDS, friendKey, type Friend, type FriendsResponse } from "../shared/friends.ts";
 import { badRequest, isJsonObject, jsonResponse } from "./http.ts";
 import { readStateDocument, writeStateDocument } from "./state-document.ts";
 
@@ -35,19 +35,36 @@ export class FriendStore {
     }
     for (const key of seen) {
       if (this.friends[key]) continue;
-      // the friends nobody wears, else the ones fewest wear: past nine workspaces they repeat evenly
-      const worn = new Map<Friend, number>(FRIENDS.map((friend) => [friend, 0]));
-      for (const friend of Object.values(this.friends)) worn.set(friend, (worn.get(friend) ?? 0) + 1);
-      const least = Math.min(...worn.values());
-      const free = FRIENDS.filter((friend) => worn.get(friend) === least);
-      this.friends[key] = free[Math.floor(this.random() * free.length)] ?? FRIENDS[0];
+      this.friends[key] = this.pick();
       changed = true;
     }
-    if (changed) {
-      try { writeStateDocument(this.path, `${JSON.stringify(this.friends, null, 2)}\n`, false); }
-      catch (error) { console.error(`Cannot write ${this.path}: ${error instanceof Error ? error.message : String(error)}`); }
-    }
+    if (changed) this.save();
     return { friends: { ...this.friends } };
+  }
+
+  /** The friend a live workspace wears, given one now if no browser has shown it yet (an alert names it). */
+  friendOf(machineId: string, workspaceId: string): Friend {
+    const key = friendKey(machineId, workspaceId);
+    const worn = this.friends[key];
+    if (worn) return worn;
+    const friend = this.pick();
+    this.friends[key] = friend;
+    this.save();
+    return friend;
+  }
+
+  // the friends nobody wears, else the ones fewest wear: past nine workspaces they repeat evenly
+  private pick(): Friend {
+    const worn = new Map<Friend, number>(FRIENDS.map((friend) => [friend, 0]));
+    for (const friend of Object.values(this.friends)) worn.set(friend, (worn.get(friend) ?? 0) + 1);
+    const least = Math.min(...worn.values());
+    const free = FRIENDS.filter((friend) => worn.get(friend) === least);
+    return free[Math.floor(this.random() * free.length)] ?? FRIENDS[0];
+  }
+
+  private save(): void {
+    try { writeStateDocument(this.path, `${JSON.stringify(this.friends, null, 2)}\n`, false); }
+    catch (error) { console.error(`Cannot write ${this.path}: ${error instanceof Error ? error.message : String(error)}`); }
   }
 }
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fail, files as scan, read, repo } from "../scripts/source-scan.ts";
+import { FRIENDS } from "../shared/friends.ts";
 
 // Client conventions from AGENTS.md and src/AGENTS.md that used to be prose only. Each failure
 // says what to change; server rules are in server/conventions.test.ts, repo-wide ones in
@@ -170,6 +171,22 @@ describe("icon cache", () => {
       ...older.filter(([, entry]) => entry.cacheName === cacheName).map(([query]) => `public/sw.js's CACHE_NAME "${cacheName}" is the cache of the icons under ?v=${query}`),
       ...older.filter(([, entry]) => entry.cacheName === current.cacheName).map(([query]) => `ICON_VERSIONS.${CURRENT_ICONS}.cacheName "${current.cacheName}" is also ICON_VERSIONS.${query}'s`),
     ], `New icons need a new CACHE_NAME in public/sw.js, recorded as cacheName of ICON_VERSIONS.${CURRENT_ICONS} in src/conventions.test.ts: an installed app keeps serving the old icons out of the old cache.`);
+  });
+});
+
+describe("Android friend pictures", () => {
+  it("keeps every friend in the Android app, byte for byte, and named in FriendIcon.java", () => {
+    const res = "app/android/ovis-push/src/main/res/drawable-nodpi";
+    const icon = read("app/android/ovis-push/src/main/java/sh/ovis/push/FriendIcon.java");
+    fail(FRIENDS.flatMap((friend) => {
+      const source = readFileSync(join(repo, `src/assets/friends/${friend}.png`));
+      let copy: Buffer | null = null;
+      try { copy = readFileSync(join(repo, res, `friend_${friend}.png`)); } catch { /* missing */ }
+      return [
+        ...(copy?.equals(source) ? [] : [`${res}/friend_${friend}.png`]),
+        ...(icon.includes(`R.drawable.friend_${friend}`) ? [] : [`FriendIcon.java: case "${friend}"`]),
+      ];
+    }), "A phone notification shows the same friend as the sidebar: copy src/assets/friends/<id>.png to the Android app's drawable-nodpi/friend_<id>.png and add its case to FriendIcon.java's switch.");
   });
 });
 

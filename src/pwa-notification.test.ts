@@ -134,6 +134,14 @@ describe("notification clicks", () => {
     expect(cold.opened).toEqual(["/?machine=pc2&ws=w1&pane=w1%3Ap9&view=chat"]);
   });
 
+  it("shows the friend of the alert's workspace, and the app's icon without a well-formed one", async () => {
+    const worker = notifications([]);
+    await worker.push({ pane_id: "w1:p1", friend: "kuma", title: "t", body: "b", tag: "a" });
+    await worker.push({ pane_id: "w1:p1", title: "t", body: "b", tag: "b" });
+    await worker.push({ pane_id: "w1:p1", friend: "../x", title: "t", body: "b", tag: "c" });
+    expect(worker.shown.map((shown) => (shown.options as { icon?: string }).icon)).toEqual(["/friends/kuma.png", "/icons/icon-192.png?v=sheep1", "/icons/icon-192.png?v=sheep1"]);
+  });
+
   it("selects the pane before a delayed focus and repeats after the page resumes", async () => {
     const pending = deferred();
     const target = client(() => pending.promise);

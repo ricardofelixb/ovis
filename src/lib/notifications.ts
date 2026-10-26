@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentStatus } from "../../shared/protocol.ts";
+import { friendPicturePath, type Friend } from "../../shared/friends.ts";
 import { ENDED_NOTIFICATION_BODY, paneNotificationTag, statusNotificationBody } from "../../shared/notify-policy.ts";
 import { nativeAlerts, nativeAlertsState, requestNativeAlerts, showNativeAlert } from "./nativeApp.ts";
 
@@ -59,16 +60,16 @@ export function useNotificationState(alertsOn: boolean): [NotificationState, (st
  * one: Android Chrome has no `new Notification()`, and the worker's notificationclick
  * (public/sw.js) selects the pane. The constructor is the fallback for a page without a worker.
  */
-async function show(paneId: string, title: string, body: string, onClick?: () => void, machineId = "local", workspaceId?: string): Promise<void> {
+async function show(paneId: string, title: string, body: string, onClick?: () => void, machineId = "local", workspaceId?: string, friend?: Friend): Promise<void> {
   if (nativeAlerts()) {
     // a tap comes back through nativeAlertTaps (lib/notificationTarget.ts), as a worker's would
-    if (nativeState === "granted" && document.hidden) await showNativeAlert({ title, body, tag: paneNotificationTag(paneId, machineId), pane_id: paneId, machine_id: machineId, ...(workspaceId ? { workspace_id: workspaceId } : {}) }).catch(() => {});
+    if (nativeState === "granted" && document.hidden) await showNativeAlert({ title, body, tag: paneNotificationTag(paneId, machineId), pane_id: paneId, machine_id: machineId, ...(workspaceId ? { workspace_id: workspaceId } : {}), ...(friend ? { friend } : {}) }).catch(() => {});
     return;
   }
   if (typeof globalThis.Notification === "undefined") return;
   if (globalThis.Notification.permission !== "granted") return;
   if (typeof document !== "undefined" && !document.hidden) return; // visible tab: the UI already shows it
-  const options: NotificationOptions = { body, tag: paneNotificationTag(paneId, machineId), data: { pane_id: paneId, machine_id: machineId, ...(workspaceId ? { workspace_id: workspaceId } : {}) }, icon: "/icons/icon-192.png?v=sheep1" };
+  const options: NotificationOptions = { body, tag: paneNotificationTag(paneId, machineId), data: { pane_id: paneId, machine_id: machineId, ...(workspaceId ? { workspace_id: workspaceId } : {}) }, icon: friend ? friendPicturePath(friend) : "/icons/icon-192.png?v=sheep1" };
   try {
     const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
     if (registration?.active) {
@@ -85,11 +86,14 @@ async function show(paneId: string, title: string, body: string, onClick?: () =>
   }
 }
 
-/** `workspaceId`: the pane's workspace, as the server's push names it (server/push.ts), so a tap after the pane ends opens it. */
-export function showPaneStatusNotification(paneId: string, title: string, status: AgentStatus, onClick?: () => void, machineId = "local", workspaceId?: string): void {
-  void show(paneId, title, statusNotificationBody(status), onClick, machineId, workspaceId);
+/**
+ * `workspaceId`: the pane's workspace, as the server's push names it (server/push.ts), so a tap after the pane ends opens it.
+ * `friend`: the friend that workspace wears, the notification's picture; without one it shows the app's icon.
+ */
+export function showPaneStatusNotification(paneId: string, title: string, status: AgentStatus, onClick?: () => void, machineId = "local", workspaceId?: string, friend?: Friend): void {
+  void show(paneId, title, statusNotificationBody(status), onClick, machineId, workspaceId, friend);
 }
 
-export function showPaneEndedNotification(paneId: string, title: string, onClick?: () => void, machineId = "local", workspaceId?: string): void {
-  void show(paneId, title, ENDED_NOTIFICATION_BODY, onClick, machineId, workspaceId);
+export function showPaneEndedNotification(paneId: string, title: string, onClick?: () => void, machineId = "local", workspaceId?: string, friend?: Friend): void {
+  void show(paneId, title, ENDED_NOTIFICATION_BODY, onClick, machineId, workspaceId, friend);
 }

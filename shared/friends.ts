@@ -11,3 +11,6 @@ export interface FriendsRequest { live: string[]; machines: string[] }
 export interface FriendsResponse { friends: Record<string, Friend> }
 
 export const friendKey = (machineId: string, workspaceId: string): string => `${machineId}:${workspaceId}`;
+
+/** A friend's picture at a fixed address (vite.config.ts emits the copies), for notifications: public/sw.js builds the same path. */
+export const friendPicturePath = (friend: Friend): string => `/friends/${friend}.png`;

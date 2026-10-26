@@ -16,7 +16,7 @@ import { AccessGate } from "./components/AccessGate.tsx";
 import { HeaderBranch } from "./components/HeaderBranch.tsx";
 import { AgentMark } from "./components/AgentMark.tsx";
 import { AgentFriend } from "./components/AgentFriend.tsx";
-import { useWorkspaceFriends } from "./lib/friends.ts";
+import { useWorkspaceFriends, workspaceFriend } from "./lib/friends.ts";
 import { friendKey } from "../shared/friends.ts";
 import { NewSessionDialog, type NewTabTarget } from "./components/NewSessionDialog.tsx";
 import { SessionHistory } from "./components/SessionHistory.tsx";
@@ -624,6 +624,7 @@ export function App() {
       machineId: machine.id,
       paneId: pane.pane_id,
       agent: pane.agent ?? null,
+      friend: pane.agent ? workspaceFriend(machine.id, pane.workspace_id) : undefined,
       title: alertPaneTitle(pane),
       machine: machinesRef.current.length > 1 ? machine.name : null,
       kind,
@@ -705,7 +706,7 @@ export function App() {
           dropIn(machine, pane, kind);
           chime(machine, pane, kind);
         }
-        if (pane && shouldNotifyStatus(previous, status) && alertsOnRef.current && !pushOnRef.current && alertsAllow(alertsRef.current, status)) showPaneStatusNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, status, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id);
+        if (pane && shouldNotifyStatus(previous, status) && alertsOnRef.current && !pushOnRef.current && alertsAllow(alertsRef.current, status)) showPaneStatusNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, status, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id, pane.agent ? workspaceFriend(machine.id, pane.workspace_id) : undefined);
         setMachines((list) => {
           let changed = false;
           const next = list.map((m) => {
@@ -729,7 +730,7 @@ export function App() {
       }
       if (message.type === "pane-exited" && alertsOnRef.current && !pushOnRef.current && alertsRef.current.done !== "off") {
         const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
-        if (pane) showPaneEndedNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id);
+        if (pane) showPaneEndedNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id, pane.agent ? workspaceFriend(machine.id, pane.workspace_id) : undefined);
       }
       // herdr's own window moved to another pane: this device follows it when asked to. As an
       // automatic pick it raises no keyboard and adds no Back entry; a pane too new for the roster

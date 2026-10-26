@@ -62,11 +62,11 @@ describe("tab alerts shown through the worker", () => {
     }
   });
   /** A hidden tab with a worker: what each alert asked the worker to show. */
-  function hiddenTabWithWorker(): Array<{ data: unknown }> {
-    const shown: Array<{ data: unknown }> = [];
+  function hiddenTabWithWorker(): Array<{ data: unknown; icon?: string }> {
+    const shown: Array<{ data: unknown; icon?: string }> = [];
     (globalThis as { Notification?: unknown }).Notification = { permission: "granted" };
     Object.defineProperty(globalThis, "document", { configurable: true, value: { hidden: true } });
-    const registration = { active: {}, showNotification: async (_title: string, options: { data: unknown }) => { shown.push({ data: options.data }); } };
+    const registration = { active: {}, showNotification: async (_title: string, options: { data: unknown; icon?: string }) => { shown.push({ data: options.data, icon: options.icon }); } };
     Object.defineProperty(globalThis, "navigator", { configurable: true, value: { serviceWorker: { getRegistration: async () => registration } } });
     return shown;
   }
@@ -82,5 +82,13 @@ describe("tab alerts shown through the worker", () => {
       { pane_id: "w2:p1", machine_id: "pc-2", workspace_id: "w2" },
       { pane_id: "w3:p1", machine_id: "local" },
     ]);
+  });
+
+  it("shows the friend of the pane's workspace, else the app's icon", async () => {
+    const shown = hiddenTabWithWorker();
+    showPaneStatusNotification("w1:p1", "Mac · pi", "done", undefined, "local", "w1", "kuma");
+    showPaneEndedNotification("w1:p2", "Mac · bash", undefined, "local", "w1");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(shown.map((entry) => entry.icon)).toEqual(["/friends/kuma.png", "/icons/icon-192.png?v=sheep1"]);
   });
 });

@@ -2,6 +2,7 @@
  * Pane status as clients and web push see it: the completion tracker, OmO's, GJC's and Claude's
  * own status, background waits, plans, the machine roster and the one collector that feeds them.
  */
+import type { Friend } from "../../shared/friends.ts";
 import { join } from "node:path";
 import type { AgentStatus, HerdrPane, PlanSummary, ServerMessage, SessionSnapshot } from "../../shared/protocol.ts";
 import { alertStatus, paneTitle } from "../../shared/notify-policy.ts";
@@ -45,6 +46,8 @@ export function createStatusHub<Owner, Lease>({ options, devices, clients, prese
     tailnetPresence?: boolean;
     alertTiming?: Partial<AlertTiming>;
     pushLoopbackHttp?: boolean;
+    /** the friend a workspace wears (FriendStore.friendOf), named in push alerts */
+    friendOf?: (machineId: string, workspaceId: string) => Friend;
     backgroundWait?: { grace: number; limit: number };
     statusNow?: () => number;
     openCodeState?: OpenCodePromptState;
@@ -66,6 +69,7 @@ export function createStatusHub<Owner, Lease>({ options, devices, clients, prese
     timing: options.alertTiming,
     now: options.statusNow,
     loopbackHttp: options.pushLoopbackHttp === true,
+    friendOf: options.friendOf,
     canDeliver: (id) => id === null || (id === undefined ? !devices.gated : devices.has(id)),
     inUse: () => present.size > 0,
     lookupTitle: async (paneId) => {

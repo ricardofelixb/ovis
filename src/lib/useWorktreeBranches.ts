@@ -9,6 +9,16 @@ import { WorkspaceBranchCache, worktreeRepositories, worktreeWorkspaceSignature,
 const BRANCH_POLL_MS = 30_000;
 const NONE: ReadonlySet<string> = new Set();
 
+// each PC's branches as its roster last read them: a cold start names them at once (the header's
+// branch, lib/paneBranch.ts) instead of waiting out the first git inventory
+const savedKey = (machineId: string): string => `ovis:branches:${machineId}`;
+function loadSaved(machineId: string): unknown {
+  try { return JSON.parse(localStorage.getItem(savedKey(machineId)) ?? "null"); } catch { return null; }
+}
+function save(machineId: string, cache: WorkspaceBranchCache): void {
+  try { localStorage.setItem(savedKey(machineId), JSON.stringify(cache.saved())); } catch { /* storage full or off: the next start reads git first */ }
+}
+
 /** Use the existing worktree API; pane status updates never trigger a git inventory poll. */
 /** `roster`: this reader is the PC's roster, whose branches the panes' composers name too (lib/paneBranch.ts). */
 /** `unmarked`: git workspaces herdr has not marked as a repository's (no `worktree`), read one by one. */
@@ -19,7 +29,11 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
   const machineId = useMachineId();
   const { listWorktrees } = useMachineApi();
   const visible = usePageVisible();
-  const owner = useMemo(() => ({ cache: new WorkspaceBranchCache(), pending: null as Promise<void> | null }), [machineId]);
+  const owner = useMemo(() => {
+    const cache = new WorkspaceBranchCache();
+    cache.restore(loadSaved(machineId));
+    return { cache, pending: null as Promise<void> | null };
+  }, [machineId]);
   const [, publish] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const workspaces = snapshot?.workspaces ?? [];
@@ -62,7 +76,10 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
             if (!stopped && error instanceof ApiError && error.status < 500) changed = owner.cache.forgetUnmarked(workspaceId, generation) || changed;
           }
         }
-        if (!stopped && changed) publish((value) => value + 1);
+        if (!stopped && changed) {
+          publish((value) => value + 1);
+          if (roster) save(machineId, owner.cache);
+        }
       })();
       owner.pending = cycle;
       await cycle;
@@ -76,7 +93,7 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
       owner.cache.invalidate();
       clearTimeout(timer);
     };
-  }, [owner, listWorktrees, signature, unmarkedKey, online, visible, refresh]);
+  }, [owner, listWorktrees, signature, unmarkedKey, online, visible, refresh, roster, machineId]);
 
   const rememberOpened = useCallback((opened: WorktreeOpened): void => {
     owner.cache.rememberOpened(opened);

@@ -7,6 +7,7 @@ import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { FRIENDS } from "./shared/friends.ts";
 
 const xtermSource = normalizePath(buildXtermSource(fileURLToPath(new URL(".", import.meta.url))));
 
@@ -30,9 +31,18 @@ const buildRevision: Plugin = {
   },
 };
 
+// the friend pictures at fixed addresses (dist/friends/<id>.png): a notification names one by
+// path, which the bundle's hashed copies cannot give (shared/friends.ts friendPicturePath)
+const friendPictures: Plugin = {
+  name: "friend-pictures",
+  generateBundle() {
+    for (const friend of FRIENDS) this.emitFile({ type: "asset", fileName: `friends/${friend}.png`, source: readFileSync(`src/assets/friends/${friend}.png`) });
+  },
+};
+
 export default defineConfig({
   // the theme boot script is emitted before compressedAssets and serviceWorkerBuild read the bundle
-  plugins: [react(), thirdPartyNotices, buildRevision, themeBootstrapBuild(), compressedAssets(), serviceWorkerBuild()],
+  plugins: [react(), thirdPartyNotices, buildRevision, friendPictures, themeBootstrapBuild(), compressedAssets(), serviceWorkerBuild()],
   define: {
     __APP_REVISION__: JSON.stringify(revision),
     __APP_VERSION__: JSON.stringify((JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version),

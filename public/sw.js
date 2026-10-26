@@ -205,13 +205,15 @@ self.addEventListener("push", (event) => {
     (async () => {
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       const watching = windows.some((client) => client.visibilityState === "visible");
+      // the friend the pane's workspace wears (shared/friends.ts friendPicturePath), else the app's icon
+      const friend = typeof payload.friend === "string" && /^[a-z]+$/.test(payload.friend) ? payload.friend : null;
       await self.registration.showNotification(payload.title || "Ovis", {
         body: payload.body || "",
         tag: payload.tag || "herdr",
         renotify: !watching,
         silent: watching,
         data: { pane_id: payload.pane_id || null, machine_id: payload.machine_id || "local", workspace_id: payload.workspace_id || null },
-        icon: "/icons/icon-192.png?v=sheep1",
+        icon: friend ? `/friends/${friend}.png` : "/icons/icon-192.png?v=sheep1",
         // Android's status bar and small icon: white on transparent, or Chrome's bell
         badge: "/icons/badge-96.png?v=sheep1",
       });

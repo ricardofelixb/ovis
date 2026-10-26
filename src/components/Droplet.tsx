@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { X } from "lucide-react";
 import { flickVelocity, onDroplet, type PressSample, type QueuedDroplet } from "../lib/droplet.ts";
 import { useT } from "../lib/i18n.ts";
+import { AgentFriend } from "./AgentFriend.tsx";
 import { AgentMark } from "./AgentMark.tsx";
 import "./Droplet.css";
 
@@ -193,7 +194,9 @@ export function Droplet({ onOpen }: { onOpen: (machineId: string, paneId: string
         onPointerUp={(event) => endPress(event, false)}
         onPointerCancel={(event) => endPress(event, true)}
       >
-        <span className="droplet-mark">{current.agent ? <AgentMark agent={current.agent} size={22} /> : <span className="droplet-mark-blank" />}</span>
+        <span className="droplet-mark">{current.agent
+          ? current.friend ? <AgentFriend friend={current.friend} agent={current.agent} status={current.kind === "ended" ? undefined : current.kind} /> : <AgentMark agent={current.agent} size={22} />
+          : <span className="droplet-mark-blank" />}</span>
         <span className="droplet-text">
           <span className="droplet-title">{current.title}</span>
           <span className="droplet-detail">{detail}</span>
