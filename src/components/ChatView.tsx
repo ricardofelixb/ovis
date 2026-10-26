@@ -63,6 +63,7 @@ import { lineDiff } from "../lib/diff.ts";
 import { formatTokens, sameMessage } from "../lib/compose.ts";
 import { formatElapsed, taskCallItems, taskResultMarkdown } from "../lib/omoTasks.ts";
 import { sendUserFileCall } from "../lib/sendUserFile.ts";
+import { editCall } from "../lib/editCall.ts";
 import { shouldFoldUserMessage } from "../lib/userMessageFold.ts";
 import { rewindOffer } from "../lib/rewindAction.ts";
 import { invalidatePaneCommands } from "../lib/paneCommandCache.ts";
@@ -395,15 +396,10 @@ function ToolInputView({ part }: { part: ToolPartType }) {
   const str = (key: string): string | undefined => typeof parsed[key] === "string" ? parsed[key] : undefined;
   const command = str("command") ?? str("cmd");
   if (command !== undefined) return <div className="chat-tool-io"><pre>{linkFilePaths(command, open)}</pre>{(str("cwd") ?? str("description")) !== undefined && <p className="chat-tool-io-meta">{str("cwd") ?? str("description")}</p>}</div>;
-  const oldString = str("old_string");
-  const newString = str("new_string");
-  if (oldString !== undefined || newString !== undefined) return <div className="chat-tool-io">{str("file_path") !== undefined && <ToolFile path={str("file_path")!} />}<EditDiff before={oldString ?? ""} after={newString ?? ""} /></div>;
-  // several edits to one file: each its own diff, in order
-  if (Array.isArray(parsed["edits"]) && parsed["edits"].every((item) => item !== null && typeof item === "object")) {
-    const edits = parsed["edits"] as Array<Record<string, unknown>>;
-    return <div className="chat-tool-io">{str("file_path") !== undefined && <ToolFile path={str("file_path")!} />}{edits.map((item, index) =>
-      <EditDiff key={index} before={typeof item["old_string"] === "string" ? item["old_string"] : ""} after={typeof item["new_string"] === "string" ? item["new_string"] : ""} />)}</div>;
-  }
+  // an edit to one file: each change its own diff, in order
+  const edit = editCall(parsed);
+  if (edit !== null) return <div className="chat-tool-io">{edit.path !== null && <ToolFile path={edit.path} />}{edit.edits.map((item, index) =>
+    <EditDiff key={index} before={item.before} after={item.after} />)}</div>;
   // SendUserFile: the files it names, openable where the viewer already opens any other path
   const sendUserFile = sendUserFileCall(parsed);
   if (sendUserFile !== null) return <div className="chat-tool-io">

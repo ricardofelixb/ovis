@@ -2534,6 +2534,12 @@ button {
     overscroll-behavior: contain;
   }
 
+  /* code too wide for the sheet scrolls sideways, and so is a scroll container: a vertical stroke
+     on it goes on to the list that holds it, which still keeps it from the chat */
+  .modal-scrim .hl-code {
+    overscroll-behavior-y: auto;
+  }
+
   .modal-scrim.is-leaving {
     pointer-events: none;
     animation: scrim-out var(--dur-sheet-out) var(--ease-out) forwards;
