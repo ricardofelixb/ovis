@@ -145,7 +145,6 @@ export const COMPOSER_KO: Record<string, string> = {
   "End call": "통화 종료",
   "Open call": "통화 열기",
   "Minimize call": "통화 최소화",
-  "You said": "내가 한 말",
   "Pi said": "Pi의 말",
   "Microphone access was denied.": "마이크 접근이 거부되었습니다.",
   "This browser cannot make a voice call.": "이 브라우저에서는 음성 통화를 할 수 없습니다.",

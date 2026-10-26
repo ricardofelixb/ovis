@@ -120,6 +120,14 @@ function PiVoiceDialog({ voice }: { voice: PiVoiceState }) {
   // the phone's Back puts the call back over the composer, as it closes any sheet
   usePhoneSheetBack(over ? dismissPiVoice : collapse);
   const status = over ? "" : phaseText(voice, t);
+  const transcript = useRef<HTMLDivElement>(null);
+  // the newest words stay in view while the reply grows, unless a finger scrolled back to read
+  const following = useRef(true);
+  useLayoutEffect(() => {
+    const box = transcript.current;
+    if (voice.assistantText === "") following.current = true;
+    if (box && following.current) box.scrollTop = box.scrollHeight;
+  }, [voice.assistantText]);
   return (
     <div className="pi-voice" role="dialog" aria-modal="true" aria-label={t("Live voice")} ref={surface} tabIndex={-1}
       onKeyDown={(event) => { if (event.key === "Escape") (over ? dismissPiVoice : collapse)(); }}>
@@ -150,9 +158,11 @@ function PiVoiceDialog({ voice }: { voice: PiVoiceState }) {
         </>
       ) : (
         <>
-          <div className="pi-voice-transcript" aria-live="polite">
-            {voice.userText !== "" && <p className="pi-voice-line is-user"><span className="visually-hidden">{t("You said")}: </span>{voice.userText}</p>}
-            {voice.assistantText !== "" && <p className="pi-voice-line is-assistant"><span className="visually-hidden">{t("Pi said")}: </span>{voice.assistantText}</p>}
+          <div className="pi-voice-transcript" ref={transcript} aria-live="polite" onScroll={(event) => {
+            const box = event.currentTarget;
+            following.current = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+          }}>
+            {voice.assistantText !== "" && <p className="pi-voice-line"><span className="visually-hidden">{t("Pi said")}: </span>{voice.assistantText}</p>}
           </div>
           <div className="pi-voice-controls">
             <button type="button" className="pi-voice-button" aria-pressed={voice.muted} aria-label={voice.muted ? t("Unmute") : t("Mute")}
