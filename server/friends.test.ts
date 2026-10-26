@@ -21,4 +21,15 @@ describe("FriendStore", () => {
     const many = Array.from({ length: 10 }, (_, i) => `pc:w${i}`);
     expect(new Set(Object.values(new FriendStore(mkdtempSync(join(tmpdir(), "friends-"))).see(many, ["pc"]).friends)).size).toBe(FRIENDS.length);
   });
+
+  test("an alert gives a workspace no browser has shown a friend, which the sidebar later shows too", () => {
+    const dir = mkdtempSync(join(tmpdir(), "friends-"));
+    const store = new FriendStore(dir);
+    const worn = store.see(["local:w1"], ["local"]).friends["local:w1"]!;
+    const picked = store.friendOf("local", "w2");
+    expect(picked).not.toBe(worn);
+    expect(store.friendOf("local", "w2")).toBe(picked);
+    // saved, and kept once a browser lists the workspace
+    expect(new FriendStore(dir).see(["local:w1", "local:w2"], ["local"]).friends["local:w2"]).toBe(picked);
+  });
 });

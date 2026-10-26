@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, w
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { Friend } from "../shared/friends.ts";
 import type { AlertPrefs } from "../shared/notify-policy.ts";
 import type { AgentStatus, HerdrPane, SessionSnapshot } from "../shared/protocol.ts";
 import { CompletionTracker } from "./completion.ts";
@@ -213,6 +214,21 @@ describe("push delivery", () => {
     expect(received!.vapidKey).toBe(push.publicKey());
     expect(received!.vapidClaims.aud).toBe(new URL(fake.subscription.endpoint).origin);
     expect(received!.vapidClaims.sub).toBe("https://github.com/devswha/ovis");
+  });
+
+  it("names the friend of an agent pane's workspace, and none for a plain terminal", async () => {
+    const asked: string[] = [];
+    const worn: Record<string, Friend> = { "local:w1": "kuma", "pc-a:w2": "neko" };
+    const push = subscribed({ friendOf: (machineId, workspaceId) => { asked.push(`${machineId}:${workspaceId}`); return worn[`${machineId}:${workspaceId}`]!; } });
+    push.seed([{ ...pane("w1:p1", "working", "claude: x"), agent: "claude" }, pane("w1:p2", "working", "bash")]);
+    push.seed([{ ...pane("w2:p1", "working", "pi"), workspace_id: "w2", agent: "pi" }], "pc-a", "Work PC");
+    await push.onStatus("w1:p1", "blocked");
+    await push.onStatus("w2:p1", "blocked", "pc-a");
+    await push.onEnded("w1:p2");
+
+    expect(fake.received.map((r) => r.payload.friend)).toEqual(["kuma", "neko", undefined]);
+    expect("friend" in fake.received[2]!.payload).toBe(false);
+    expect(asked).toEqual(["local:w1", "pc-a:w2"]);
   });
 
   it("keeps equal pane IDs, titles, status baselines and push links separated by PC", async () => {

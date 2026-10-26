@@ -3,6 +3,7 @@
  * on it. Only what the client needs of the app is here, through `window.Capacitor` as the app
  * injects it, so the browser build carries no Capacitor code.
  */
+import type { Friend } from "../../shared/friends.ts";
 interface CapacitorBridge {
   isNativePlatform?: () => boolean;
   getPlatform?: () => string;
@@ -78,7 +79,8 @@ async function alertsCall(method: "alertsState" | "requestAlerts"): Promise<Nati
 export const nativeAlertsState = (): Promise<NativeAlertsState> => alertsCall("alertsState");
 export const requestNativeAlerts = (): Promise<NativeAlertsState> => alertsCall("requestAlerts");
 
-export interface NativeAlert { title: string; body: string; tag: string; pane_id: string; machine_id: string; workspace_id?: string }
+/** `friend`: the pane's workspace's friend, the notification's picture (HerdrShellPlugin.alert). */
+export interface NativeAlert { title: string; body: string; tag: string; pane_id: string; machine_id: string; workspace_id?: string; friend?: Friend }
 
 export async function showNativeAlert(alert: NativeAlert): Promise<void> {
   await bridge()?.nativePromise?.("HerdrShell", "alert", { ...alert });

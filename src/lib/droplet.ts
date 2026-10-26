@@ -1,4 +1,5 @@
 import type { AgentStatus } from "../../shared/protocol.ts";
+import type { Friend } from "../../shared/friends.ts";
 import { shouldNotifyStatus, type AlertPrefs } from "../../shared/notify-policy.ts";
 import { paneStorageId } from "../../shared/machines.ts";
 
@@ -18,6 +19,8 @@ export interface DropletNotice {
   machineId: string;
   paneId: string;
   agent: string | null;
+  /** the friend the pane's workspace wears (lib/friends.ts), drawn in place of the agent's mark */
+  friend?: Friend;
   /** the pane's name, as the sidebar shows it */
   title: string;
   /** the machine's name, shown beside what happened when there is more than one */

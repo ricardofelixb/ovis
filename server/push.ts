@@ -36,6 +36,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import webpush from "web-push";
 
+import type { Friend } from "../shared/friends.ts";
 import { paneStorageId } from "../shared/machines.ts";
 import type { AgentStatus, HerdrPane, PushPayload } from "../shared/protocol.ts";
 import {
@@ -124,6 +125,8 @@ export interface PushServiceOptions {
   inUse?: () => boolean;
   /** accept plain-http loopback endpoints: only for the tests' fake push service (push.fake.ts) */
   loopbackHttp?: boolean;
+  /** The friend a workspace wears (FriendStore.friendOf), named in an agent pane's alert. */
+  friendOf?: (machineId: string, workspaceId: string) => Friend;
 }
 
 export { defaultStateDir } from "./update-state.ts";
@@ -197,6 +200,8 @@ export function createPushService(options: PushServiceOptions): PushService {
   // the workspace a pane was last seen in: an alert names it, so the tap of an ended pane can open
   // its workspace (src/lib/deepLink.ts resolveLink) once herdr has dropped the pane
   const workspaces = new Map<string, string>();
+  // the panes seen running an agent: only theirs wear their workspace's friend, as in the sidebar
+  const agentPanes = new Set<string>();
   const retiredPath = join(options.stateDir, "push-retired.json");
   /** sha256 of each endpoint a push service retired -> when, oldest first; loaded on first need */
   let retiredEndpoints: Map<string, number> | null = null;
@@ -320,10 +325,14 @@ export function createPushService(options: PushServiceOptions): PushService {
     );
   }
 
-  /** Where an alert's pane is: its PC (absent for this one) and the workspace it was last seen in. */
-  function where(key: string, machineId: string): Pick<PushPayload, "machine_id" | "workspace_id"> {
+  /**
+   * Where an alert's pane is: its PC (absent for this one), the workspace it was last seen in, and
+   * the friend that workspace wears when the pane runs an agent.
+   */
+  function where(key: string, machineId: string): Pick<PushPayload, "machine_id" | "workspace_id" | "friend"> {
     const workspace = workspaces.get(key);
-    return { ...(machineId === "local" ? {} : { machine_id: machineId }), ...(workspace ? { workspace_id: workspace } : {}) };
+    const friend = workspace && agentPanes.has(key) ? options.friendOf?.(machineId, workspace) : undefined;
+    return { ...(machineId === "local" ? {} : { machine_id: machineId }), ...(workspace ? { workspace_id: workspace } : {}), ...(friend ? { friend } : {}) };
   }
 
   async function titleOf(paneId: string): Promise<string> {
@@ -420,6 +429,8 @@ export function createPushService(options: PushServiceOptions): PushService {
         const key = paneStorageId(machineId, pane.pane_id);
         titles.set(key, `${machineName ? machineName + " · " : ""}${paneTitle(pane)}`);
         workspaces.set(key, pane.workspace_id);
+        if (pane.agent) agentPanes.add(key);
+        else agentPanes.delete(key);
         if (!lastStatus.has(key)) lastStatus.set(key, pane.agent_status);
       }
     },

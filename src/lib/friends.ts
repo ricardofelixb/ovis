@@ -11,6 +11,9 @@ let asked = "";
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const current = () => friends;
 
+/** The friend a workspace wears, as this browser last heard: for alerts raised in App's event handlers. */
+export const workspaceFriend = (machineId: string, workspaceId: string): Friend | undefined => friends[friendKey(machineId, workspaceId)];
+
 /**
  * The friends of the workspaces on the PCs this browser has: told to the server whenever the
  * workspaces change, which gives a new one a friend and takes a closed one's back. A server
