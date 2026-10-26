@@ -68,6 +68,8 @@ export class BrowserLiveMedia {
   #remoteAnalyser: AnalyserNode | undefined;
   #stopLease: (() => void) | undefined;
   #stopLevels: (() => void) | undefined;
+  /** gives up the wait for the channel to open, when one is pending */
+  #abortWait: ((reason: Error) => void) | undefined;
   #active = false;
   #muted = false;
   #closed = false;
@@ -81,7 +83,7 @@ export class BrowserLiveMedia {
   /** The connection to Pi is up: say the device is here, and start counting Pi's silence. */
   hello(): void {
     this.#armLease();
-    this.#deps.send({ type: "hello" });
+    this.#emit({ type: "hello" });
   }
 
   /** A frame from Pi. Only the ones about the audio device are acted on; any of them shows Pi is there. */
@@ -120,6 +122,7 @@ export class BrowserLiveMedia {
     this.#closed = true;
     this.#stopLease?.();
     this.#stopLevels?.();
+    this.#abortWait?.(new Error("The call ended."));
     for (const track of this.#deps.stream.getTracks()) track.stop();
     this.#channel?.close();
     this.#peer?.close();
@@ -129,9 +132,17 @@ export class BrowserLiveMedia {
     void this.#deps.audioContext?.close().catch(() => undefined);
   }
 
+  /**
+   * Everything sent to Pi goes through here: once the media is closed it says nothing. The call's
+   * connection may by then belong to the next call, and Pi ends a call for a frame it did not ask for.
+   */
+  #emit(frame: PhoneToPiFrame): void {
+    if (!this.#closed) this.#deps.send(frame);
+  }
+
   #fail(message: string): void {
     if (this.#closed) return;
-    this.#deps.send({ type: "failure", message });
+    this.#emit({ type: "failure", message });
     this.close();
     this.#deps.onFailed(message);
   }
@@ -149,10 +160,10 @@ export class BrowserLiveMedia {
   async #serve(frame: PiVoiceRequest): Promise<void> {
     try {
       const sdp = await this.#perform(frame);
-      this.#deps.send({ type: "response", id: frame.id, ok: true, ...(sdp ? { sdp } : {}) });
+      this.#emit({ type: "response", id: frame.id, ok: true, ...(sdp ? { sdp } : {}) });
     } catch (cause) {
       const error = (cause instanceof Error ? cause.message : String(cause)).slice(0, MAX_ERROR) || "The request failed.";
-      this.#deps.send({ type: "response", id: frame.id, ok: false, error });
+      this.#emit({ type: "response", id: frame.id, ok: false, error });
     }
   }
 
@@ -189,7 +200,7 @@ export class BrowserLiveMedia {
       channel.onopen = () => resolve();
     });
     channel.onmessage = (event) => {
-      if (typeof event.data === "string" && event.data) this.#deps.send({ type: "event", payload: event.data });
+      if (typeof event.data === "string" && event.data) this.#emit({ type: "event", payload: event.data });
     };
     peer.ontrack = (event) => {
       const remote = event.streams[0] ?? new MediaStream([event.track]);
@@ -212,9 +223,18 @@ export class BrowserLiveMedia {
     if (!opened || !this.#channel) return Promise.reject(new Error("No offer was made."));
     if (this.#channel.readyState === "open") return Promise.resolve();
     return new Promise((resolve, reject) => {
-      const stop = this.#timers.after(() => reject(new Error("The connection to the voice service did not open.")), ms);
+      const stop = this.#timers.after(() => {
+        this.#abortWait = undefined;
+        reject(new Error("The connection to the voice service did not open."));
+      }, ms);
+      this.#abortWait = (reason) => {
+        stop();
+        this.#abortWait = undefined;
+        reject(reason);
+      };
       void opened.then(() => {
         stop();
+        this.#abortWait = undefined;
         resolve();
       });
     });
@@ -224,7 +244,7 @@ export class BrowserLiveMedia {
     this.#stopLevels?.();
     this.#stopLevels = this.#timers.every(() => {
       const { input, output } = this.sample();
-      this.#deps.send({ type: "levels", input: clamp(input), output: clamp(output) });
+      this.#emit({ type: "levels", input: clamp(input), output: clamp(output) });
     }, LEVELS_MS);
   }
 

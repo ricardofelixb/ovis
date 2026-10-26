@@ -36,7 +36,8 @@ export interface PiVoiceState {
 const IDLE: PiVoiceState = { status: "idle", paneId: "", label: "", phase: "connecting", muted: false, userText: "", assistantText: "", end: null };
 
 interface Call {
-  socket: WebSocket;
+  /** opened only once the microphone is allowed (see `connect`) */
+  socket: WebSocket | null;
   media: BrowserLiveMedia | null;
   stream: MediaStream | null;
   audio: HTMLAudioElement;
@@ -65,7 +66,7 @@ function update(patch: Partial<PiVoiceState>): void {
 }
 
 function send(frame: PhoneToPiFrame): void {
-  if (call?.socket.readyState === WebSocket.OPEN) call.socket.send(encodePiVoiceFrame(frame));
+  if (call?.socket?.readyState === WebSocket.OPEN) call.socket.send(encodePiVoiceFrame(frame));
 }
 
 function callUrl(paneId: string): string {
@@ -86,7 +87,7 @@ function finish(end: PiVoiceEnd | null): void {
     void over.audioContext?.close().catch(() => undefined);
     document.removeEventListener("visibilitychange", over.keepAwake);
     void over.wakeLock?.release().catch(() => undefined);
-    over.socket.close();
+    over.socket?.close();
   }
   update(end ? { status: "ended", end } : { ...IDLE });
 }
@@ -123,9 +124,16 @@ function onFrame(frame: PiToPhoneFrame): void {
   }
 }
 
-function connect(active: Call): void {
-  const { socket, stream, audio, audioContext } = active;
+/**
+ * Opens the connection to Pi, now that the microphone is allowed, and listens to it from its
+ * first frame. Opening it any earlier would leave a prompt that stays open for a minute with
+ * nobody listening to Pi giving up on the call.
+ */
+function connect(active: Call, paneId: string): void {
+  const { stream, audio, audioContext } = active;
   if (!stream) return;
+  const socket = new WebSocket(callUrl(paneId));
+  active.socket = socket;
   const media = new BrowserLiveMedia({
     stream,
     audio,
@@ -171,7 +179,7 @@ export function startPiVoice({ paneId, label }: { paneId: string; label: string 
   const audio = new Audio();
   audio.autoplay = true;
   void audio.play().catch(() => undefined);
-  const started: Call = { socket: new WebSocket(callUrl(paneId)), media: null, stream: null, audio, audioContext, wakeLock: null, keepAwake: () => {}, userEnded: false };
+  const started: Call = { socket: null, media: null, stream: null, audio, audioContext, wakeLock: null, keepAwake: () => {}, userEnded: false };
   call = started;
   started.keepAwake = () => {
     if (call !== started || document.visibilityState !== "visible" || (started.wakeLock && !started.wakeLock.released)) return;
@@ -189,9 +197,7 @@ export function startPiVoice({ paneId, label }: { paneId: string; label: string 
         return;
       }
       started.stream = stream;
-      connect(started);
-      // the socket may have opened while the browser was asking; its open event is then already past
-      if (started.socket.readyState === WebSocket.OPEN) started.media?.hello();
+      connect(started, paneId);
     },
     () => {
       if (call === started) finish({ kind: "denied" });
@@ -230,8 +236,12 @@ function subscribe(listener: () => void): () => void {
   return () => { listeners.delete(listener); };
 }
 
+export function piVoiceState(): PiVoiceState {
+  return state;
+}
+
 export function usePiVoice(): PiVoiceState {
-  return useSyncExternalStore(subscribe, () => state);
+  return useSyncExternalStore(subscribe, piVoiceState);
 }
 
 /** Pi can take a call in this pane: it is Pi's, on this PC, and its bridge answers (not before a reload of a Pi that started without it). */

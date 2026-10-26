@@ -216,6 +216,29 @@ describe("the phone as Pi's audio device", () => {
     expect(failures).toHaveLength(1);
   });
 
+  it("says nothing once it is closed: a wait still pending when the call ends is dropped, not answered later", async () => {
+    const { media, receive, drain, peers, timers } = setup();
+    receive({ type: "request", id: 1, method: "createOffer" });
+    await flush();
+    receive({ type: "request", id: 2, method: "waitForOpen", timeoutMs: 3000 });
+    await flush();
+    drain();
+    media.close();
+    timers.advance(10_000);
+    peers[0]!.channel!.open();
+    await flush();
+    // a response sent now would reach whichever call the sender points at by then, and Pi ends a call for an unasked one
+    expect(drain()).toEqual([]);
+  });
+
+  it("does not answer a request that was still being served when the call closed", async () => {
+    const { media, receive, drain } = setup();
+    receive({ type: "request", id: 1, method: "createOffer" });
+    media.close();
+    await flush();
+    expect(drain()).toEqual([]);
+  });
+
   it("stops the microphone, the peer and the speaker on close, without calling it a failure", async () => {
     const { receive, drain, track, peers, failures, audio } = setup();
     receive({ type: "request", id: 1, method: "createOffer" });
