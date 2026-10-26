@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import { skillSyntax } from "../../shared/skill-syntax.ts";
-import { agentDisplayLabel, composerDelivery, composerMessage, composerSendShown, composerPayload, composerModelDraw, composerStatusCompact, composerStatusHint, composerStatusWord, COMPOSER_STATUS_COMPACT_BELOW, contextLeftPercent, formatTokens, imageMention, insertLeadingMention, MAX_COMPOSER_CHARS, QUEUE_READY_STATUS, rankSlashCommands, submitNote, submitNotTyped, submitRefusal, sameMessage, pendingActionUncertain } from "./compose.ts";
+import { agentDisplayLabel, composerDelivery, composerMessage, composerPrimaryAction, composerSendShown, composerPayload, composerModelDraw, composerStatusCompact, composerStatusHint, composerStatusWord, COMPOSER_STATUS_COMPACT_BELOW, contextLeftPercent, formatTokens, imageMention, insertLeadingMention, MAX_COMPOSER_CHARS, QUEUE_READY_STATUS, rankSlashCommands, submitNote, submitNotTyped, submitRefusal, sameMessage, pendingActionUncertain } from "./compose.ts";
 import { briefDescription, COMMAND_GROUPS, commandGroup, commandsForTrigger, slashCommandReplacement, terminalCommand, typedTerminalCommand } from "./compose.ts";
 import type { SlashCommand } from "../../shared/protocol.ts";
 import { activeTrigger, applyCompletion, type ActiveTrigger } from "./mentions.ts";
@@ -288,6 +288,21 @@ describe("composer presentation helpers", () => {
     expect(composerStatusCompact(820)).toBe(false);
     // a card that is not laid out yet has no width: it is not called narrow
     expect(composerStatusCompact(0)).toBe(false);
+  });
+
+  it("shows a voice call where there is nothing to send and one can start", () => {
+    const idle = { sending: false, working: false, text: "", hasAttachments: false, canStartVoice: true };
+    expect(composerPrimaryAction(idle)).toBe("voice");
+    expect(composerPrimaryAction({ ...idle, text: " \n" })).toBe("voice");
+    // anything to send, or no call to start, leaves Send
+    expect(composerPrimaryAction({ ...idle, text: "hi" })).toBe("send");
+    expect(composerPrimaryAction({ ...idle, hasAttachments: true })).toBe("send");
+    expect(composerPrimaryAction({ ...idle, canStartVoice: false })).toBe("send");
+    expect(composerPrimaryAction({ ...idle, sending: true })).toBe("send");
+    // the working agent keeps Stop, and a message written meanwhile is a Send that queues
+    expect(composerPrimaryAction({ ...idle, working: true })).toBe("stop");
+    expect(composerPrimaryAction({ ...idle, working: true, text: "check the tests" })).toBe("send");
+    expect(composerPrimaryAction({ ...idle, working: true, sending: true })).toBe("send");
   });
 
   it("uses one Stop or Send control and queues all agents' working-turn messages", () => {
