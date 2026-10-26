@@ -26,6 +26,14 @@ export async function changePc(): Promise<void> {
 
 const inAndroidApp = (): boolean => inNativeApp() && bridge()?.getPlatform?.() === "android";
 
+/**
+ * The Android app makes a live call Android's own phone call (TelecomCall.java), which silences the
+ * WebView's media sound: the reply plays as the call's sound instead, never through Web Audio.
+ */
+export function nativeCallAudio(): boolean {
+  return inAndroidApp();
+}
+
 /** The Android app shows alerts itself (HerdrShellPlugin.java): its WebView has no Web Notifications. */
 export function nativeAlerts(): boolean {
   return inAndroidApp();
