@@ -93,7 +93,10 @@ public class HerdrShellPlugin extends Plugin {
         return NotificationManagerCompat.from(getContext()).areNotificationsEnabled() ? "granted" : "denied";
     }
 
-    /** title, body, tag (one alert per pane, replaced), and the pane a tap opens: pane_id, machine_id, workspace_id */
+    /**
+     * title, body, tag (one alert per pane, replaced), the pane a tap opens (pane_id, machine_id,
+     * workspace_id), and friend: the workspace's friend, the notification's picture
+     */
     @PluginMethod
     public void alert(PluginCall call) {
         if (!"granted".equals(alertsState())) {
@@ -118,6 +121,8 @@ public class HerdrShellPlugin extends Plugin {
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setContentIntent(tap);
+        android.graphics.Bitmap face = sh.ovis.push.FriendIcon.of(getContext(), call.getString("friend"));
+        if (face != null) notification.setLargeIcon(face);
         NotificationManagerCompat.from(getContext()).notify(tag, 0, notification.build());
         call.resolve();
     }

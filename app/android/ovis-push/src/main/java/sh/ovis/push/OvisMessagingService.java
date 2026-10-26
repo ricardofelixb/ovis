@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.os.Build;
 import android.util.Log;
 import androidx.core.app.NotificationCompat;
@@ -34,6 +35,7 @@ public class OvisMessagingService extends FirebaseMessagingService {
         String title = "Ovis";
         String body = getString(R.string.ovis_push_fallback);
         String tag = "herdr";
+        String friend = "";
         String sealed = message.getData().get("ovis");
         if (sealed != null) {
             try {
@@ -42,15 +44,17 @@ public class OvisMessagingService extends FirebaseMessagingService {
                 title = payload.optString("title", "").isEmpty() ? title : payload.getString("title");
                 body = payload.optString("body", "");
                 tag = payload.optString("tag", "").isEmpty() ? tag : payload.getString("tag");
+                friend = payload.optString("friend", "");
             } catch (GeneralSecurityException | IllegalArgumentException | JSONException e) {
                 // keys made again since the PC subscribed, or a damaged body: the fallback line shows
                 Log.w(TAG, "a push could not be read: " + e.getClass().getSimpleName());
             }
         }
-        show(title, body, tag);
+        show(title, body, tag, friend);
     }
 
-    private void show(String title, String body, String tag) {
+    /** `friend`: the pane's workspace's friend, the notification's picture (FriendIcon); empty for none. */
+    private void show(String title, String body, String tag, String friend) {
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
         getSystemService(NotificationManager.class).createNotificationChannel(
             new NotificationChannel(CHANNEL, getString(R.string.ovis_push_channel), NotificationManager.IMPORTANCE_HIGH)
@@ -65,6 +69,8 @@ public class OvisMessagingService extends FirebaseMessagingService {
             .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
             .setAutoCancel(true)
             .setContentIntent(tap);
+        Bitmap face = FriendIcon.of(this, friend);
+        if (face != null) notification.setLargeIcon(face);
         NotificationManagerCompat.from(this).notify(tag, 0, notification.build());
     }
 }
