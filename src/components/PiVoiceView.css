@@ -255,10 +255,59 @@
   opacity: calc(1 - var(--pi-voice-pull, 0));
 }
 
+/* the orb shrinking away once its call ends takes no taps */
+.pi-voice-dock.is-leaving > * {
+  pointer-events: none;
+}
+
+/* a call opens on the orb growing out over the composer, a little past its size and back, and
+   closes on it shrinking away: the agents app's timing. `scale` rather than `transform`, which
+   the drag holds */
+@media (prefers-reduced-motion: no-preference) {
+  .pi-voice-dock.is-entering .pi-voice-dock-orb {
+    animation: pi-voice-orb-fade-in 394ms cubic-bezier(0.33, 1, 0.68, 1), pi-voice-orb-grow 680ms;
+  }
+
+  .pi-voice-dock.is-entering .pi-voice-button {
+    animation: pi-voice-control-in 520ms cubic-bezier(0.16, 1, 0.3, 1) 140ms backwards;
+  }
+
+  .pi-voice-dock.is-leaving .pi-voice-dock-orb {
+    animation: pi-voice-orb-out 240ms cubic-bezier(0.32, 0, 0.67, 0) forwards;
+  }
+
+  .pi-voice-dock.is-leaving .pi-voice-button {
+    opacity: 0;
+    transition: opacity 140ms ease;
+  }
+}
+
+@keyframes pi-voice-orb-fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes pi-voice-orb-grow {
+  0% { scale: 0.46; animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1); }
+  58% { scale: 1.05; animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1); }
+  100% { scale: 1; }
+}
+
+@keyframes pi-voice-control-in {
+  from { opacity: 0; }
+}
+
+@keyframes pi-voice-orb-out {
+  to { opacity: 0; scale: 0.28; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pi-voice,
   .pi-voice-dock-orb {
     animation: none;
     transition: none;
+  }
+
+  .pi-voice-dock.is-leaving {
+    visibility: hidden;
   }
 }

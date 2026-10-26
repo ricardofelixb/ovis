@@ -1,5 +1,5 @@
 import { ChevronDown, Mic, MicOff, PhoneOff } from "lucide-react";
-import { useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { useT } from "../lib/i18n.ts";
 import { useOrbDrag } from "../lib/orbDrag.ts";
@@ -33,27 +33,61 @@ const collapse = () => setPiVoiceExpanded(false);
 export function PiVoiceView() {
   const voice = usePiVoice();
   const docked = usePiVoiceDocked();
-  if (voice.status === "idle") return null;
-  if (voice.expanded) return <PiVoiceDialog voice={voice} />;
-  return docked ? null : <PiVoiceDock floating />;
+  const floating = voice.status !== "idle" && !voice.expanded && !docked;
+  const leaving = useDockExit(floating, voice);
+  if (voice.status !== "idle" && voice.expanded) return <PiVoiceDialog voice={voice} />;
+  if (floating) return <PiVoiceDock voice={voice} floating />;
+  return leaving ? <PiVoiceDock voice={leaving} floating leaving /> : null;
 }
 
 /** The call's orb over the composer of its pane, while the call is not full-screen. */
 export function PiVoiceDockHost({ paneId }: { paneId: string }) {
   const voice = usePiVoice();
   const shown = voice.status !== "idle" && !voice.expanded && voice.paneId === paneId;
-  usePiVoiceDock(shown);
-  return shown ? <PiVoiceDock /> : null;
+  const leaving = useDockExit(shown, voice);
+  usePiVoiceDock(shown || leaving !== null);
+  if (shown) return <PiVoiceDock voice={voice} />;
+  return leaving ? <PiVoiceDock voice={leaving} leaving /> : null;
 }
 
-function PiVoiceDock({ floating = false }: { floating?: boolean }) {
+/** How long the orb takes to shrink away once its call ends: the agents app's exit wait. */
+const DOCK_EXIT_MS = 280;
+
+/**
+ * The call as the dock last showed it, for the moment its orb shrinks away once the call ends.
+ * Opening the full call or moving to another pane is no ending: the dock goes at once.
+ */
+function useDockExit(shown: boolean, voice: PiVoiceState): PiVoiceState | null {
+  const last = useRef<PiVoiceState | null>(null);
+  const [leaving, setLeaving] = useState<PiVoiceState | null>(null);
+  useLayoutEffect(() => {
+    if (shown) last.current = voice;
+  });
+  useLayoutEffect(() => {
+    if (shown) {
+      setLeaving(null);
+      return;
+    }
+    const was = last.current;
+    last.current = null;
+    if (!was || voice.status !== "idle") return;
+    setLeaving(was);
+    const timer = setTimeout(() => setLeaving(null), DOCK_EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  return leaving;
+}
+
+function PiVoiceDock({ voice, floating = false, leaving = false }: { voice: PiVoiceState; floating?: boolean; leaving?: boolean }) {
   const t = useT();
-  const voice = usePiVoice();
+  // a call opens on the orb growing in; putting the full call back is no opening
+  const [entering] = useState(() => voice.status === "starting");
   const surface = useRef<HTMLDivElement>(null);
   const orb = useRef<HTMLButtonElement>(null);
   useOrbDrag(orb, surface, "up", expand);
+  const classes = ["pi-voice-dock", floating && "is-floating", entering && "is-entering", leaving && "is-leaving"].filter(Boolean).join(" ");
   return (
-    <div className={`pi-voice-dock${floating ? " is-floating" : ""}`} ref={surface} role="group" aria-label={t("Live voice")}>
+    <div className={classes} ref={surface} role="group" aria-label={t("Live voice")} aria-hidden={leaving || undefined}>
       <span className="visually-hidden" aria-live="polite">{phaseText(voice, t)}</span>
       <button type="button" className="pi-voice-button is-compact" aria-pressed={voice.muted} aria-label={voice.muted ? t("Unmute") : t("Mute")}
         title={voice.muted ? t("Unmute") : t("Mute")} disabled={voice.status !== "live"} onClick={() => setPiVoiceMuted(!voice.muted)}>

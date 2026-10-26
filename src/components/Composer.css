@@ -636,9 +636,10 @@
   --composer-action-fill: var(--primary);
 }
 
-/* during this pane's call, the empty box's circle hangs it up, in the call's End colour */
+/* during this pane's call, the empty box's circle hangs it up: Stop's colours, as the agents
+   app's hang-up is the text colour with the background's glyph */
 .composer-hangup {
-  --composer-action-fill: var(--status-blocked);
+  --composer-action-fill: var(--text-strong);
   color: var(--bg);
 }
 
