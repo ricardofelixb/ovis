@@ -46,8 +46,15 @@ interface Call {
   userEnded: boolean;
 }
 
+/**
+ * Pi reads the reply's level to tell speaking from listening, and speech has gaps between words:
+ * left alone the label would flicker once a word. Going back to listening waits this long.
+ */
+const SPEAKING_HOLD_MS = 600;
+
 let state: PiVoiceState = IDLE;
 let call: Call | null = null;
+let settling: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();
 
 function update(patch: Partial<PiVoiceState>): void {
@@ -68,6 +75,7 @@ function callUrl(paneId: string): string {
 function finish(end: PiVoiceEnd | null): void {
   const over = call;
   call = null;
+  clearTimeout(settling);
   if (over) {
     over.media?.close();
     // a call that never got as far as its media still holds what the tap asked for
@@ -80,11 +88,20 @@ function finish(end: PiVoiceEnd | null): void {
   update(end ? { status: "ended", end } : { ...IDLE });
 }
 
+function showPhase(phase: PiVoicePhase): void {
+  clearTimeout(settling);
+  if (phase === "listening" && state.phase === "speaking") {
+    settling = setTimeout(() => update({ phase }), SPEAKING_HOLD_MS);
+    return;
+  }
+  update({ phase, ...(phase !== "connecting" && state.status === "starting" ? { status: "live" as const } : {}) });
+}
+
 function onFrame(frame: PiToPhoneFrame): void {
   call?.media?.receive(frame);
   switch (frame.type) {
     case "phase":
-      update({ phase: frame.phase, ...(frame.phase !== "connecting" && state.status === "starting" ? { status: "live" as const } : {}) });
+      showPhase(frame.phase);
       break;
     case "mute":
       update({ muted: frame.muted });
