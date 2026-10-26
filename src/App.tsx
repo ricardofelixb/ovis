@@ -49,7 +49,7 @@ import { focusWorkspaceListToggle } from "./lib/focus.ts";
 import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
 import { LOCAL_MACHINE, paneStorageId, type Machine, type MachineEvent } from "../shared/machines.ts";
 import { takeAuthTokenFromUrl } from "./lib/authLink.ts";
-import { applyPaneStatus } from "./lib/snapshot.ts";
+import { applyPaneStatus, heirPane, type PanePlace } from "./lib/snapshot.ts";
 import { setAgentRowTokens } from "./lib/agentRowTokens.ts";
 import { rosterPanes } from "./lib/dagPane.ts";
 import { SnapshotRequests } from "./lib/snapshotRequests.ts";
@@ -352,6 +352,8 @@ export function App() {
   // still list a pane that has ended (a phone resumed from the background), and when the next
   // one drops it, that workspace opens with a word, as a link's does. Any other pick clears it.
   const selectionHint = useRef<{ machine: string; pane: string; workspace: string } | null>(null);
+  // where the selected pane sat in the last roster that listed it: once it closes, a pane beside it opens
+  const selectedPlace = useRef<{ machine: string; place: PanePlace } | null>(null);
   // a short word in the header: a link that could not open what it named, or a link copied
   const [headerNote, setHeaderNote] = useState<LinkNote | "copied" | null>(null);
   useEffect(() => {
@@ -866,7 +868,9 @@ export function App() {
     if (!snapshot || selectedMachine?.state !== "connected") return;
     // a link lands once its PC's roster is in: its pane, the pane its workspace's row opens, or,
     // when nothing it named is open, the usual fallback below with a word in the header
-    const fallback = (current: typeof snapshot) => current.panes.find((pane) => pane.pane_id === current.focused_pane_id)?.pane_id ?? current.panes[0]?.pane_id ?? null;
+    const place = selectedPlace.current;
+    const gone = place?.machine === selectedMachineId && place.place.pane_id === selectedPaneId ? place.place : null;
+    const fallback = (current: typeof snapshot) => heirPane(current, gone);
     const linked = pendingLink.current;
     if (linked && linked.machine === selectedMachineId) {
       const land = (landed: ReturnType<typeof resolveLink>): boolean => {
@@ -906,7 +910,11 @@ export function App() {
         return () => { cancelled = true; };
       }
     }
-    if (snapshot.panes.some((pane) => pane.pane_id === selectedPaneId)) return;
+    const shown = snapshot.panes.find((pane) => pane.pane_id === selectedPaneId);
+    if (shown) {
+      selectedPlace.current = { machine: selectedMachineId, place: { pane_id: shown.pane_id, workspace_id: shown.workspace_id, tab_id: shown.tab_id } };
+      return;
+    }
     if (selectedPaneId === null) { setSelectedPaneId(fallback(snapshot)); return; }
     // The combined roster is cached: a newly created pane can be selected before it
     // appears there. Confirm absence against this PC before discarding the selection.

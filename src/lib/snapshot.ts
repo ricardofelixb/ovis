@@ -3,6 +3,28 @@ import type { AgentStatus, HerdrPane, PlanSummary, SessionSnapshot } from "../..
 const samePlan = (a: PlanSummary | undefined, b: PlanSummary | undefined): boolean =>
   a === b || (a !== undefined && b !== undefined && a.done === b.done && a.total === b.total && a.current === b.current);
 
+/** Where a selected pane sat, kept while it shows so the pane beside it can open once it closes. */
+export interface PanePlace { pane_id: string; workspace_id: string; tab_id: string }
+
+/**
+ * The pane to show once the selected one has gone: one beside it before any other. Its tab's focused
+ * pane or another in that tab, then its workspace's active tab, then any pane in that workspace, and
+ * only then herdr's focused pane or the first there is, which can be in another workspace.
+ */
+export function heirPane(snapshot: SessionSnapshot, gone: PanePlace | null): string | null {
+  const { panes } = snapshot;
+  const inTab = (tabId: string | undefined): HerdrPane | undefined => {
+    if (tabId === undefined) return undefined;
+    const focused = snapshot.layouts.find((layout) => layout.tab_id === tabId)?.focused_pane_id;
+    return panes.find((pane) => pane.tab_id === tabId && pane.pane_id === focused) ?? panes.find((pane) => pane.tab_id === tabId);
+  };
+  const near = gone === null ? undefined
+    : inTab(gone.tab_id)
+      ?? inTab(snapshot.workspaces.find((workspace) => workspace.workspace_id === gone.workspace_id)?.active_tab_id)
+      ?? panes.find((pane) => pane.workspace_id === gone.workspace_id);
+  return near?.pane_id ?? panes.find((pane) => pane.pane_id === snapshot.focused_pane_id)?.pane_id ?? panes[0]?.pane_id ?? null;
+}
+
 /**
  * Merges a pushed `pane-status` into the last snapshot so the sidebar badge updates
  * instantly; the debounced /api/session refetch that follows brings the derived
