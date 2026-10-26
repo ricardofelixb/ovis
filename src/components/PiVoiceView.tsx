@@ -62,9 +62,12 @@ function PiVoiceDock({ floating = false }: { floating?: boolean }) {
       <button type="button" className={`pi-voice-dock-orb is-${voice.phase}`} ref={orb} aria-label={t("Open call")} title={t("Open call")} onClick={expand}>
         <VoiceOrb phase={voice.phase} levels={piVoiceLevels} />
       </button>
-      <button type="button" className="pi-voice-button is-compact is-end" aria-label={t("End call")} title={t("End call")} onClick={endPiVoice}>
-        <PhoneOff aria-hidden="true" />
-      </button>
+      {/* over a composer, its button hangs up; at the screen's foot there is none to */}
+      {floating && (
+        <button type="button" className="pi-voice-button is-compact is-end" aria-label={t("End call")} title={t("End call")} onClick={endPiVoice}>
+          <PhoneOff aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }

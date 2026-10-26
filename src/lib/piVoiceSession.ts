@@ -5,6 +5,7 @@ import { fetchPiVoiceStatus } from "./api.ts";
 import { useMachineId } from "./machineContext.tsx";
 import { BrowserLiveMedia } from "./piVoiceMedia.ts";
 import { micErrorReason } from "./voice.ts";
+import { playVoiceChime } from "./voiceChime.ts";
 
 /**
  * The live voice call with the Pi in a pane, one per tab, kept outside React so the composer
@@ -88,6 +89,7 @@ function finish(end: PiVoiceEnd | null): void {
   call = null;
   clearTimeout(settling);
   if (over) {
+    playVoiceChime("close");
     over.media?.close();
     // a call that never got as far as its media still holds what the tap asked for
     for (const track of over.stream?.getTracks() ?? []) track.stop();
@@ -178,6 +180,8 @@ function connect(active: Call, paneId: string, voice: PiVoice | undefined): void
 export function startPiVoice({ paneId, label, voice }: { paneId: string; label: string; voice?: PiVoice }): void {
   if (state.status === "starting" || state.status === "live") return;
   update({ ...IDLE, status: "starting", paneId, label });
+  // on the tap, which lets it play, and before the microphone turns the phone's sound to a call's
+  playVoiceChime("open");
   const getUserMedia = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
   if (!getUserMedia || typeof RTCPeerConnection === "undefined") {
     finish({ kind: "unsupported" });

@@ -636,6 +636,12 @@
   --composer-action-fill: var(--primary);
 }
 
+/* during this pane's call, the empty box's circle hangs it up, in the call's End colour */
+.composer-hangup {
+  --composer-action-fill: var(--status-blocked);
+  color: var(--bg);
+}
+
 /* the one round button: Stop is Send's circle in the text colour, in the same place at the same
    size, so only the glyph changes when the agent starts and ends a turn */
 .composer-stop {
