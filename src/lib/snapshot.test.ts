@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { AgentStatus, SessionSnapshot } from "../../shared/protocol.ts";
-import { applyPaneStatus } from "./snapshot.ts";
+import { applyPaneStatus, heirPane } from "./snapshot.ts";
 
 function snapshotFixture(): SessionSnapshot {
   return {
@@ -77,5 +77,30 @@ describe("applyPaneStatus", () => {
   it("returns the same snapshot object when the pane is unknown", () => {
     const current = snapshotFixture();
     expect(applyPaneStatus(current, "w9:p9", "done" as AgentStatus)).toBe(current);
+  });
+});
+
+describe("heirPane", () => {
+  // w1 has tabs t1 (p1, p2; p2 focused) and t2 (p3); w2 holds herdr's focus
+  const pane = (pane_id: string, tab_id: string) => ({ pane_id, tab_id, workspace_id: tab_id.split(":")[0] });
+  const roster = (panes: string[][]) => ({
+    panes: panes.map(([id, tab]) => pane(id!, tab!)),
+    layouts: [{ tab_id: "w1:t1", focused_pane_id: "w1:p2" }, { tab_id: "w1:t2", focused_pane_id: "w1:p3" }],
+    workspaces: [{ workspace_id: "w1", active_tab_id: "w1:t2" }, { workspace_id: "w2", active_tab_id: "w2:t1" }],
+    focused_pane_id: "w2:p1",
+  }) as unknown as SessionSnapshot;
+  const gone = (pane_id: string, tab_id: string) => ({ pane_id, tab_id, workspace_id: tab_id.split(":")[0]! });
+
+  it("keeps a closed pane's successor in its tab, then its workspace, before herdr's focus elsewhere", () => {
+    const all = [["w2:p1", "w2:t1"], ["w1:p2", "w1:t1"], ["w1:p3", "w1:t2"]];
+    expect(heirPane(roster(all), gone("w1:p1", "w1:t1"))).toBe("w1:p2");
+    // its tab closed with it: the workspace's active tab
+    expect(heirPane(roster(all.filter(([, tab]) => tab !== "w1:t1")), gone("w1:p1", "w1:t1"))).toBe("w1:p3");
+    // the workspace closed too: herdr's focused pane
+    expect(heirPane(roster([["w2:p1", "w2:t1"]]), gone("w1:p1", "w1:t1"))).toBe("w2:p1");
+  });
+
+  it("with nothing selected before, opens herdr's focused pane", () => {
+    expect(heirPane(roster([["w1:p2", "w1:t1"], ["w2:p1", "w2:t1"]]), null)).toBe("w2:p1");
   });
 });
