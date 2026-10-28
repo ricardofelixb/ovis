@@ -266,6 +266,13 @@ pieces are the Java twins of the iOS ones, in `app/android/app/src/main/java/sh/
   each entry into another origin for its bridge, and the PC's own links stay in the WebView anyway.
   Opening or leaving a PC starts the activity again, so the next page is a first load and the
   old WebView goes with the old activity.
+- Each window of the app is a task of its own (`singleInstancePerTask`, and
+  `PROPERTY_SUPPORTS_MULTI_INSTANCE_SYSTEM_UI` for the launcher's New window), so split screen and
+  free windows can show two. The client's Open in new window calls `openWindow`, which starts
+  another task beside this one on an address of the same PC. A window keeps its PC in its saved
+  state, so another window choosing a PC leaves it alone, and starting again (`reopen`) recreates
+  it in place: finishing it and starting another would close the window and hand the start to
+  another window. A live call belongs to the window that started it.
 - `onPause` flushes WebView cookies. Without it, a pairing made a moment before the app was
   swiped away was lost: the next start asked for pairing again.
 - `HerdrShellPlugin` and `PCStore` (SharedPreferences) mirror the iOS plugin and store. As on

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type AnimationEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { ChevronDown, ChevronRight, Ellipsis, Folder, FolderOpen, GitBranch, History, Layers, ListChecks, Pencil, Pin, PinOff, Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns2, Ellipsis, Folder, FolderOpen, GitBranch, History, Layers, ListChecks, Pencil, Pin, PinOff, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 
 import "./Sidebar.css";
 
@@ -17,6 +17,8 @@ import { focusWorkspaceListToggle } from "../lib/focus.ts";
 import { folderName, shortPathTitle, stripPaneChrome, taskRowLines } from "../lib/paneName.ts";
 import { ApiError } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
+import { linkSearch, slugOf } from "../lib/deepLink.ts";
+import { nativeWindows, openNativeWindow } from "../lib/nativeApp.ts";
 import { userErrorMessage } from "../lib/userError.ts";
 import { rosterPanes } from "../lib/dagPane.ts";
 import { useSidebarActivity } from "../lib/sidebarActivity.tsx";
@@ -405,6 +407,8 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
         ? { id: "unpin-workspace", label: t("Unpin workspace"), icon: PinOff, run: () => togglePin(state) }
         : { id: "pin-workspace", label: t("Pin workspace"), icon: Pin, run: () => togglePin(state) },
       { id: "rename-workspace", label: t("Rename workspace"), icon: Pencil, run: () => beginWorkspaceRename(workspace) },
+      // a link to a workspace opens the pane its row opens (lib/deepLink.ts)
+      ...(nativeWindows() ? [{ id: "new-window", label: t("Open in new window"), icon: Columns2, run: () => openNativeWindow(linkSearch({ machine: machineId, workspace: workspace.workspace_id, workspaceSlug: slugOf(workspace.label) || null, pane: null, view: null, settings: null }, window.location.search)) }] : []),
       // the folder's earlier sessions, listed for the agent of the pane the row opens
       ...(historyOffered && !watching ? [{ id: "session-history", label: t("Earlier sessions…"), icon: History, run: () => actions.openSessionHistory({ machineId, workspaceId: workspace.workspace_id, agent: (panes.length > 0 ? currentPane(workspace, panes) : null)?.agent ?? null }) }] : []),
       { ...closeItem, label: t(sameRepo.length > 0 ? "Close group" : "Close workspace"), divider: false },

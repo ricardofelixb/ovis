@@ -144,8 +144,12 @@ public class LiveCallService extends Service {
         }
     }
 
+    /** The window (its activity) whose page has the call: another window's page loading or closing leaves it alone. */
+    private static Context owner;
+
     /** Throws when the app is no longer in view, where Android starts no service. */
     static void start(Context context, String title, String body, String mute, String unmute) {
+        owner = context;
         context.startService(new Intent(context, LiveCallService.class).putExtra("title", title).putExtra("body", body)
             .putExtra("mute", mute).putExtra("unmute", unmute));
     }
@@ -158,7 +162,10 @@ public class LiveCallService extends Service {
         service.post();
     }
 
+    /** Ends the call of `context`'s window; a call another window has goes on. */
     static void stop(Context context) {
+        if (owner != null && owner != context) return;
+        owner = null;
         context.stopService(new Intent(context, LiveCallService.class));
     }
 
