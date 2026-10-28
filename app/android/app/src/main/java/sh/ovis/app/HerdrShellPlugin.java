@@ -17,6 +17,7 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import java.util.function.Consumer;
 
 /**
  * What the app's own pages (app/web) and the client's Change PC (src/lib/nativeApp.ts) ask of the
@@ -29,20 +30,22 @@ public class HerdrShellPlugin extends Plugin {
     private static final String CHANNEL = "agent-alerts";
     private static final String TAP = "sh.ovis.app.ALERT_TAP";
 
+    /** Hang up or Mute on the live call's notification, for this window's call to act on. */
+    private final Consumer<String> callActions = action -> {
+        JSObject event = new JSObject();
+        event.put("action", action);
+        notifyListeners("liveCallAction", event);
+    };
+
     @Override
     public void load() {
         deliverTap(getActivity().getIntent());
-        // Hang up or Mute on the live call's notification, for the page's call to act on
-        LiveCallService.onAction = action -> {
-            JSObject event = new JSObject();
-            event.put("action", action);
-            notifyListeners("liveCallAction", event);
-        };
     }
 
     @Override
     protected void handleOnDestroy() {
-        LiveCallService.onAction = null;
+        // another window's call keeps its buttons
+        if (LiveCallService.onAction == callActions) LiveCallService.onAction = null;
         super.handleOnDestroy();
     }
 
@@ -130,8 +133,10 @@ public class HerdrShellPlugin extends Plugin {
     /** A live call has the microphone: keep it going out of sight, under a notification of title and body. */
     @PluginMethod
     public void liveCallStarted(PluginCall call) {
+        // the window whose page has the call takes the notification's buttons
+        LiveCallService.onAction = callActions;
         try {
-            LiveCallService.start(getContext(), call.getString("title", "Ovis"), call.getString("body", ""),
+            LiveCallService.start(getActivity(), call.getString("title", "Ovis"), call.getString("body", ""),
                 call.getString("mute", "Mute"), call.getString("unmute", "Unmute"));
         } catch (RuntimeException outOfSight) {
             // the app left view before the microphone was allowed: the call goes on only while it is in view
@@ -141,7 +146,7 @@ public class HerdrShellPlugin extends Plugin {
 
     @PluginMethod
     public void liveCallEnded(PluginCall call) {
-        LiveCallService.stop(getContext());
+        LiveCallService.stop(getActivity());
         call.resolve();
     }
 
@@ -174,7 +179,7 @@ public class HerdrShellPlugin extends Plugin {
         PCStore.open(getContext(), origin, text);
         PCStore.failure = null;
         call.resolve();
-        reopen();
+        reopen(origin);
     }
 
     @PluginMethod
@@ -189,18 +194,35 @@ public class HerdrShellPlugin extends Plugin {
     public void disconnect(PluginCall call) {
         PCStore.setCurrent(getContext(), null);
         call.resolve();
-        reopen();
+        reopen(null);
     }
 
-    /** Opens the current PC again from its first page. */
+    /** Opens this window's PC again from its first page. */
     @PluginMethod
     public void retry(PluginCall call) {
         PCStore.failure = null;
         call.resolve();
-        reopen();
+        reopen(window().origin());
     }
 
-    private void reopen() {
-        getActivity().runOnUiThread(() -> ((MainActivity) getActivity()).reopen());
+    /** url: an address of this window's PC, opened in another window beside this one (MainActivity.openWindow). */
+    @PluginMethod
+    public void openWindow(PluginCall call) {
+        String url = call.getString("url");
+        String own = window().origin();
+        if (url == null || own == null || !own.equals(PCStore.origin(url))) {
+            call.reject("A new window opens only an address of this window's PC.");
+            return;
+        }
+        getActivity().runOnUiThread(() -> window().openWindow(url));
+        call.resolve();
+    }
+
+    private MainActivity window() {
+        return (MainActivity) getActivity();
+    }
+
+    private void reopen(String origin) {
+        getActivity().runOnUiThread(() -> window().reopen(origin));
     }
 }

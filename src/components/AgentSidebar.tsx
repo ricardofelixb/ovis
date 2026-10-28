@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronDown, ChevronRight, Ellipsis, Pin, PinOff, Terminal } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns2, Ellipsis, Pin, PinOff, Terminal } from "lucide-react";
 
 import type { Machine } from "../../shared/machines.ts";
 import { paneStorageId } from "../../shared/machines.ts";
@@ -7,6 +7,8 @@ import { paneTokenValues } from "../../shared/pane-tokens.ts";
 import type { AgentStatus, PlanSummary } from "../../shared/protocol.ts";
 import { currentAgentRowTokens, subscribeAgentRowTokens } from "../lib/agentRowTokens.ts";
 import { useT } from "../lib/i18n.ts";
+import { linkSearch } from "../lib/deepLink.ts";
+import { nativeWindows, openNativeWindow } from "../lib/nativeApp.ts";
 import { useAnnouncedText } from "../lib/useAnnouncedText.ts";
 import { agentRoster, type AgentRow } from "../lib/agentRoster.ts";
 import { agentContext, agentTabName, paneMark } from "../lib/sidebarAgents.ts";
@@ -226,6 +228,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
       menuPinned
         ? { id: "unpin", label: t("Unpin agent"), icon: PinOff, run: () => runPin(menu) }
         : { id: "pin", label: t("Pin agent"), icon: Pin, run: () => runPin(menu) },
+      ...(nativeWindows() && menuRow ? [{ id: "new-window", label: t("Open in new window"), icon: Columns2, run: () => openNativeWindow(linkSearch({ machine: menuRow.machine.id, workspace: menuRow.entry.pane.workspace_id, pane: menuRow.entry.pane.pane_id, view: null, settings: null }, window.location.search)) }] : []),
     ]} />}
   </section>;
 }

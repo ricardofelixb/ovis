@@ -16,8 +16,14 @@
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
-            android:launchMode="singleTask"
+            android:launchMode="singleInstancePerTask"
             android:exported="true">
+
+            <!-- each window is a task of its own, so split screen and free windows can show two
+                 (MainActivity.openWindow); this offers New window in the launcher and taskbar -->
+            <property
+                android:name="android.window.PROPERTY_SUPPORTS_MULTI_INSTANCE_SYSTEM_UI"
+                android:value="true" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

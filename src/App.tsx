@@ -1,5 +1,5 @@
 import { type CSSProperties, type DragEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Bell, Ellipsis, FolderOpen, Link, Menu, MessageSquare, Monitor, PanelLeft, Search, SquareTerminal, X } from "lucide-react";
+import { Bell, Columns2, Ellipsis, FolderOpen, Link, Menu, MessageSquare, Monitor, PanelLeft, Search, SquareTerminal, X } from "lucide-react";
 
 import type { AgentStatus, AccessRefusal, HealthAuth, HerdrPane, SessionHistoryAgent } from "../shared/protocol.ts";
 import { ApiError, authenticate, createTab, fetchHealth, fetchBridgeHealth, fetchMachines, fetchSession, pairDevice, sendTestPush, shareSeen, signOut, splitPane, verifySourceBoot, zoomPane, type HealthInfo } from "./lib/api.ts";
@@ -75,6 +75,7 @@ import {
   showPaneStatusNotification,
 } from "./lib/notifications.ts";
 import { ensurePushSubscription, pushSupported, removePushSubscription } from "./lib/push.ts";
+import { nativeWindows, openNativeWindow } from "./lib/nativeApp.ts";
 import { machineGone, notificationLanding, notificationTargetFromSearch, sameLink, notificationViewForPane, onNotificationTarget, type NotificationTarget } from "./lib/notificationTarget.ts";
 import { useUpdates } from "./lib/updates.ts";
 import { UpdateNotice } from "./components/UpdateControls.tsx";
@@ -1583,6 +1584,8 @@ export function App() {
     ...(selectedPane && !wideScreen ? [{ id: "files", label: t("Browse files"), icon: FolderOpen, run: () => setFilesOpen(true) }] : []),
     // the address says where the app is (lib/deepLink.ts); a phone has no address bar to copy it from
     { id: "copy-link", label: t("Copy link"), icon: Link, run: () => void copyText(window.location.href).then((ok) => { if (ok) setHeaderNote("copied"); }) },
+    // the Android app: this place again in a window of its own, for split screen on a large screen
+    ...(nativeWindows() ? [{ id: "new-window", label: t("Open in new window"), icon: Columns2, run: () => openNativeWindow(window.location.search) }] : []),
     ...(bellVisible ? [{ id: "alerts", label: t("Alerts"), hint: bell.state, checked: bell.on, title: bell.title, icon: Bell, run: () => void bell.run() }] : []),
   ];
 

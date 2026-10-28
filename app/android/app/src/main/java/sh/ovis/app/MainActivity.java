@@ -53,6 +53,15 @@ public class MainActivity extends BridgeActivity {
         "  else apply();" +
         "})();";
 
+    /** The PC a window opened beside another (openWindow) shows, and the one a window keeps in its saved state: "" is the connect screen. */
+    private static final String EXTRA_ORIGIN = "sh.ovis.app.ORIGIN";
+
+    /** The address on that PC a window opened beside another starts at. */
+    private static final String EXTRA_START = "sh.ovis.app.START";
+
+    /** This window's PC, an origin; null on the connect screen. */
+    private String origin;
+
     /** Whether the page itself (not a picture or a frame in it) failed since it started. */
     private boolean pageFailed;
 
@@ -62,7 +71,17 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(HerdrShellPlugin.class);
-        String origin = PCStore.current(this);
+        // a window keeps its PC through reopen and the app's process being killed (its saved state),
+        // so another window choosing a PC leaves it where it is; a window the launcher opens shows
+        // the app's current PC, and one opened beside another the PC it was opened from
+        Intent launch = getIntent();
+        String chosen = savedInstanceState != null && savedInstanceState.containsKey(EXTRA_ORIGIN)
+            ? savedInstanceState.getString(EXTRA_ORIGIN)
+            : launch.hasExtra(EXTRA_ORIGIN) ? launch.getStringExtra(EXTRA_ORIGIN) : PCStore.current(this);
+        String origin = chosen == null || chosen.isEmpty() ? null : chosen;
+        this.origin = origin;
+        // a pairing link (PCStore.open) comes first; startPath drops one of another PC
+        String start = PCStore.pendingStart != null ? PCStore.pendingStart : launch.getStringExtra(EXTRA_START);
         String host = origin == null ? null : Uri.parse(origin).getHost();
         if (host != null) {
             boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
@@ -72,7 +91,7 @@ public class MainActivity extends BridgeActivity {
             // pairing link's path and query come in as the start path until a PC page has loaded.
             config = new CapConfig.Builder(this)
                 .setServerUrl(origin)
-                .setStartPath(startPath(PCStore.pendingStart, origin))
+                .setStartPath(startPath(start, origin))
                 // No allowNavigation: the PC's own links (its host and scheme, any port) stay in the
                 // WebView already, and Capacitor turns each entry into another bridge origin rule
                 // (https://host, or a host starting with "http" as is: invalid, which again drops the
@@ -280,7 +299,7 @@ public class MainActivity extends BridgeActivity {
         CookieManager.getInstance().flush();
     }
 
-    /** The path and query of a pairing link on `origin`, else the PC's root. */
+    /** The path and query of `start` (a pairing link, a window's place) on `origin`, else the PC's root. */
     static String startPath(String start, String origin) {
         if (start == null || !origin.equals(PCStore.origin(start))) return "/";
         Uri uri = Uri.parse(start);
@@ -290,24 +309,47 @@ public class MainActivity extends BridgeActivity {
         return (path == null || path.isEmpty() ? "/" : path) + (query == null ? "" : "?" + query) + (fragment == null ? "" : "#" + fragment);
     }
 
-    /** Opens the current PC again from its first page. */
+    /** Opens this window's PC again from its first page. */
     void retry() {
         PCStore.failure = null;
-        reopen();
+        reopen(origin);
     }
 
     /** Back to the connect screen; the PC stays in the list. */
     void changePc() {
         PCStore.setCurrent(this, null);
-        reopen();
+        reopen(null);
     }
 
-    /** Starts this activity again, so the next page (a PC, or the connect screen) is a first load. */
-    void reopen() {
-        Intent intent = new Intent(this, MainActivity.class);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-        finish();
-        overridePendingTransition(0, 0);
+    /** This window's PC, or null on the connect screen. */
+    String origin() {
+        return origin;
+    }
+
+    /**
+     * Starts this activity again on `origin` (null: the connect screen), so the next page is a first
+     * load. It is recreated in place: finishing it and starting another would close this window and
+     * hand the start to another window of the app (singleInstancePerTask).
+     */
+    void reopen(String origin) {
+        this.origin = origin;
+        recreate();
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        outState.putString(EXTRA_ORIGIN, origin == null ? "" : origin);
+    }
+
+    /**
+     * Opens `start`, an address of this window's PC, in another window of the app beside this one,
+     * as Chrome's "New window" does: split screen when there is room, else a window of its own in
+     * Recents.
+     */
+    void openWindow(String start) {
+        Intent intent = new Intent(this, MainActivity.class).putExtra(EXTRA_ORIGIN, origin).putExtra(EXTRA_START, start);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
         startActivity(intent);
     }
 }
