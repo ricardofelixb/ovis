@@ -19,8 +19,7 @@ import "./Composer.css";
 import type { AgentStatus, ClientRole, ConversationMetadata, PlanSummary, SlashCommand } from "../../shared/protocol.ts";
 import { skillSyntax } from "../../shared/skill-syntax.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
-import { endPiVoice, startPiVoice, usePiVoice, usePiVoiceAvailable } from "../lib/piVoiceSession.ts";
-import { PiVoiceDockHost } from "./PiVoiceView.tsx";
+import { piVoiceLabel, startPiVoice, usePiVoiceAvailable } from "../lib/piVoiceSession.ts";
 import { composerDrafts } from "../lib/composerDraft.ts";
 import { commentsWait, holdsQuoteLine, messageWithComments, replyComments, replyCommentsKey, type ReplyComment } from "../lib/replyComments.ts";
 import { ReplyCommentsChip, useReplyComments } from "./ReplyComments.tsx";
@@ -1090,13 +1089,9 @@ export function Composer({
   const shownStatus = paneStatus({ agent_status: agentStatus, ...(backgroundWait ? { background_wait: true as const } : {}) });
   const statusCompact = composerStatusCompact(cardWidth);
   const voiceAvailable = usePiVoiceAvailable(paneId, agent);
-  const voice = usePiVoice();
-  const inCall = (voice.status === "starting" || voice.status === "live") && voice.machineId === machineId && voice.paneId === paneId;
-  // the orb shows once the call is ready to talk; until then the hang-up turns, and still cancels it
-  const callConnecting = inCall && voice.status === "starting";
   // comments waiting to go (#511) count as something to send
   // an orb where there is nothing to send: a live call with the Pi in this pane, from a phone or a PC alike
-  const primaryAction = composerPrimaryAction({ sending: sending || carried.length > 0, working: isWorking, text, hasAttachments: attachments.length > 0, canStartVoice: voiceAvailable && role !== "observe" && connected, inCall });
+  const primaryAction = composerPrimaryAction({ sending: sending || carried.length > 0, working: isWorking, text, hasAttachments: attachments.length > 0, canStartVoice: voiceAvailable && role !== "observe" && connected });
   const hint = composerStatusHint({ uploading, connected, text, noRoom: roomless !== undefined });
   const models = agent === "pi" && role !== "observe" && metadata?.models?.length ? metadata.models : undefined;
   // a switch shows at once: pi applies it in a moment, but its transcript reaches the pill a read later
@@ -1160,7 +1155,6 @@ export function Composer({
 
   return (
     <div className={`composer${notices ? " has-notices" : ""}`} role="group" aria-label={t("Message composer")} data-dictating={dictation.voice.state !== "idle" ? "" : undefined} inert={inert || undefined}>
-      <PiVoiceDockHost paneId={paneId} />
       {greeting}
       {notices}
       {/* no Tab key on a phone: the suggestion can be a chip there that fills the box, when Settings asks for it */}
@@ -1569,21 +1563,9 @@ export function Composer({
               title={t("Start live voice")}
               // the tap is the gesture that lets the browser open the microphone and play the reply
               onPointerDown={(event) => event.preventDefault()}
-              onClick={() => startPiVoice({ machineId, paneId, label: cwd?.split("/").filter(Boolean).at(-1) ?? "Pi", ...(settings.liveVoice !== "pi" ? { voice: settings.liveVoice } : {}) })}
+              onClick={() => startPiVoice({ machineId, paneId, label: piVoiceLabel(cwd), ...(settings.liveVoice !== "pi" ? { voice: settings.liveVoice } : {}) })}
             >
               <AudioLines aria-hidden="true" />
-            </button>
-          ) : primaryAction === "hangup" ? (
-            <button
-              type="button"
-              className="composer-action composer-hangup"
-              aria-label={t("End call")}
-              title={t("End call")}
-              onPointerDown={(event) => event.preventDefault()}
-              aria-busy={callConnecting || undefined}
-              onClick={endPiVoice}
-            >
-              {callConnecting ? <LoaderCircle className="composer-send-progress" aria-hidden="true" /> : <X aria-hidden="true" />}
             </button>
           ) : (
             <button

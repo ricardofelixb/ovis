@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { LOCAL_MACHINE } from "../../shared/machines.ts";
 import { encodePiVoiceFrame, parsePiFrame, PI_VOICE_PATH, type PhoneToPiFrame, type PiToPhoneFrame, type PiVoice, type PiVoiceEndCode, type PiVoicePhase } from "../../shared/pi-voice.ts";
@@ -6,7 +6,7 @@ import { fetchPiVoiceStatus } from "./api.ts";
 import { t } from "./i18n.ts";
 import { useMachineId } from "./machineContext.tsx";
 import { nativeLiveCall, nativeLiveCallMuted, onNativeLiveCallAction } from "./nativeApp.ts";
-import { BrowserLiveMedia } from "./piVoiceMedia.ts";
+import { BrowserLiveMedia, browserTimers } from "./piVoiceMedia.ts";
 import { micErrorReason } from "./voice.ts";
 import { playVoiceChime, primeVoiceChime } from "./voiceChime.ts";
 
@@ -14,9 +14,10 @@ import { playVoiceChime, primeVoiceChime } from "./voiceChime.ts";
  * The live voice call with the Pi in a pane, one per tab, kept outside React so the composer
  * remounting (a pane switch, a layout change) does not end it. The phone is the call's
  * microphone and speaker (piVoiceMedia.ts); this server relays Pi's frames (server/pi-voice.ts).
- * A call is started by a tap and only ever by a tap: the browser asks for the microphone and
- * lets the reply play on the strength of that gesture, so `startPiVoice` does its browser calls
- * before it waits for anything.
+ * A call is first started by a tap: the browser asks for the microphone and lets the reply play
+ * on the strength of that gesture, so `startPiVoice` does its browser calls before it waits for
+ * anything. From then on the call follows the selected agent (`followPiVoice`): those calls start
+ * without a tap, on the page's sticky activation, until End.
  */
 
 /** why a call is over, when it did not end by a tap on End or by Pi's own account of a normal end */
@@ -27,8 +28,11 @@ export type PiVoiceEnd =
   | { kind: "error"; message: string };
 
 export interface PiVoiceState {
-  /** `idle`: no call; `starting`: reaching Pi; `live`: the call is on; `ended`: over, with `end` to read */
-  status: "idle" | "starting" | "live" | "ended";
+  /**
+   * `idle`: no call, nothing followed; `starting`: reaching Pi; `live`: the call is on; `away`: the
+   * call follows the selected agent but has none, with `end` saying why (null: no voice there)
+   */
+  status: "idle" | "starting" | "live" | "away";
   /** the PC the pane is on (shared/machines.ts) */
   machineId: string;
   paneId: string;
@@ -37,13 +41,9 @@ export interface PiVoiceState {
   muted: boolean;
   assistantText: string;
   end: PiVoiceEnd | null;
-  /** the full-screen call; otherwise the orb sits over the composer and the chat stays in view */
-  expanded: boolean;
-  /** when the call became ready to talk (`Date.now()`), 0 before: the orb grows in then */
-  readyAt: number;
 }
 
-const IDLE: PiVoiceState = { status: "idle", machineId: LOCAL_MACHINE, paneId: "", label: "", phase: "connecting", muted: false, assistantText: "", end: null, expanded: false, readyAt: 0 };
+const IDLE: PiVoiceState = { status: "idle", machineId: LOCAL_MACHINE, paneId: "", label: "", phase: "connecting", muted: false, assistantText: "", end: null };
 
 /**
  * How long the microphone stays open once a call ends: the close chime's length. Letting go of it
@@ -96,8 +96,11 @@ function callUrl(machineId: string, paneId: string, voice: PiVoice | undefined):
   return `${protocol}//${window.location.host}${PI_VOICE_PATH}?pane_id=${encodeURIComponent(paneId)}${machine}${chosen}`;
 }
 
-/** Releases the microphone, the speaker, the screen and the socket, and shows how the call ended (null: it simply did). */
-function finish(end: PiVoiceEnd | null): void {
+/**
+ * Releases the microphone, the speaker, the screen and the socket, and shows how the call ended
+ * (null: it simply did). `away` keeps following the selected agent; `idle` stops.
+ */
+function finish(end: PiVoiceEnd | null, next: "idle" | "away" = "away"): void {
   const over = call;
   call = null;
   clearTimeout(settling);
@@ -117,8 +120,7 @@ function finish(end: PiVoiceEnd | null): void {
       if (over.stream) nativeLiveCall(null);
     }, RELEASE_AFTER_MS);
   }
-  // what went wrong is read in the full call, which has the room for it
-  update(end ? { status: "ended", end, expanded: true } : { ...IDLE });
+  update(next === "idle" ? { ...IDLE } : { ...IDLE, status: "away", machineId: state.machineId, paneId: state.paneId, end });
 }
 
 function showPhase(phase: PiVoicePhase): void {
@@ -131,10 +133,10 @@ function showPhase(phase: PiVoicePhase): void {
     update({ phase });
     return;
   }
-  // ready to talk: the orb grows in on the opening chime, as in the agents app. The phone's sound
-  // is a call's by now, so the chime is not cut off switching to it
+  // ready to talk, on the opening chime. The phone's sound is a call's by now, so the chime is not
+  // cut off switching to it
   playVoiceChime("open");
-  update({ phase, status: "live", readyAt: Date.now() });
+  update({ phase, status: "live" });
 }
 
 function onFrame(frame: PiToPhoneFrame): void {
@@ -155,7 +157,10 @@ function onFrame(frame: PiToPhoneFrame): void {
       update({ assistantText: "" });
       break;
     case "ended":
-      finish(frame.error ? { kind: "error", message: frame.error } : frame.code ? { kind: frame.code } : null);
+      // Pi ending the call on its own account (/live in its terminal) is an End; anything else keeps following
+      if (frame.error) finish({ kind: "error", message: frame.error });
+      else if (frame.code) finish({ kind: frame.code });
+      else finish(null, "idle");
       break;
     default:
       break;
@@ -201,14 +206,20 @@ function connect(active: Call, machineId: string, paneId: string, voice: PiVoice
   };
 }
 
+interface CallTarget { machineId: string; paneId: string; label: string; voice?: PiVoice }
+
 /**
- * Starts the call for a pane. It must run inside the tap's own handler: the microphone is asked
- * for, the speaker element and the audio context are made, and the screen kept awake, all
- * before anything is waited for.
+ * Starts a call with the Pi in `paneId` on `machineId`, in `voice` if given and otherwise the one
+ * Pi is set to. The first one must run inside the tap's own handler: the microphone is asked for,
+ * the speaker element and the audio context are made, and the screen kept awake, all before
+ * anything is waited for.
  */
-/** Starts a call with the Pi in `paneId` on `machineId`, in `voice` if given and otherwise the one Pi is set to. */
-export function startPiVoice({ machineId, paneId, label, voice }: { machineId: string; paneId: string; label: string; voice?: PiVoice }): void {
+export function startPiVoice(target: CallTarget): void {
   if (state.status === "starting" || state.status === "live") return;
+  open(target);
+}
+
+function open({ machineId, paneId, label, voice }: CallTarget): void {
   update({ ...IDLE, status: "starting", machineId, paneId, label });
   // the opening chime plays once the call is ready to talk; only a tap lets sound start
   primeVoiceChime();
@@ -253,45 +264,85 @@ export function startPiVoice({ machineId, paneId, label, voice }: { machineId: s
   );
 }
 
-/** The tap on End: stops at once, and tells Pi so it can end its side. */
-export function endPiVoice(): void {
+/** Ends the call that is on, telling Pi so it can end its side, into `next`. */
+function hangUp(next: "idle" | "away"): void {
   if (!call) {
-    update({ ...IDLE });
+    update(next === "idle" ? { ...IDLE } : { end: null });
     return;
   }
   call.userEnded = true;
   send({ type: "stop" });
-  finish(null);
+  finish(null, next);
 }
 
-/** Opens the full-screen call, or puts it back over the composer. */
-export function setPiVoiceExpanded(expanded: boolean): void {
-  if (state.status !== "idle" && state.expanded !== expanded) update({ expanded });
+/** The tap on End: stops at once, and stops following the selected agent. */
+export function endPiVoice(): void {
+  hangUp("idle");
 }
 
-/** Composers showing the call's orb over them; with none in view, the orb sits at the screen's foot. */
-let docks = 0;
-
-/** Counts this composer as showing the orb while `shown`, before the screen paints. */
-export function usePiVoiceDock(shown: boolean): void {
-  useLayoutEffect(() => {
-    if (!shown) return;
-    docks += 1;
-    notify();
-    return () => {
-      docks -= 1;
-      notify();
-    };
-  }, [shown]);
+/** A pane's agent, as the call follows the selection. */
+export interface PiVoiceFollowTarget {
+  machineId: string;
+  paneId: string | null;
+  agent: string | null;
+  label: string;
+  voice?: PiVoice;
 }
 
-export function usePiVoiceDocked(): boolean {
-  return useSyncExternalStore(subscribe, () => docks > 0);
+/**
+ * How long a selection holds before the call follows it: moving through several agents opens no
+ * call on each, and the call left behind has let go of its microphone by then.
+ */
+export const FOLLOW_SETTLE_MS = 1000;
+
+/**
+ * The selection moved to `target`: a call on another agent ends at once, and once `target` has
+ * held for FOLLOW_SETTLE_MS a call starts there if its Pi can take one. Nothing while no call is
+ * followed. Returns the cancel for a selection that moves on before then.
+ */
+export function followPiVoice(
+  target: PiVoiceFollowTarget,
+  deps: { after?: (run: () => void, ms: number) => () => void; status?: typeof fetchPiVoiceStatus } = {},
+): () => void {
+  if (state.status === "idle") return () => {};
+  const here = state.machineId === target.machineId && state.paneId === target.paneId;
+  if (here && state.status !== "away") return () => {};
+  // a microphone refused, or a browser without calls, would only fail again on the next agent
+  const stuck = state.end?.kind === "denied" || state.end?.kind === "unsupported";
+  if (!here && call) hangUp("away");
+  update({ machineId: target.machineId, paneId: target.paneId ?? "", label: target.label, end: here || stuck ? state.end : null });
+  const { paneId } = target;
+  if (paneId === null || target.agent !== "pi" || stuck) return () => {};
+  let live = true;
+  const { after = browserTimers.after, status = fetchPiVoiceStatus } = deps;
+  const cancel = after(() => {
+    void status(paneId, target.machineId).then(
+      (answer) => {
+        if (!live || state.status !== "away") return;
+        if (answer.busy) update({ end: { kind: "busy" } });
+        else if (answer.available) open({ machineId: target.machineId, paneId, label: target.label, ...(target.voice ? { voice: target.voice } : {}) });
+      },
+      () => undefined,
+    );
+  }, FOLLOW_SETTLE_MS);
+  return () => {
+    live = false;
+    cancel();
+  };
 }
 
-/** Closes the account of a call that ended with something to read. */
-export function dismissPiVoice(): void {
-  if (state.status === "ended") update({ ...IDLE });
+/** Keeps a followed call on the selected agent (see `followPiVoice`). */
+export function usePiVoiceFollow(target: PiVoiceFollowTarget): void {
+  const latest = useRef(target);
+  latest.current = target;
+  const { machineId, paneId, agent } = target;
+  // the call's state is no dependency: a call started from a composer outside the selection stays on
+  useEffect(() => followPiVoice(latest.current), [machineId, paneId, agent]);
+}
+
+/** What a call with the Pi in `cwd` is named: the folder's name. */
+export function piVoiceLabel(cwd: string | null | undefined): string {
+  return cwd?.split("/").filter(Boolean).at(-1) ?? "Pi";
 }
 
 /** Asks Pi to mute or unmute; the answer comes back as a `mute` frame, which is what the view shows. */
@@ -320,7 +371,8 @@ export function usePiVoice(): PiVoiceState {
 /** Pi can take a call in this pane: it is Pi's and its bridge answers, on whichever PC it runs (not before a reload of a Pi that started without it). */
 export function usePiVoiceAvailable(paneId: string | null, agent: string | null | undefined): boolean {
   const machineId = useMachineId();
-  const idle = usePiVoice().status === "idle";
+  const status = usePiVoice().status;
+  const idle = status === "idle" || status === "away";
   const [available, setAvailable] = useState(false);
   useEffect(() => {
     if (paneId === null || agent !== "pi" || !idle) {
