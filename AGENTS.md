@@ -112,3 +112,9 @@ to change. Also read [server/AGENTS.md](server/AGENTS.md) and [src/AGENTS.md](sr
   says so in a comment, and any other PR merges on its checks and the maintainer.
 - Changelog entries go in `changelog.d/` fragments ([format](changelog.d/README.md)), not
   CHANGELOG.md; only a release folds them in.
+
+## This fork
+- To put a change on Ricardo's own Ovis (orgo-desktop, `https://orgo-desktop.tailb4e5ae.ts.net:8443`),
+  run `bun scripts/deploy-orgo.ts`. It builds, restarts the server, checks the new bundle from
+  omarchy and restarts the Xiaomi app. Say it's deployed only once it exits 0; when it stops at the
+  Xiaomi, ask Ricardo to swipe Ovis away and reopen it.
