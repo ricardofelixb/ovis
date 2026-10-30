@@ -6,6 +6,7 @@ import {
   MAX_PI_VOICE_FRAME_BYTES,
   parsePhoneFrame,
   parsePiFrame,
+  PI_VOICE_PATH,
   PI_VOICE_STATUS_PATH,
   type PiReady,
   type PiVoice,
@@ -15,6 +16,7 @@ import {
 import { badRequest, jsonResponse, setRequestRoute } from "./http.ts";
 import { type PiVoiceCandidate, piVoiceSocketCandidates } from "./pi.ts";
 import { sameOrigin } from "./machine-security.ts";
+import { authenticatedWebSocket } from "./remote-websocket.ts";
 
 /**
  * Live voice with a Pi pane: this server relays frames between a phone's WebSocket and the unix
@@ -43,12 +45,21 @@ export interface PiVoiceSocketData {
     deviceId: string | undefined;
     /** the voice the phone chose for this call; Pi's own otherwise */
     voice?: PiVoice;
+    /** the PC the pane is on, when it is not this one: the call goes through to that PC's server */
+    machine?: PiVoiceMachine;
     /** frames the phone sent while Pi was still being reached */
     waiting?: string[];
-    relay?: PiVoiceRelay;
+    relay?: PiVoiceRelay | PiVoiceMachineRelay;
     unwatch?: () => void;
     closed?: boolean;
   };
+}
+
+/** Another PC's bridge, reached as the terminal relay reaches it (server/machine-relay.ts). */
+export interface PiVoiceMachine {
+  endpoint: { url: string; token: string };
+  /** ends the call when the PC disconnects; returns the way to stop watching */
+  track: (close: () => void) => () => void;
 }
 
 export interface PiVoiceHubOptions {
@@ -92,12 +103,7 @@ export class PiVoiceRelay {
     this.#now = options.now;
     this.#onEnd = options.onEnd;
     this.#lastSeen = options.now();
-    // Pi pings the phone itself, but a phone that has not started yet answers nothing: the
-    // WebSocket's own ping is what a browser answers without any script running.
-    this.#stopTimer = options.every(() => {
-      if (this.#now() - this.#lastSeen > LEASE_MS) this.#end("closed", true);
-      else this.#phone.ping();
-    }, PING_MS);
+    this.#stopTimer = leaseOf(phone, options, () => this.#lastSeen, () => this.#end("closed", true));
     this.#send(pi, encodePiVoiceFrame(options.voice ? { type: "start", voice: options.voice } : { type: "start" }));
   }
 
@@ -171,6 +177,100 @@ export class PiVoiceRelay {
   }
 }
 
+/**
+ * Pi pings the phone itself, but a phone that has not started yet answers nothing: the WebSocket's
+ * own ping is what a browser answers without any script running. Returns the way to stop.
+ */
+function leaseOf(phone: PiVoiceSocket, clock: { every: (run: () => void, ms: number) => () => void; now: () => number }, lastSeen: () => number, lapsed: () => void): () => void {
+  return clock.every(() => {
+    if (clock.now() - lastSeen() > LEASE_MS) lapsed();
+    else phone.ping();
+  }, PING_MS);
+}
+
+/**
+ * A call with the Pi of a pane on another PC: the frames go to that PC's own `/ws/pi-voice`, whose
+ * server reaches its Pi, sends `start` and keeps one call per pane. They are checked here as well,
+ * so this server forwards only frames it validated.
+ */
+export class PiVoiceMachineRelay {
+  readonly #phone: PiVoiceSocket;
+  readonly #pc: WebSocket;
+  readonly #now: () => number;
+  readonly #stopTimer: () => void;
+  readonly #onEnd: () => void;
+  #waiting: string[] = [];
+  #opened = false;
+  #lastSeen: number;
+  #done = false;
+
+  constructor(phone: PiVoiceSocket, pc: WebSocket, options: { every: (run: () => void, ms: number) => () => void; now: () => number; onEnd: () => void }) {
+    this.#phone = phone;
+    this.#pc = pc;
+    this.#now = options.now;
+    this.#onEnd = options.onEnd;
+    this.#lastSeen = options.now();
+    this.#stopTimer = leaseOf(phone, options, () => this.#lastSeen, () => this.#end("closed", true));
+    pc.onopen = () => {
+      this.#opened = true;
+      for (const text of this.#waiting) pc.send(text);
+      this.#waiting = [];
+    };
+    pc.onmessage = (event) => this.#fromPc(event.data);
+    // a PC whose bridge has no voice yet refuses the upgrade: it closes without having opened
+    pc.onclose = () => this.#end(this.#opened ? "closed" : "unavailable", true);
+  }
+
+  alive(): void {
+    this.#lastSeen = this.#now();
+  }
+
+  fromPhone(message: string | Uint8Array): void {
+    if (this.#done) return;
+    this.alive();
+    let text;
+    try {
+      if (typeof message !== "string") throw new Error("binary frame");
+      text = encodePiVoiceFrame(parsePhoneFrame(message));
+    } catch {
+      this.#end(undefined, false);
+      return;
+    }
+    if (this.#opened) this.#pc.send(text);
+    else if (this.#waiting.length < MAX_WAITING) this.#waiting.push(text);
+    else this.#end(undefined, false);
+  }
+
+  phoneGone(): void {
+    this.#end(undefined, false);
+  }
+
+  #fromPc(data: unknown): void {
+    if (this.#done) return;
+    let frame;
+    try {
+      if (typeof data !== "string") throw new Error("binary frame");
+      frame = parsePiFrame(data);
+      if (frame.type === "ready") throw new Error("ready is the bridge's own");
+    } catch {
+      this.#end("closed", true);
+      return;
+    }
+    this.#phone.send(encodePiVoiceFrame(frame));
+    if (frame.type === "ended") this.#end(undefined, true);
+  }
+
+  #end(code: PiVoiceEndCode | undefined, phoneStillThere: boolean): void {
+    if (this.#done) return;
+    this.#done = true;
+    this.#stopTimer();
+    if (phoneStillThere && code) this.#phone.send(encodePiVoiceFrame({ type: "ended", code }));
+    this.#phone.close();
+    this.#pc.close();
+    this.#onEnd();
+  }
+}
+
 /** Calls to the Pi in a pane, one at a time per pane. */
 export class PiVoiceHub {
   readonly #options: Required<Pick<PiVoiceHubOptions, "readyMs" | "every" | "now">> & PiVoiceHubOptions;
@@ -191,6 +291,10 @@ export class PiVoiceHub {
 
   async open(ws: PiVoiceSocket): Promise<void> {
     const state = ws.data.piVoice;
+    if (state.machine) {
+      this.#openOnMachine(ws, state.machine);
+      return;
+    }
     if (this.#calls.has(state.paneId)) {
       this.#refuse(ws, "busy", false);
       return;
@@ -227,6 +331,18 @@ export class PiVoiceHub {
     const waiting = state.waiting;
     state.waiting = undefined;
     for (const text of waiting) relay.fromPhone(text);
+  }
+
+  /** A call on another PC: that PC's server keeps it one per pane, so nothing is reserved here. */
+  #openOnMachine(ws: PiVoiceSocket, machine: PiVoiceMachine): void {
+    const state = ws.data.piVoice;
+    const unwatchDevice = state.deviceId ? this.#options.onRevoke?.(state.deviceId, () => ws.close()) : undefined;
+    const untrack = machine.track(() => ws.close());
+    state.unwatch = () => { unwatchDevice?.(); untrack(); };
+    const query = new URLSearchParams({ pane_id: state.paneId, ...(state.voice ? { voice: state.voice } : {}) });
+    const url = `${machine.endpoint.url.replace(/^http/, "ws")}${PI_VOICE_PATH}?${query.toString()}`;
+    const pc = authenticatedWebSocket(url, machine.endpoint.token);
+    state.relay = new PiVoiceMachineRelay(ws, pc, { every: this.#options.every, now: this.#options.now, onEnd: () => this.#release(state) });
   }
 
   message(ws: PiVoiceSocket, message: string | Uint8Array): void {
@@ -370,7 +486,7 @@ export async function handlePiVoiceRequest(
   url: URL,
   server: Server<PiVoiceSocketData>,
   hub: PiVoiceHub,
-  caller: { readOnly: boolean; deviceId: string | undefined; headers: Headers },
+  caller: { readOnly: boolean; deviceId: string | undefined; headers: Headers; machine?: PiVoiceMachine },
 ): Promise<Response | undefined> {
   setRequestRoute(url.pathname);
   const paneId = url.searchParams.get("pane_id");
@@ -387,6 +503,6 @@ export async function handlePiVoiceRequest(
   if (!PANE_ID.test(paneId)) return badRequest("invalid_pane_id", "pane_id is not a pane id");
   const voice = url.searchParams.get("voice");
   if (voice !== null && !isPiVoice(voice)) return badRequest("invalid_voice", "voice is not a live voice");
-  if (server.upgrade(request, { headers: caller.headers, data: { piVoice: { paneId, deviceId: caller.deviceId, ...(voice ? { voice } : {}) } } })) return undefined;
+  if (server.upgrade(request, { headers: caller.headers, data: { piVoice: { paneId, deviceId: caller.deviceId, ...(voice ? { voice } : {}), ...(caller.machine ? { machine: caller.machine } : {}) } } })) return undefined;
   return new Response("websocket upgrade required", { status: 426 });
 }

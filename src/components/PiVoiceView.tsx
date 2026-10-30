@@ -2,6 +2,7 @@ import { ChevronDown, Mic, MicOff, PhoneOff } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { useT } from "../lib/i18n.ts";
+import { useMachineId } from "../lib/machineContext.tsx";
 import { useOrbDrag } from "../lib/orbDrag.ts";
 import {
   dismissPiVoice,
@@ -43,8 +44,9 @@ export function PiVoiceView() {
 /** The call's orb over the composer of its pane, while the call is not full-screen. */
 export function PiVoiceDockHost({ paneId }: { paneId: string }) {
   const voice = usePiVoice();
+  const machineId = useMachineId();
   // only once the call is ready to talk, as in the agents app: while it connects, the composer's button shows it
-  const shown = voice.status === "live" && !voice.expanded && voice.paneId === paneId;
+  const shown = voice.status === "live" && !voice.expanded && voice.machineId === machineId && voice.paneId === paneId;
   const leaving = useDockExit(shown, voice);
   usePiVoiceDock(shown || leaving !== null);
   if (shown) return <PiVoiceDock voice={voice} />;

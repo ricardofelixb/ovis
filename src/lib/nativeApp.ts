@@ -6,12 +6,16 @@
 import type { Friend } from "../../shared/friends.ts";
 interface CapacitorBridge {
   isNativePlatform?: () => boolean;
+  /** "ios" or "android" in the app */
   getPlatform?: () => string;
   nativePromise?: (plugin: string, method: string, options?: Record<string, unknown>) => Promise<unknown>;
   nativeCallback?: (plugin: string, method: string, options: Record<string, unknown>, callback: (data: unknown) => void) => string;
-  /** the app's plugins and their methods, as Capacitor's Android bridge lists them */
-  PluginHeaders?: { name: string; methods?: { name: string }[] }[];
+  /** the app's native plugins, announced to the page before its first script runs */
+  PluginHeaders?: ReadonlyArray<{ name?: unknown; methods?: { name: string }[] }>;
 }
+
+/** The app's push plugin: app/ios/App/App/OvisPushPlugin.swift and app/android/ovis-push. */
+export const PUSH_PLUGIN = "OvisPush";
 
 function bridge(): CapacitorBridge | undefined {
   return (globalThis as { Capacitor?: CapacitorBridge }).Capacitor;
@@ -22,12 +26,35 @@ export function inNativeApp(): boolean {
   return bridge()?.isNativePlatform?.() === true;
 }
 
+/** Whether this page runs in Ovis for Mac's own window (app/mac), which names itself in the user agent. */
+export function inMacApp(): boolean {
+  return typeof navigator !== "undefined" && /\bOvisMac\//.test(navigator.userAgent);
+}
+
+/** Whether this page runs inside the Android app, whose WebView draws no menu of its own for a long-pressed link. */
+export function inAndroidApp(): boolean {
+  return inNativeApp() && bridge()?.getPlatform?.() === "android";
+}
+
+/**
+ * Whether the app around this page has the native plugin `name`. An app built before the plugin
+ * existed has not, and on iOS a call to a plugin the app lacks never settles.
+ */
+export function hasNativePlugin(name: string): boolean {
+  return inNativeApp() && (bridge()?.PluginHeaders ?? []).some((header) => header.name === name);
+}
+
+/** Calls `method` of the app's plugin `plugin`; a refusal rejects with the plugin's `code` on the error. */
+export async function callNative<T>(plugin: string, method: string, options: Record<string, unknown> = {}): Promise<T> {
+  const call = bridge()?.nativePromise;
+  if (!call) throw new Error(`this page has no ${plugin} plugin`);
+  return await call(plugin, method, options) as T;
+}
+
 /** Back to the app's list of PCs (app/ios/App/App/HerdrShellPlugin.swift, `disconnect`). */
 export async function changePc(): Promise<void> {
   await bridge()?.nativePromise?.("HerdrShell", "disconnect", {});
 }
-
-const inAndroidApp = (): boolean => inNativeApp() && bridge()?.getPlatform?.() === "android";
 
 /**
  * The Android app makes a live call Android's own phone call (TelecomCall.java), which silences the
@@ -50,9 +77,12 @@ export function openNativeWindow(search: string): void {
   void bridge()?.nativePromise?.("HerdrShell", "openWindow", { url: `${window.location.origin}${window.location.pathname}${search}` })?.catch(() => undefined);
 }
 
-/** The Android app shows alerts itself (HerdrShellPlugin.java): its WebView has no Web Notifications. */
+/**
+ * The Android app shows alerts itself (HerdrShellPlugin.java): its WebView has no Web Notifications.
+ * An app built with the push plugin gets them by push instead.
+ */
 export function nativeAlerts(): boolean {
-  return inAndroidApp();
+  return inAndroidApp() && !hasNativePlugin(PUSH_PLUGIN);
 }
 
 /**

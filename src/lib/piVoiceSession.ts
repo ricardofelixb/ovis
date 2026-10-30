@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from "react";
 
+import { LOCAL_MACHINE } from "../../shared/machines.ts";
 import { encodePiVoiceFrame, parsePiFrame, PI_VOICE_PATH, type PhoneToPiFrame, type PiToPhoneFrame, type PiVoice, type PiVoiceEndCode, type PiVoicePhase } from "../../shared/pi-voice.ts";
 import { fetchPiVoiceStatus } from "./api.ts";
 import { t } from "./i18n.ts";
@@ -28,6 +29,8 @@ export type PiVoiceEnd =
 export interface PiVoiceState {
   /** `idle`: no call; `starting`: reaching Pi; `live`: the call is on; `ended`: over, with `end` to read */
   status: "idle" | "starting" | "live" | "ended";
+  /** the PC the pane is on (shared/machines.ts) */
+  machineId: string;
   paneId: string;
   label: string;
   phase: PiVoicePhase;
@@ -40,7 +43,7 @@ export interface PiVoiceState {
   readyAt: number;
 }
 
-const IDLE: PiVoiceState = { status: "idle", paneId: "", label: "", phase: "connecting", muted: false, assistantText: "", end: null, expanded: false, readyAt: 0 };
+const IDLE: PiVoiceState = { status: "idle", machineId: LOCAL_MACHINE, paneId: "", label: "", phase: "connecting", muted: false, assistantText: "", end: null, expanded: false, readyAt: 0 };
 
 /**
  * How long the microphone stays open once a call ends: the close chime's length. Letting go of it
@@ -86,10 +89,11 @@ function send(frame: PhoneToPiFrame): void {
   if (call?.socket?.readyState === WebSocket.OPEN) call.socket.send(encodePiVoiceFrame(frame));
 }
 
-function callUrl(paneId: string, voice: PiVoice | undefined): string {
+function callUrl(machineId: string, paneId: string, voice: PiVoice | undefined): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const chosen = voice ? `&voice=${voice}` : "";
-  return `${protocol}//${window.location.host}${PI_VOICE_PATH}?pane_id=${encodeURIComponent(paneId)}${chosen}`;
+  const machine = machineId === LOCAL_MACHINE ? "" : `&machine_id=${encodeURIComponent(machineId)}`;
+  return `${protocol}//${window.location.host}${PI_VOICE_PATH}?pane_id=${encodeURIComponent(paneId)}${machine}${chosen}`;
 }
 
 /** Releases the microphone, the speaker, the screen and the socket, and shows how the call ended (null: it simply did). */
@@ -163,10 +167,10 @@ function onFrame(frame: PiToPhoneFrame): void {
  * first frame. Opening it any earlier would leave a prompt that stays open for a minute with
  * nobody listening to Pi giving up on the call.
  */
-function connect(active: Call, paneId: string, voice: PiVoice | undefined): void {
+function connect(active: Call, machineId: string, paneId: string, voice: PiVoice | undefined): void {
   const { stream, audio, audioContext } = active;
   if (!stream) return;
-  const socket = new WebSocket(callUrl(paneId, voice));
+  const socket = new WebSocket(callUrl(machineId, paneId, voice));
   active.socket = socket;
   const media = new BrowserLiveMedia({
     stream,
@@ -202,10 +206,10 @@ function connect(active: Call, paneId: string, voice: PiVoice | undefined): void
  * for, the speaker element and the audio context are made, and the screen kept awake, all
  * before anything is waited for.
  */
-/** Starts a call with the Pi in `paneId`, in `voice` if given and otherwise the one Pi is set to. */
-export function startPiVoice({ paneId, label, voice }: { paneId: string; label: string; voice?: PiVoice }): void {
+/** Starts a call with the Pi in `paneId` on `machineId`, in `voice` if given and otherwise the one Pi is set to. */
+export function startPiVoice({ machineId, paneId, label, voice }: { machineId: string; paneId: string; label: string; voice?: PiVoice }): void {
   if (state.status === "starting" || state.status === "live") return;
-  update({ ...IDLE, status: "starting", paneId, label });
+  update({ ...IDLE, status: "starting", machineId, paneId, label });
   // the opening chime plays once the call is ready to talk; only a tap lets sound start
   primeVoiceChime();
   const getUserMedia = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
@@ -239,7 +243,7 @@ export function startPiVoice({ paneId, label, voice }: { paneId: string; label: 
       started.stream = stream;
       onNativeLiveCallAction((action) => action === "hangup" ? endPiVoice() : setPiVoiceMuted(!state.muted));
       nativeLiveCall({ title: t("Live voice"), body: label, mute: t("Mute"), unmute: t("Unmute") });
-      connect(started, paneId, voice);
+      connect(started, machineId, paneId, voice);
     },
     (error: unknown) => {
       // a refusal reads as one, a missing or busy microphone as that, as dictation tells them apart
@@ -313,19 +317,19 @@ export function usePiVoice(): PiVoiceState {
   return useSyncExternalStore(subscribe, piVoiceState);
 }
 
-/** Pi can take a call in this pane: it is Pi's, on this PC, and its bridge answers (not before a reload of a Pi that started without it). */
+/** Pi can take a call in this pane: it is Pi's and its bridge answers, on whichever PC it runs (not before a reload of a Pi that started without it). */
 export function usePiVoiceAvailable(paneId: string | null, agent: string | null | undefined): boolean {
   const machineId = useMachineId();
   const idle = usePiVoice().status === "idle";
   const [available, setAvailable] = useState(false);
   useEffect(() => {
-    if (paneId === null || agent !== "pi" || machineId !== "local" || !idle) {
+    if (paneId === null || agent !== "pi" || !idle) {
       setAvailable(false);
       return;
     }
     let live = true;
     const ask = () => {
-      void fetchPiVoiceStatus(paneId).then(
+      void fetchPiVoiceStatus(paneId, machineId).then(
         (status) => { if (live) setAvailable(status.available); },
         () => { if (live) setAvailable(false); },
       );
