@@ -52,8 +52,8 @@ export function createStatusHub<Owner, Lease>({ options, devices, preferences, c
     tailnetPresence?: boolean;
     alertTiming?: Partial<AlertTiming>;
     pushLoopbackHttp?: boolean;
-    /** the friend a workspace wears (FriendStore.friendOf), named in push alerts */
-    friendOf?: (machineId: string, workspaceId: string) => Friend;
+    /** the friend an agent pane wears (FriendStore.friendOf), named in push alerts */
+    friendOf?: (machineId: string, paneId: string) => Friend;
     backgroundWait?: { grace: number; limit: number };
     statusNow?: () => number;
     openCodeState?: OpenCodePromptState;

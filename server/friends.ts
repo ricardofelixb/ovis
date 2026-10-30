@@ -7,9 +7,10 @@ const MAX_KEYS = 2000;
 const isFriend = (value: unknown): value is Friend => (FRIENDS as readonly unknown[]).includes(value);
 
 /**
- * Which friend each workspace wears (shared/friends.ts), kept beside preferences.json so every
+ * Which friend each agent pane wears (shared/friends.ts), kept beside preferences.json so every
  * browser of this server shows the same one. A damaged or unreadable file starts over: the picks
- * are only looks.
+ * are only looks. A file from when friends went by workspace (`machine:workspace` keys) is
+ * carried over: a workspace's first agent keeps its friend.
  */
 export class FriendStore {
   private friends: Record<string, Friend> = {};
@@ -25,35 +26,38 @@ export class FriendStore {
     } catch { /* starts empty */ }
   }
 
-  /** Frees the gone workspaces of `machines`, gives each new live one a friend, and answers them all. */
+  /** Frees the gone agent panes of `machines`, gives each new live one a friend, and answers them all. */
   see(live: readonly string[], machines: readonly string[]): FriendsResponse {
     const seen = new Set(live);
     const ownedBy = (key: string) => machines.some((machine) => key.startsWith(`${machine}:`));
     let changed = false;
+    for (const key of seen) if (!this.friends[key]) { this.give(key); changed = true; }
     for (const key of Object.keys(this.friends)) {
       if (!seen.has(key) && ownedBy(key)) { delete this.friends[key]; changed = true; }
-    }
-    for (const key of seen) {
-      if (this.friends[key]) continue;
-      this.friends[key] = this.pick();
-      changed = true;
     }
     if (changed) this.save();
     return { friends: { ...this.friends } };
   }
 
-  /** The friend a live workspace wears, given one now if no browser has shown it yet (an alert names it). */
-  friendOf(machineId: string, workspaceId: string): Friend {
-    const key = friendKey(machineId, workspaceId);
+  /** The friend a live agent pane wears, given one now if no browser has shown it yet (an alert names it). */
+  friendOf(machineId: string, paneId: string): Friend {
+    const key = friendKey(machineId, paneId);
     const worn = this.friends[key];
     if (worn) return worn;
-    const friend = this.pick();
-    this.friends[key] = friend;
+    const friend = this.give(key);
     this.save();
     return friend;
   }
 
-  // the friends nobody wears, else the ones fewest wear: past nine workspaces they repeat evenly
+  // a pane (`machine:workspace:pane`) takes its workspace's friend from an older file, else a new one
+  private give(key: string): Friend {
+    const workspace = key.slice(0, key.lastIndexOf(":"));
+    const kept = workspace.includes(":") ? this.friends[workspace] : undefined;
+    if (kept) delete this.friends[workspace];
+    return this.friends[key] = kept ?? this.pick();
+  }
+
+  // the friends nobody wears, else the ones fewest wear: past nine agents they repeat evenly
   private pick(): Friend {
     const worn = new Map<Friend, number>(FRIENDS.map((friend) => [friend, 0]));
     for (const friend of Object.values(this.friends)) worn.set(friend, (worn.get(friend) ?? 0) + 1);
@@ -68,7 +72,7 @@ export class FriendStore {
   }
 }
 
-/** /api/friends: POST what a browser sees, answered with every workspace's friend. */
+/** /api/friends: POST what a browser sees, answered with every agent pane's friend. */
 export async function handleFriendsRequest(request: Request, store: FriendStore): Promise<Response> {
   if (request.method !== "POST") return jsonResponse({ error: { code: "method_not_allowed", message: "Use POST /api/friends" } }, 405);
   let body: unknown;
