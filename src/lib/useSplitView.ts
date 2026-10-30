@@ -104,7 +104,7 @@ export interface SplitColumn {
   attach: boolean;
 }
 
-export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, selectedPane, selectedMachineId, splitShownRef, health, machineRosterLoaded, endSplit, otherRecheck, otherRosterTick, setSplit, soloSlot, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setOutputStopped, splitRef, selectPane, paneAreaRef, dropTargetRef, clearDropPreview, tabDrag, showDropTarget, setPaneDragging, movingPanes, draggedPaneRef, markSwap, swapPanes }: {
+export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, selectedPane, selectedMachineId, splitShownRef, health, machineRosterLoaded, endSplit, otherRecheck, otherRosterTick, setSplit, soloSlot, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setOutputStopped, splitRef, selectPane, paneAreaRef, dropTargetRef, clearDropPreview, tabDrag, showDropTarget, setPaneDragging, movingPanes, draggedPaneRef, markSwap, swapPanes, sidebarCollapsed, setSidebarCollapsed }: {
   machines: Machine[];
   split: SplitState | null;
   wideScreen: boolean;
@@ -139,6 +139,8 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
   markSwap: (head: HTMLElement | null) => void;
   /** herdr's pane.swap of the dragged pane and another pane of its tab */
   swapPanes: (dragged: SplitTarget, targetPaneId: string) => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: Dispatch<SetStateAction<boolean>>;
 }) {
   // The split view (lib/split.ts): drawn only where the sidebar stands beside the pane, and only
   // while a pane is selected; a narrower window shows the active column alone and keeps the split
@@ -160,8 +162,6 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
   useEffect(() => () => observed.current?.observer.disconnect(), []);
   const fit = areaWidth > 0 ? columnsFit(areaWidth) : 2;
   const shown: SplitSlot[] = splitOn ? shownColumns(split, fit) : [split ? split.active : soloSlot];
-  // a drop opens a new column only while every column is drawn and one more fits
-  const room = !splitOn || (split.order.length === shown.length && shown.length < fit);
 
   const columnOf = (target: SplitTarget): SplitColumn => {
     const machine = machines.find((m) => m.id === target.machineId);
@@ -283,13 +283,21 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
   const dock = (dragged: SplitTarget, drop: SplitDrop): void => {
     if (!wideScreen || selectedPaneId === null) return;
     const result = dockPane(splitOn ? split : null, current(), dragged, drop, soloSlot, shown);
-    if (result) applySplit(result.split, result.select, result.split.active);
+    if (!result) return;
+    applySplit(result.split, result.select, result.split.active);
+    // a new column that needs the docked sidebar's room hides the sidebar, as its button would
+    if (result.split.order.length > fit) setSidebarCollapsed(true);
   };
   /** The drop a point over the pane area would make, if it is over it. */
   const dropOver = (x: number, y: number): SplitDrop | null => {
     const box = paneAreaRef.current?.getBoundingClientRect();
     const inside = !!box && x >= box.left && x < box.right && y >= box.top && y < box.bottom;
-    return box && inside ? dropAt(x, box.left, box.width, splitOn ? shown.length : 1, room, dropTargetRef.current) : null;
+    if (!box || !inside) return null;
+    // a drop opens a new column only while every column is drawn and one more fits, counting the
+    // docked sidebar's width: the drag mostly starts there, and dock hides it for the column
+    const sidebar = sidebarCollapsed ? 0 : document.getElementById("workspace-drawer")?.offsetWidth ?? 0;
+    const room = !splitOn || (split.order.length === shown.length && shown.length < columnsFit(box.width + sidebar));
+    return dropAt(x, box.left, box.width, splitOn ? shown.length : 1, room, dropTargetRef.current);
   };
   /** A pane dropped at a point: the column under it, or a new one at its edge, opens the pane. */
   const dockAt = (dragged: SplitTarget, x: number, y: number): void => {
