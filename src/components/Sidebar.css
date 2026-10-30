@@ -475,35 +475,7 @@ button.sidebar-section-label:focus-visible { outline-offset: calc(var(--ring-off
 .workspace-name { flex: 0 1 auto; }
 
 
-/* As in herdr's sidebar, a top-level git workspace says its branch under its name, on the height of
-   a two-line row; worktrees and folders outside git stay one line. */
-.workspace-header:has(.workspace-copy.is-branch-line) { min-height: var(--side-row-2); }
-
-.workspace-copy.is-branch-line {
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: center;
-  gap: var(--space-1);
-}
-
-.workspace-line {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.workspace-place {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-dim);
-  font-size: var(--fs-xs);
-  line-height: var(--lh-tight);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* a worktree workspace's own name follows its branch on the same line, and gives way first */
+/* a workspace's branch follows its name on the same line, and gives way first */
 .worktree-workspace-label {
   flex: 1 1 0;
   min-width: 0;

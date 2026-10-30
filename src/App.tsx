@@ -9,7 +9,6 @@ import { MachineSessionsProvider } from "./lib/machineSessionContext.tsx";
 import { PaneTerminal } from "./components/PaneTerminal.tsx";
 import { paneCovered, paneContentKey, paneContentPresented } from "./lib/panePresentation.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
-import { worktreeRepoName } from "./lib/composerStrip.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
 import { AgentMark } from "./components/AgentMark.tsx";
 import { HeaderBranch } from "./components/HeaderBranch.tsx";
@@ -19,7 +18,7 @@ import { friendKey } from "../shared/friends.ts";
 import { PiVoiceView } from "./components/PiVoiceView.tsx";
 import { ComputerView } from "./components/ComputerView.tsx";
 import { useComputerView } from "./lib/computerSettings.ts";
-import { DETACHED, useHeaderBranch } from "./lib/paneBranch.ts";
+import { DETACHED, usePaneBranch } from "./lib/paneBranch.ts";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { SetupGuide, SetupGuideResume } from "./components/SetupGuide.tsx";
 import { useSetupGuide } from "./lib/useSetupGuide.ts";
@@ -367,8 +366,8 @@ export function App() {
     ? headerCrumb({ machine: selectedMachine?.name ?? selectedMachineId, machineCount: machines.length, workspace: selectedWorkspace?.label ?? selectedPane.workspace_id, title: selectedTitle, cwd: selectedPane.cwd })
     : null;
 
-  // where the composer drops its folder-and-branch strip (Composer.tsx), the header says the branch
-  const paneBranch = useHeaderBranch(selectedMachineId, selectedPane?.workspace_id ?? null);
+  // the header says the pane's branch under its title, on a phone and a desktop alike
+  const paneBranch = usePaneBranch(selectedMachineId, selectedPane?.workspace_id ?? null);
   const headerBranch = paneBranch === null ? null : paneBranch === DETACHED ? t("Detached HEAD") : paneBranch;
   // the friend the selected agent wears in the agents list, for the header (lib/friends.ts)
   const friends = useAgentFriends(machines);
@@ -931,8 +930,6 @@ export function App() {
                         plan={machine?.state === "connected" ? (item as HerdrPane | undefined)?.plan ?? null : null}
                         backgroundWait={item?.background_wait === true}
                         cwd={item?.cwd ?? null}
-                        workspaceId={item?.workspace_id ?? null}
-                        worktreeRepo={worktreeRepoName(item === null ? undefined : slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item.workspace_id))}
                         machineName={machine?.name ?? machineId}
                         view={item ? lensOf(item) : slotView}
                         // the composer's way to the terminal: the selected pane's lens, or the pane's own remembered one

@@ -1,6 +1,6 @@
 /**
- * The pane's branch as a dim line under its title in the header, no icon, where the composer has no strip
- * to show it (a phone's screen, a touch one). A name cut short is whole in a bubble under it on a
+ * The pane's branch as a dim line under its title in the header, no icon, on every screen.
+ * A name cut short is whole in a bubble under it on a
  * tap; a press anywhere else, a resize or a scroll closes it.
  */
 import { useEffect, useRef, useState } from "react";

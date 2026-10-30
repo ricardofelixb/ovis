@@ -1951,7 +1951,7 @@ button {
   overflow: visible;
 }
 
-/* A phone's header names the pane's branch on a dim line under the title instead of the crumb
+/* The header names the pane's branch on a dim line under the title instead of the crumb
    (HeaderBranch.tsx), lined up with the name: the two lines share the one-line header's height */
 .context.has-branch {
   max-height: none;

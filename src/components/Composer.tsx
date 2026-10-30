@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { ArrowUp, AudioLines, ChevronDown, Cpu, FileText, Folder, FolderGit2, GitBranch, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
+import { ArrowUp, AudioLines, ChevronDown, Cpu, FileText, FolderGit2, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon } from "lucide-react";
 
 import "./Composer.css";
 
@@ -52,7 +52,6 @@ import {
   typedTerminalCommand,
 } from "../lib/compose.ts";
 import { compactCommandText } from "../lib/compactContext.ts";
-import { composerStrip } from "../lib/composerStrip.ts";
 import { composerLabelDraw } from "../lib/composerLabelFit.ts";
 import { composerFull, formatChars, pasteOverflow } from "../lib/composerLength.ts";
 import { normalizeComposerImageFile } from "../lib/composerImageMime.ts";
@@ -114,13 +113,8 @@ export interface ComposerProps {
   /** opens the New tab dialog on this pane's workspace, to start another agent with its model, effort, skills
    * and first message (NewSessionDialog); none: the pane has no workspace to add a tab to */
   onOpenNewSession?: () => void;
-  /** the pane's working folder, named in the strip tucked under the card; nothing is drawn for it while absent */
+  /** the pane's working folder: a live voice call is named after it */
   cwd?: string | null;
-  /** the pane's branch, beside the folder in that strip; nothing is drawn for it while absent */
-  branch?: string | null;
-  /** the workspace is a linked worktree of this repository: the strip names the repository in the folder's
-   * place (the checkout folder is the branch again, with dashes) and says it is a worktree; null: not one */
-  worktreeRepo?: string | null;
   /** true: sent, clear the box; a string: keep the text and say why; a DraftRefusal: the same, and the
    * note offers to send again with `clearDraft`, which clears that draft from the terminal first, or,
    * where it named none, with `sendAnyway`; a promise settles to any of them */
@@ -283,8 +277,6 @@ export function Composer({
   onOpenHistory,
   onOpenNewSession,
   cwd = null,
-  branch = null,
-  worktreeRepo = null,
   onSend,
   onAbort,
   onCommand,
@@ -1146,9 +1138,6 @@ export function Composer({
   const noteLine = note === null ? null : typeof note === "string" ? note : "failure" in note
     ? [note.failure.cause === null ? t("{name} could not be attached", { name: note.attachment.file.name }) : t("{name} could not be attached: {reason}", { name: note.attachment.file.name, reason: note.failure.cause }), note.attachment.leftOut].filter((part) => part !== null).join(" ")
     : note.note;
-  /** the strip under the card: the folder and the branch the caller knows; none, or a phone's screen, no strip */
-  const strip = mobile ? null : composerStrip({ cwd, branch, repo: worktreeRepo });
-  const worktree = worktreeRepo !== null;
   // Fit only changes to drawn content. Streaming context usage is a fixed-size ring unless
   // its number is open on desktop; transcript/status refreshes need no measurement layout.
   useLayoutEffect(fitStatus, [fitStatus, agent, modelId, effort,
@@ -1614,23 +1603,6 @@ export function Composer({
           )}
         </div>
       </div>
-      {/* the strip tucked under the card (t3code's composer context strip): the pane's working folder and its
-          branch, each drawn only when the caller passes it. It only names them; nothing in it is pressed */}
-      {strip !== null && (
-        <div className="composer-strip">
-          {strip.folder !== null && <span className="composer-strip-item composer-strip-folder" title={strip.path ?? undefined}>
-            {worktree ? <FolderGit2 aria-hidden="true" /> : <Folder aria-hidden="true" />}
-            <span className="visually-hidden">{t("Working folder")}: </span>
-            <span className="composer-strip-text">{strip.folder}</span>
-            {worktree && <span className="composer-strip-kind">{t("Worktree")}</span>}
-          </span>}
-          {strip.branch !== null && <span className="composer-strip-item composer-strip-branch" title={strip.branch}>
-            <GitBranch aria-hidden="true" />
-            <span className="visually-hidden">{t("Branch")}: </span>
-            <span className="composer-strip-text">{strip.branch}</span>
-          </span>}
-        </div>
-      )}
       {/* above the whole composer: inside the surface it would cover the text being dictated */}
       {dictation.shown && <VoiceRecordingPill dictation={dictation} align="start" />}
     </div>
