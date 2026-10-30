@@ -5,7 +5,7 @@ import { paneStorageId, type Machine } from "../../shared/machines.ts";
 import { alertPaneTitle } from "../components/Sidebar.tsx";
 import type { Settings } from "./settings.ts";
 import type { SelectionMark } from "./selectionMark.ts";
-import { workspaceFriend } from "./friends.ts";
+import { paneFriend } from "./friends.ts";
 import { shouldNotifyStatus, alertStatus, alertsAllow, paneAlertsMuted, showPaneEndedNotification, showPaneStatusNotification } from "./notifications.ts";
 import { currentPaneMutes, subscribePaneMutes } from "./paneMutes.ts";
 import type { NotificationTarget } from "./notificationTarget.ts";
@@ -54,7 +54,7 @@ export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRe
       machineId: machine.id,
       paneId: pane.pane_id,
       agent: pane.agent ?? null,
-      friend: pane.agent ? workspaceFriend(machine.id, pane.workspace_id) : undefined,
+      friend: pane.agent ? paneFriend(machine.id, pane.pane_id) : undefined,
       title: alertPaneTitle(pane),
       machine: machinesRef.current.length > 1 ? machine.name : null,
       kind,
@@ -113,7 +113,7 @@ export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRe
       dropIn(machine, pane, kind);
       chime(machine, pane, kind);
     }
-    if (pane && !muted && shouldNotifyStatus(previous, status) && alertsOnRef.current && !pushOnRef.current && alertsAllow(alertsRef.current, status)) showPaneStatusNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, status, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id, pane.agent ? workspaceFriend(machine.id, pane.workspace_id) : undefined);
+    if (pane && !muted && shouldNotifyStatus(previous, status) && alertsOnRef.current && !pushOnRef.current && alertsAllow(alertsRef.current, status)) showPaneStatusNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, status, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id, pane.agent ? paneFriend(machine.id, pane.pane_id) : undefined);
   }, []);
   const onPaneExited = useCallback((machine: Machine, message: PaneExitedMessage, takeNotificationTargetRef: TakeNotificationTargetRef) => {
     const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
@@ -124,7 +124,7 @@ export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRe
     }
     if (message.type === "pane-exited" && alertsOnRef.current && !pushOnRef.current && alertsRef.current.done !== "off" && !paneAlertsMuted(currentPaneMutes(), machine.id, message.pane_id)) {
       const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
-      if (pane) showPaneEndedNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id, pane.agent ? workspaceFriend(machine.id, pane.workspace_id) : undefined);
+      if (pane) showPaneEndedNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id, pane.agent ? paneFriend(machine.id, pane.pane_id) : undefined);
     }
   }, []);
   return { dropIn, chime, onRoster, onPaneStatus, onPaneExited };

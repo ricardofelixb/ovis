@@ -7,7 +7,7 @@ import "./AgentFriend.css";
 const picture = (friend: Friend) => new URL(`../assets/friends/${friend}.png`, import.meta.url).href;
 
 /**
- * A workspace's agent friend (agents-app's friends), in place of its agent's mark: it bounces while
+ * An agent's friend (agents-app's friends), in place of its agent's mark: it bounces while
  * the agent works, hops and then waves while a finish waits to be read, and keeps the agent's mark
  * as a badge on its corner. An offline row dims it (AgentFriend.css).
  */

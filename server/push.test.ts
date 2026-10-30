@@ -221,10 +221,10 @@ describe("push delivery", () => {
     expect(received!.vapidClaims.sub).toBe("https://github.com/devswha/ovis");
   });
 
-  it("names the friend of an agent pane's workspace, and none for a plain terminal", async () => {
+  it("names the friend of an agent pane, and none for a plain terminal", async () => {
     const asked: string[] = [];
-    const worn: Record<string, Friend> = { "local:w1": "kuma", "pc-a:w2": "neko" };
-    const push = subscribed({ friendOf: (machineId, workspaceId) => { asked.push(`${machineId}:${workspaceId}`); return worn[`${machineId}:${workspaceId}`]!; } });
+    const worn: Record<string, Friend> = { "local:w1:p1": "kuma", "pc-a:w2:p1": "neko" };
+    const push = subscribed({ friendOf: (machineId, paneId) => { asked.push(`${machineId}:${paneId}`); return worn[`${machineId}:${paneId}`]!; } });
     push.seed([{ ...pane("w1:p1", "working", "claude: x"), agent: "claude" }, pane("w1:p2", "working", "bash")]);
     push.seed([{ ...pane("w2:p1", "working", "pi"), workspace_id: "w2", agent: "pi" }], "pc-a", "Work PC");
     await push.onStatus("w1:p1", "blocked");
@@ -233,7 +233,7 @@ describe("push delivery", () => {
 
     expect(fake.received.map((r) => r.payload.friend)).toEqual(["kuma", "neko", undefined]);
     expect("friend" in fake.received[2]!.payload).toBe(false);
-    expect(asked).toEqual(["local:w1", "pc-a:w2"]);
+    expect(asked).toEqual(["local:w1:p1", "pc-a:w2:p1"]);
   });
 
   it("keeps equal pane IDs, titles, status baselines and push links separated by PC", async () => {

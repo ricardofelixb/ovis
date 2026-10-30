@@ -203,8 +203,8 @@ export interface PushServiceOptions {
   muted?: (machineId: string, paneId: string) => boolean;
   /** accept plain-http loopback endpoints: only for the tests' fake push service (push.fake.ts) */
   loopbackHttp?: boolean;
-  /** The friend a workspace wears (FriendStore.friendOf), named in an agent pane's alert. */
-  friendOf?: (machineId: string, workspaceId: string) => Friend;
+  /** The friend an agent pane wears (FriendStore.friendOf), named in its alert. */
+  friendOf?: (machineId: string, paneId: string) => Friend;
   /** a pane's alert reached one device (the push service took it); not the test push or a pairing notice */
   onAlertDelivered?: () => void;
 }
@@ -639,11 +639,11 @@ export function createPushService(options: PushServiceOptions): PushService {
 
   /**
    * Where an alert's pane is: its PC (absent for this one), the workspace it was last seen in, and
-   * the friend that workspace wears when the pane runs an agent.
+   * the friend the pane wears when it runs an agent.
    */
-  function where(key: string, machineId: string): Pick<PushPayload, "machine_id" | "workspace_id" | "friend"> {
+  function where(key: string, machineId: string, paneId: string): Pick<PushPayload, "machine_id" | "workspace_id" | "friend"> {
     const workspace = workspaces.get(key);
-    const friend = workspace && agentPanes.has(key) ? options.friendOf?.(machineId, workspace) : undefined;
+    const friend = agentPanes.has(key) ? options.friendOf?.(machineId, paneId) : undefined;
     return { ...(machineId === "local" ? {} : { machine_id: machineId }), ...(workspace ? { workspace_id: workspace } : {}), ...(friend ? { friend } : {}) };
   }
 
@@ -875,7 +875,7 @@ export function createPushService(options: PushServiceOptions): PushService {
           const current = store().get(subscription.endpoint);
           return current && current.device_id === subscription.device_id ? [current] : [];
         });
-        await broadcast({ ...statusMessage(paneId, title, status), ...where(key, machineId), tag: paneNotificationTag(paneId, machineId) }, status === "blocked" ? "high" : "normal", live, true);
+        await broadcast({ ...statusMessage(paneId, title, status), ...where(key, machineId, paneId), tag: paneNotificationTag(paneId, machineId) }, status === "blocked" ? "high" : "normal", live, true);
       });
     },
 
@@ -888,7 +888,7 @@ export function createPushService(options: PushServiceOptions): PushService {
       const to = [...store().values()].filter((subscription) => (subscription.alerts ?? DEFAULT_ALERTS).done !== "off");
       if (to.length === 0 || options.inUse?.()) return;
       // the pane may already be gone from herdr: the seeded title is what is left
-      await broadcast({ ...endedMessage(paneId, titles.get(key) ?? paneId), ...where(key, machineId), tag: paneNotificationTag(paneId, machineId) }, "normal", to);
+      await broadcast({ ...endedMessage(paneId, titles.get(key) ?? paneId), ...where(key, machineId, paneId), tag: paneNotificationTag(paneId, machineId) }, "normal", to);
     },
 
     mutesChanged() {

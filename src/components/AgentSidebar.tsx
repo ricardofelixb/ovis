@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Bell, BellOff, Ellipsis, Terminal } from "lucide-react";
+import { Bell, BellOff, Ellipsis, Terminal, X } from "lucide-react";
 
 import { paneStorageId } from "../../shared/machines.ts";
 import { paneTokenValues } from "../../shared/pane-tokens.ts";
 import type { AgentStatus, PlanSummary, SessionSnapshot, TabInfo } from "../../shared/protocol.ts";
 import { currentAgentRowTokens, subscribeAgentRowTokens } from "../lib/agentRowTokens.ts";
 import { useT } from "../lib/i18n.ts";
-import { useMachineId } from "../lib/machineContext.tsx";
+import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { currentPaneMutes, paneMuteKey, prunePaneMutes, setPaneMutes, subscribePaneMutes, togglePaneMute } from "../lib/paneMutes.ts";
 import { agentContext, agentRowName, paneMark, renamedTab, type SidebarAgent } from "../lib/sidebarAgents.ts";
 import { useSettings } from "../lib/settings.ts";
@@ -16,6 +16,7 @@ import { useSidebarFilter } from "../lib/sidebarFilterContext.ts";
 import { PANE_DRAG_TYPE, paneDragData } from "../lib/split.ts";
 import { AgentMark, hasAgentMark } from "./AgentMark.tsx";
 import { AgentFriend } from "./AgentFriend.tsx";
+import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import type { Friend } from "../../shared/friends.ts";
 import { friendKey } from "../../shared/friends.ts";
 import { useFriends } from "../lib/friends.ts";
@@ -119,6 +120,8 @@ export function WorkspaceAgents({ agents, tabs, snapshot, online, selectedPaneId
   const rows = filtered === null ? agents : agents.filter((entry) => filtered.panes.has(entry.pane.pane_id));
   const [menu, setMenu] = useState<AgentMenu | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
+  const { closePane } = useMachineApi();
+  const [closing, setClosing] = useState<{ paneId: string; title: string } | null>(null);
   const menuEntry = menu === null || !online ? undefined : rows.find((entry) => entry.pane.pane_id === menu.paneId);
   // a row that left the list or whose PC stopped connecting takes its menu with it
   useEffect(() => {
@@ -173,7 +176,7 @@ export function WorkspaceAgents({ agents, tabs, snapshot, online, selectedPaneId
           event.dataTransfer.setData(PANE_DRAG_TYPE, paneDragData({ machineId, paneId: pane.pane_id }));
         }}>
         {/* a saved roster's state is not news: a PC that is away says nothing about its agents */}
-        <AgentRowBody mark={mark} friend={friends[friendKey(machineId, entry.workspace.workspace_id)]} markKind={markKind} title={title} name={name} context={context} tokens={tokens} backgroundTasks={online ? pane.background_tasks : 0} plan={online ? pane.plan : undefined} status={online ? activity.status(machineId, pane) : undefined} note={filterContext && selected ? t("Selected") : null} muted={muted?.includes(paneMuteKey(machineId, pane.pane_id)) === true} />
+        <AgentRowBody mark={mark} friend={friends[friendKey(machineId, pane.pane_id)]} markKind={markKind} title={title} name={name} context={context} tokens={tokens} backgroundTasks={online ? pane.background_tasks : 0} plan={online ? pane.plan : undefined} status={online ? activity.status(machineId, pane) : undefined} note={filterContext && selected ? t("Selected") : null} muted={muted?.includes(paneMuteKey(machineId, pane.pane_id)) === true} />
       </button>
       {hasMenu && <div className="agent-actions">
         <button type="button" className="sidebar-row-action row-menu-toggle" aria-label={t("More for {title}", { title })} aria-haspopup="menu" aria-expanded={menuOpen} onClick={(event) => toggleMenu(event.currentTarget)}>
@@ -195,6 +198,14 @@ export function WorkspaceAgents({ agents, tabs, snapshot, online, selectedPaneId
         id: "mute", label: menuMuted ? t("Unmute alerts") : t("Mute alerts"), icon: menuMuted ? Bell : BellOff, checked: menuMuted, disabled: watching,
         run: () => toggleMute(menuEntry.pane.pane_id),
       },
+      // the pane's own close (PaneCanvas), behind the same confirm: the agent stops mid-turn
+      {
+        id: "close", label: t("Close pane"), icon: X, danger: true, divider: true, disabled: watching,
+        run: () => setClosing({ paneId: menuEntry.pane.pane_id, title: menuShown.title }),
+      },
     ]} />}
+    {closing && <ConfirmDialog title={t("Close pane {name}?", { name: closing.title })}
+      body={t("The pane's running processes will stop. Closing its last pane also closes the workspace.")}
+      confirmLabel={t("Close pane")} onClose={() => setClosing(null)} onConfirm={async () => { await closePane(closing.paneId); setClosing(null); }} />}
   </>;
 }

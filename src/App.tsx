@@ -14,7 +14,7 @@ import { AccessGate } from "./components/AccessGate.tsx";
 import { AgentMark } from "./components/AgentMark.tsx";
 import { HeaderBranch } from "./components/HeaderBranch.tsx";
 import { AgentFriend } from "./components/AgentFriend.tsx";
-import { useWorkspaceFriends } from "./lib/friends.ts";
+import { useAgentFriends } from "./lib/friends.ts";
 import { friendKey } from "../shared/friends.ts";
 import { PiVoiceView } from "./components/PiVoiceView.tsx";
 import { ComputerView } from "./components/ComputerView.tsx";
@@ -370,9 +370,9 @@ export function App() {
   // where the composer drops its folder-and-branch strip (Composer.tsx), the header says the branch
   const paneBranch = useHeaderBranch(selectedMachineId, selectedPane?.workspace_id ?? null);
   const headerBranch = paneBranch === null ? null : paneBranch === DETACHED ? t("Detached HEAD") : paneBranch;
-  // the friend the selected pane's workspace wears in the agents list, for the header (lib/friends.ts)
-  const friends = useWorkspaceFriends(machines);
-  const selectedFriend = selectedPane ? friends[friendKey(selectedMachineId, selectedPane.workspace_id)] : undefined;
+  // the friend the selected agent wears in the agents list, for the header (lib/friends.ts)
+  const friends = useAgentFriends(machines);
+  const selectedFriend = selectedPane ? friends[friendKey(selectedMachineId, selectedPane.pane_id)] : undefined;
   useEffect(() => {
     // the PC's host and the pane close the title, for the desktop's scripts (zed-here, screen-here, a Touch Bar)
     const host = selectedMachine?.kind === "local" ? selectedMachine.name : selectedMachine?.target?.destination;

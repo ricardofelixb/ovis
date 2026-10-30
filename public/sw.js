@@ -205,7 +205,7 @@ self.addEventListener("push", (event) => {
     (async () => {
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       const watching = windows.some((client) => client.visibilityState === "visible");
-      // the friend the pane's workspace wears (shared/friends.ts friendPicturePath), else the app's icon
+      // the friend the agent pane wears (shared/friends.ts friendPicturePath), else the app's icon
       const friend = typeof payload.friend === "string" && /^[a-z]+$/.test(payload.friend) ? payload.friend : null;
       await self.registration.showNotification(payload.title || "Ovis", {
         body: payload.body || "",
