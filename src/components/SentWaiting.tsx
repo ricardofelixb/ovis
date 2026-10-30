@@ -43,9 +43,11 @@ export function SentWaitingList({ sends }: { sends: readonly WaitingSend[] }) {
       return <div key={send.id} className="chat-turn chat-turn-user chat-turn-waiting">
         <div className="chat-user-row">
           <div className="chat-bubble"><div className="chat-bubble-body">{chars.length > 160 ? `${chars.slice(0, 160).join("")}…` : send.text}</div></div>
-          {now - send.at >= WAITING_HINT_MS && <div className="chat-turn-meta">
-            <span className="chat-sent-late" role="img" aria-label={late} title={late}><Clock aria-hidden="true" /></span>
-          </div>}
+          {/* the meta row is there from the start, as tall as the turn's own, so the turn takes the
+              bubble's place without moving the chat */}
+          <div className="chat-turn-meta">
+            {now - send.at >= WAITING_HINT_MS && <span className="chat-sent-late" role="img" aria-label={late} title={late}><Clock aria-hidden="true" /></span>}
+          </div>
         </div>
       </div>;
     })}
