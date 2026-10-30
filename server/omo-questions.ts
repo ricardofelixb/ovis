@@ -1,11 +1,10 @@
 import type { HerdrPane } from "../shared/protocol.ts";
 import { omoTranscriptForPane } from "./omo.ts";
-import { piTranscriptPath } from "./pi.ts";
 import { OmoAskReader, omoAsksAfter, type OmoAskCall, type OmoAsks } from "./omo-ask.ts";
 import type { OmoAsk } from "./dialogs/shared.ts";
 
 /** A call's questions, or null for arguments that are not the shape omo asks with. */
-function omoAskOf(call: OmoAskCall): OmoAsk | null {
+export function omoAskOf(call: OmoAskCall): OmoAsk | null {
   const questions = (call.args as { questions?: unknown } | null | undefined)?.questions;
   if (!Array.isArray(questions) || questions.length === 0) return null;
   const ask: OmoAsk = { id: call.id, questions: [], wait: call.wait };
@@ -53,15 +52,6 @@ const omoAskReader = new OmoAskReader();
 export async function omoAsksFor(paneId: string, cwd: string, panes: HerdrPane[]): Promise<OmoAsk[]> {
   const path = await omoTranscriptForPane(paneId, cwd, panes).catch(() => null);
   if (!path) return [];
-  try { return omoAskReader.read(path).flatMap((call) => omoAskOf({ ...call, id: `${path}\0${call.id}` }) ?? []).reverse(); }
-  catch { return []; }
-}
-
-/** pi's own questions (the rpiv-ask-user-question extension): its session records the call as omo's does. */
-export async function piAsksFor(paneId: string): Promise<OmoAsk[]> {
-  const found = await piTranscriptPath(paneId).catch(() => null);
-  if (!found || !("path" in found)) return [];
-  const path = found.path;
   try { return omoAskReader.read(path).flatMap((call) => omoAskOf({ ...call, id: `${path}\0${call.id}` }) ?? []).reverse(); }
   catch { return []; }
 }

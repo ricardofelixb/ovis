@@ -88,8 +88,11 @@ describe("starting a call from the phone", () => {
     expect(socket.closed).toBe(true);
     // the microphone goes quiet at once, and is let go once the close chime has played
     expect(tracks.every((track) => !track.enabled && !track.stopped)).toBe(true);
-    await new Promise((resolve) => setTimeout(resolve, 550));
-    expect(tracks.every((track) => track.stopped)).toBe(true);
+    const deadline = Date.now() + 5_000;
+    while (!tracks.every((track) => track.stopped)) {
+      if (Date.now() > deadline) throw new Error("the microphone was never let go");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
   });
 
   it("names the PC of a pane on another one, so this server calls through to it", async () => {

@@ -178,6 +178,7 @@ public class HerdrShellPlugin extends Plugin {
         }
         PCStore.open(getContext(), origin, text);
         PCStore.failure = null;
+        PCStore.redirects = 0;
         call.resolve();
         reopen(origin);
     }
@@ -201,6 +202,7 @@ public class HerdrShellPlugin extends Plugin {
     @PluginMethod
     public void retry(PluginCall call) {
         PCStore.failure = null;
+        PCStore.redirects = 0;
         call.resolve();
         reopen(window().origin());
     }

@@ -1,7 +1,6 @@
 import type { DialogReader } from "./registry.ts";
-import type { OmoAsk } from "./shared.ts";
 import { pickerPlan } from "./interaction-plan.ts";
-import { ANSI_RE, KEY, PI_MODEL_HINT_RE, PI_ROW_RE, type ParsedPrompt, cleanLine, findLastIndex, finishPrompt, isDivider, keySteps, navigationKeys, piModelRows, wrapped } from "./shared.ts";
+import { ANSI_RE, onePerPass, KEY, PI_MODEL_HINT_RE, PI_ROW_RE, type ParsedPrompt, cleanLine, findLastIndex, finishPrompt, isDivider, keySteps, navigationKeys, own, piModelRows, wrapped } from "./shared.ts";
 
 /**
  * pi draws one menu widget for its dialogs — an extension's `ctx.ui.select`, `confirm` and
@@ -20,11 +19,22 @@ export const PI_MENU_HINT_RE = /\u2191\u2193 navigate\s+enter select\s+esc(?:ape
 export const PI_INPUT_HINT_RE = /enter submit\s+esc(?:ape)?\/ctrl\+c cancel/i;
 
 /**
- * A dialog asked with a timeout counts down in its title (`Init-deep (9s)`) and cancels itself at
- * zero. The card's id reads the title without the count, or an answer tapped a second later
- * would be refused as one to another card.
+ * A dialog asked with a timeout counts down at the end of its title (`Init-deep (9s)`) and cancels
+ * itself at zero. A confirm is a select titled with its title and message on two lines, so there
+ * the count ends the message. The card's id reads the dialog's words without the count, or an
+ * answer tapped a second later would be refused as one to another card. Only the last line can
+ * hold it, alone there when a narrow pane wrapped it (`(10s)` may wrap where `(9s)` fits); a
+ * `(30s)` on an earlier line is the text's.
  */
-const PI_COUNTDOWN_RE = / \(\d+s\)$/;
+const PI_COUNTDOWN_RE = /(?:^|\s)\(\d+s\)$/;
+const uncounted = (words: string[]): string[] => {
+  const last = words.at(-1)?.replace(PI_COUNTDOWN_RE, "");
+  return last ? [...words.slice(0, -1), last] : words.slice(0, -1);
+};
+
+/** the first line is the dialog's own; what follows is a confirm's message, or more of a wrapped line */
+const ownLine = (words: string[]): string => words[0] ?? "";
+const restOf = (words: string[]): string | undefined => words.length > 1 ? words.slice(1).join(" ") : undefined;
 
 /** the line pi types an answer into */
 const PI_INPUT_LINE_RE = /^[\u203a>\u276f]+\s*(.*)$/;
@@ -97,8 +107,8 @@ function parsePiModel(screen: string): ParsedPrompt | null {
   // should know what they are switching from; pi's tick is the only mark that says so
   const current = rows.find((row) => row.current);
   const question = current
-    ? `Select model (currently ${current.label.replace(PI_MODEL_DEFAULT_RE, "")})`
-    : "Select model";
+    ? own("Select model (currently {model})", { model: current.label.replace(PI_MODEL_DEFAULT_RE, "") })
+    : own("Select model");
   return finishPrompt("pi", {
     kind: "question",
     title: "",
@@ -113,44 +123,35 @@ function parsePiModel(screen: string): ParsedPrompt | null {
   });
 }
 
-/**
- * The rpiv-ask-user-question extension's dialog: its key hint, cut short in a narrow pane, so only
- * its start is matched. Its rows read `❯ 1. Label` at the cursor and `  2. Label` elsewhere, with
- * a description wrapped under each and a last `Type something.` row that takes typed text.
- */
-export const PI_ASK_HINT_RE = /Enter to select\s+\u00b7\s+\u2191\/\u2193/;
-const PI_ASK_CURSOR_RE = /^[\u276f\u2771>]\s*(\d+)\.\s/;
-const PI_ASK_CUSTOM = "Type something.";
+export const PI_THINKING_HINT_LINES = 6;
 
-/**
- * The text comes from the call in pi's session (`ask`, as omo's form is read), which no pane
- * width wraps or cuts; the screen gives where the cursor stands. One single-choice question
- * only: a multi-question call has tabs, and a multiple choice ticks rows, which the card does
- * not walk yet, so those stay with the terminal.
- */
-function parsePiAsk(screen: string, ask: OmoAsk | null): ParsedPrompt | null {
-  const question = ask?.questions.length === 1 ? ask.questions[0] : undefined;
-  if (!question || question.multiSelect || question.options.length === 0) return null;
+/** Thinking uses the model selector's footer, but only visibly offered level rows are choices. */
+function parsePiThinking(screen: string): ParsedPrompt | null {
   const lines = screen.replace(ANSI_RE, "").split(/\r?\n/);
-  const hintIndex = findLastIndex(lines, (_, index) => PI_ASK_HINT_RE.test(wrapped(lines, index)));
+  const hintIndex = findLastIndex(lines, (_, index) => PI_MODEL_HINT_RE.test(wrapped(lines, index, PI_THINKING_HINT_LINES)));
   if (hintIndex < 0) return null;
-  const cursorIndex = findLastIndex(lines.slice(0, hintIndex), (line) => PI_ASK_CURSOR_RE.test(cleanLine(line)));
-  if (cursorIndex < 0) return null;
-  const selectedIndex = Number(PI_ASK_CURSOR_RE.exec(cleanLine(lines[cursorIndex]!))![1]) - 1;
-  const custom = question.options.length;
-  if (selectedIndex < 0 || selectedIndex > custom) return null;
+  const headingIndex = findLastIndex(lines.slice(0, hintIndex), (line) => cleanLine(line) === "Thinking Level");
+  if (headingIndex < 0) return null;
+  const filterIndex = lines.findIndex((line, index) => index > headingIndex && index < hintIndex && /^[>›❯](?:\s|$)/.test(cleanLine(line)));
+  if (filterIndex < 0) return null;
+  const rows: { label: string; description: string | null; cursor: boolean; current: boolean }[] = [];
+  for (const line of lines.slice(filterIndex + 1, hintIndex)) {
+    if (!line.trim()) continue;
+    // Arrow = highlight, tick = session level; `· default` belongs to the description only.
+    const row = line.match(/^([→ ]) ([✓ ]) (off|minimal|low|medium|high|xhigh|max)(?: +(.+))?\s*$/);
+    if (!row || rows.some((other) => other.label === row[3])) return null;
+    rows.push({ label: row[3]!, description: row[4]?.trim() || null, cursor: row[1] === "→", current: row[2] === "✓" });
+  }
+  if (rows.length === 0 || rows.filter((row) => row.cursor).length !== 1 || rows.filter((row) => row.current).length > 1) return null;
+  const current = rows.find((row) => row.current);
   return finishPrompt("pi", {
-    kind: "question",
-    title: question.header,
-    question: question.question,
-    body: null,
-    options: [...question.options, { label: PI_ASK_CUSTOM, description: null }],
-    multi_select: false,
-    custom_option_index: custom,
+    kind: "question", title: "", question: current ? own("Select thinking level (currently {level})", { level: current.label }) : own("Select thinking level"),
+    body: null, options: rows.map(({ label, description }) => ({ label, description })),
+    multi_select: false, custom_option_index: null,
   }, {
-    responder: "pi-ask",
-    menuLabels: [...question.options.map((option) => option.label), PI_ASK_CUSTOM],
-    selectedIndex, checkedOptionIndices: [], customMenuIndex: custom, rejectWithEscapeIndex: null,
+    responder: "pi-thinking", menuLabels: rows.map((row) => row.label),
+    selectedIndex: rows.findIndex((row) => row.cursor), checkedOptionIndices: [], customMenuIndex: null,
+    rejectWithEscapeIndex: null,
   });
 }
 
@@ -160,16 +161,15 @@ export function parsePiDialog(screen: string, moved = false): ParsedPrompt | nul
   if (hintIndex < 0) return null;
   const block = piDialogRows(lines, hintIndex);
   if (block.rows.length === 0) return null;
-  // the first line is the dialog's own; what follows is a confirm's message, or more of a wrapped line
-  const title = block.title[0];
-  const body = block.title.length > 1 ? block.title.slice(1).join(" ") : undefined;
   // pi wants text on a `>` line: there is nothing to pick, and the answer is typed into it
   if (PI_INPUT_HINT_RE.test(wrapped(lines, hintIndex))) {
     if (!block.rows.every((row) => PI_INPUT_LINE_RE.test(row.line))) return null;
+    const text = (words: string[]) => ({ title: restOf(words) ?? "", question: ownLine(words) });
     return finishPrompt("pi", {
-      kind: "question", title: body ?? "", question: title ?? "", body: null,
-      options: [{ label: "Type your answer", description: null }], multi_select: false, custom_option_index: 0,
-    }, { responder: "pi-input", menuLabels: [], selectedIndex: 0, checkedOptionIndices: [], customMenuIndex: 0, rejectWithEscapeIndex: null });
+      kind: "question", ...text(block.title), body: null,
+      options: [{ label: own("Type your answer"), description: null }], multi_select: false, custom_option_index: 0,
+    }, { responder: "pi-input", menuLabels: [], selectedIndex: 0, checkedOptionIndices: [], customMenuIndex: 0, rejectWithEscapeIndex: null },
+    text(uncounted(block.title)));
   }
   // every line of the block must be a row, and a row must be a single label: pi sets its
   // command palette out in two columns, and offering those as options would run a slash
@@ -186,11 +186,12 @@ export function parsePiDialog(screen: string, moved = false): ParsedPrompt | nul
   const labels = rows.map((row) => row[2]!.trim());
   const confirming = labels.length === 2 && /^yes\b/i.test(labels[0]!) && /^no\b/i.test(labels[1]!);
   // a select has a title alone: a second line is the rest of it, wrapped
-  const question = confirming ? (body ?? title ?? "") : block.title.join(" ");
+  const text = (words: string[]) => confirming
+    ? { title: ownLine(words), question: restOf(words) ?? ownLine(words) }
+    : { title: "", question: words.join(" ") };
   return finishPrompt("pi", {
     kind: confirming ? "approval" : "question",
-    title: confirming ? (title ?? "") : "",
-    question,
+    ...text(block.title),
     body: null,
     options: labels.map((label) => ({ label, description: null })),
     multi_select: false,
@@ -202,12 +203,20 @@ export function parsePiDialog(screen: string, moved = false): ParsedPrompt | nul
     // "No" is pressed, not cancelled: pi's own Yes/No answers the question false, which is
     // what a confirmation means, where Escape would leave it unanswered
     rejectWithEscapeIndex: null,
-  }, confirming
-    ? { title: (title ?? "").replace(PI_COUNTDOWN_RE, "") }
-    : { question: question.replace(PI_COUNTDOWN_RE, "") });
+  }, text(uncounted(block.title)));
 }
 
+const dialogRead = onePerPass((screen) => parsePiDialog(screen));
+
 export const readers: readonly DialogReader[] = [
+  {
+    id: "pi-thinking", agents: ["pi"], priority: 10,
+    reread: "before-commit", list: "none",
+    interaction: (parsed) => pickerPlan(parsed, parsePiThinking,
+      parsed.options.map((_, index) => keySteps([...navigationKeys(index - parsed.selectedIndex), KEY.enter])),
+      (shown, cursor) => shown.options[cursor]?.label),
+    parse: (screen) => parsePiThinking(screen),
+  },
   {
     id: "pi-model", agents: ["pi"], priority: 10,
     reread: "before-commit", list: "none",
@@ -220,31 +229,26 @@ export const readers: readonly DialogReader[] = [
     },
   },
   {
-    id: "pi-ask", agents: ["pi"], priority: 80,
-    reread: "none", list: "none",
-    parse: (screen, ctx) => parsePiAsk(screen, ctx.omoAsk),
-  },
-  {
     id: "pi-question", agents: ["pi"], priority: 90,
     reread: "none", list: "none",
-    parse: (screen) => {
-      const parsed = parsePiDialog(screen);
+    parse: (screen, ctx) => {
+      const parsed = dialogRead(screen, ctx);
       return parsed?.responder === "pi-question" ? parsed : null;
     },
   },
   {
     id: "pi-confirm", agents: ["pi"], priority: 90,
     reread: "none", list: "none",
-    parse: (screen) => {
-      const parsed = parsePiDialog(screen);
+    parse: (screen, ctx) => {
+      const parsed = dialogRead(screen, ctx);
       return parsed?.responder === "pi-confirm" ? parsed : null;
     },
   },
   {
     id: "pi-input", agents: ["pi"], priority: 90,
     reread: "none", list: "none",
-    parse: (screen) => {
-      const parsed = parsePiDialog(screen);
+    parse: (screen, ctx) => {
+      const parsed = dialogRead(screen, ctx);
       return parsed?.responder === "pi-input" ? parsed : null;
     },
   },

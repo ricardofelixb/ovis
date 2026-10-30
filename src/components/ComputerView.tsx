@@ -168,8 +168,8 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
             setModifiers(NO_STICKY_MODIFIERS);
           }}
           onKey={(item: KeyBarKeyItem) => send(item.key, item.modifiers)}
-          directTyping={!typing} directLabel={t("Keyboard")}
-          onToggleDirect={() => { if (typing) fieldRef.current?.blur(); else fieldRef.current?.focus(); }} />
+          keyboardOwner={`computer:${machineId}`}
+          onToggleKeyboard={() => { if (typing) fieldRef.current?.blur(); else fieldRef.current?.focus(); }} />
       </>}
     </div>
   );

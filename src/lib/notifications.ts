@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from "react";
 import type { AgentStatus } from "../../shared/protocol.ts";
 import { friendPicturePath, type Friend } from "../../shared/friends.ts";
 import { ENDED_NOTIFICATION_BODY, paneNotificationTag, statusNotificationBody } from "../../shared/notify-policy.ts";
-import { nativeAlerts, nativeAlertsState, requestNativeAlerts, showNativeAlert } from "./nativeApp.ts";
+import { callNative, hasNativePlugin, nativeAlerts, nativeAlertsState, PUSH_PLUGIN, requestNativeAlerts, showNativeAlert } from "./nativeApp.ts";
 
 /**
  * Tab alerts: Web Notifications for pane status transitions while this page is open
@@ -11,48 +10,64 @@ import { nativeAlerts, nativeAlertsState, requestNativeAlerts, showNativeAlert }
  * (https or localhost) - a plain-http LAN deployment reports "unsupported", and the bell
  * there switches only the in-app alerts.
  *
+ * The phone app's web view has no Notification either: there the permission is the app's, asked
+ * through its push plugin (lib/nativeApp.ts), and the app shows the server's pushes itself.
+ *
  * The transition policy is shared with the server (shared/notify-policy.ts).
  */
 
-export { alertStatus, alertsAllow, shouldNotifyStatus } from "../../shared/notify-policy.ts";
+export { alertStatus, alertsAllow, paneAlertsMuted, shouldNotifyStatus } from "../../shared/notify-policy.ts";
 
 export type NotificationState = "unsupported" | "default" | "granted" | "denied";
 
-// the Android app answers asynchronously: its last answer, which App asks for on load (syncNotificationState)
+/** The app's permission, the newest of its push plugin's answers (`askApp`); the page cannot read it synchronously. */
+let appPermission: NotificationState = "default";
+// an app without the push plugin shows alerts itself (HerdrShellPlugin): its last answer
 let nativeState: NotificationState = "default";
+/**
+ * Orders the plugin's answers, so an out-of-date one never replaces a newer one. A check counts from
+ * when it was asked: what it read can be older than an answer that overtakes it (the page came back
+ * into view as the user tapped Alerts, and the check answers after the tap's request). A request
+ * counts from when its answer came, as the user gave it then.
+ */
+let turns = 0;
+let answeredTurn = 0;
 
 export function notificationState(): NotificationState {
+  if (hasNativePlugin(PUSH_PLUGIN)) return appPermission;
   if (nativeAlerts()) return nativeState;
   if (typeof globalThis.Notification === "undefined") return "unsupported";
   return globalThis.Notification.permission;
 }
 
-export async function syncNotificationState(): Promise<NotificationState> {
+/**
+ * Capacitor's permission states as the app's push plugin answers them; Android's "prompt-with-rationale"
+ * may still ask. Resolves to the newest permission known, which an answer that overtook this one set.
+ */
+async function askApp(method: "checkPermissions" | "requestPermissions"): Promise<NotificationState> {
+  const asked = method === "checkPermissions" ? ++turns : 0;
+  const { notifications } = await callNative<{ notifications?: string }>(PUSH_PLUGIN, method);
+  const turn = method === "requestPermissions" ? ++turns : asked;
+  if (turn > answeredTurn) {
+    answeredTurn = turn;
+    appPermission = notifications === "granted" ? "granted" : notifications === "denied" ? "denied" : "default";
+  }
+  return appPermission;
+}
+
+/** The app's permission read anew from its push plugin, as the phone's Settings can change it while the page is away; elsewhere notificationState(). */
+export async function refreshNotificationState(): Promise<NotificationState> {
+  if (hasNativePlugin(PUSH_PLUGIN)) return askApp("checkPermissions");
   if (nativeAlerts()) nativeState = await nativeAlertsState();
   return notificationState();
 }
 
 export async function requestNotificationPermission(): Promise<NotificationState> {
+  if (hasNativePlugin(PUSH_PLUGIN)) return askApp("requestPermissions");
   if (nativeAlerts()) return nativeState = await requestNativeAlerts();
   if (typeof globalThis.Notification === "undefined") return "unsupported";
   const permission = await globalThis.Notification.requestPermission();
   return permission === "granted" ? "granted" : permission === "denied" ? "denied" : "default";
-}
-
-/**
- * This browser's alert permission. The Android app's answer comes later than the first frame, and the
- * app asks once on load when alerts are on (they sync, or were on before a reinstall) and nobody asked yet.
- */
-export function useNotificationState(alertsOn: boolean): [NotificationState, (state: NotificationState) => void] {
-  const [state, setState] = useState<NotificationState>(() => notificationState());
-  const asked = useRef(false);
-  useEffect(() => { void syncNotificationState().then(setState); }, []);
-  useEffect(() => {
-    if (!alertsOn || state !== "default" || !nativeAlerts() || asked.current) return;
-    asked.current = true;
-    void requestNotificationPermission().then(setState);
-  }, [alertsOn, state]);
-  return [state, setState];
 }
 
 /**
