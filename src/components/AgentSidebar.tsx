@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Bell, BellOff, ChevronDown, ChevronRight, Columns2, Ellipsis, Pin, PinOff, Terminal } from "lucide-react";
+import { Bell, BellOff, ChevronDown, ChevronRight, Ellipsis, Pin, PinOff, Terminal } from "lucide-react";
 
 import type { Machine } from "../../shared/machines.ts";
 import { paneStorageId } from "../../shared/machines.ts";
@@ -7,8 +7,6 @@ import { paneTokenValues } from "../../shared/pane-tokens.ts";
 import type { AgentStatus, PlanSummary } from "../../shared/protocol.ts";
 import { currentAgentRowTokens, subscribeAgentRowTokens } from "../lib/agentRowTokens.ts";
 import { useT } from "../lib/i18n.ts";
-import { linkSearch } from "../lib/deepLink.ts";
-import { nativeWindows, openNativeWindow } from "../lib/nativeApp.ts";
 import { useAnnouncedText } from "../lib/useAnnouncedText.ts";
 import { agentRoster, type AgentRow } from "../lib/agentRoster.ts";
 import { currentPaneMutes, paneMuteKey, prunePaneMutes, setPaneMutes, subscribePaneMutes, togglePaneMute } from "../lib/paneMutes.ts";
@@ -286,7 +284,6 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
       menuPinned
         ? { id: "unpin", label: t("Unpin agent"), icon: PinOff, run: () => runPin(menu) }
         : { id: "pin", label: t("Pin agent"), icon: Pin, run: () => runPin(menu) },
-      ...(nativeWindows() && menuRow ? [{ id: "new-window", label: t("Open in new window"), icon: Columns2, run: () => openNativeWindow(linkSearch({ machine: menuRow.machine.id, workspace: menuRow.entry.pane.workspace_id, pane: menuRow.entry.pane.pane_id, view: null, settings: null }, window.location.search)) }] : []),
       // one switch for every alert channel and every browser (lib/paneMutes.ts); a watching device sees its state and cannot flip it
       ...(muted === null || menuRow === undefined ? [] : [{
         id: "mute", label: menuMuted ? t("Unmute alerts") : t("Mute alerts"), icon: menuMuted ? Bell : BellOff, checked: menuMuted, disabled: watching,

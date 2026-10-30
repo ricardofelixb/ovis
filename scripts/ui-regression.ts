@@ -2182,7 +2182,7 @@ try {
     await half("left").locator(`.pane-frame[data-layout-pane="${paneA}"]`).getByRole("log").waitFor();
     await half("right").locator(`.pane-frame[data-layout-pane="${paneB}"]`).getByRole("log").waitFor();
     assert.match(await page.evaluate(() => sessionStorage.getItem("ovis:split") ?? ""), /"active":"a"/, "the split is kept for a reload");
-    await half("right").getByRole("button", { name: "Close this half", exact: true }).click();
+    await half("right").getByRole("button", { name: "Close this column", exact: true }).click();
     await until(async () => await page.locator(".pane-slot").count() === 1, "one pane after closing a half");
     assert.equal(await page.evaluate(() => sessionStorage.getItem("ovis:split")), null);
     await page.locator(`.pane-frame[data-layout-pane="${paneA}"]`).getByRole("log").waitFor();

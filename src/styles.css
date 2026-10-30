@@ -1756,9 +1756,9 @@ button {
   padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
 }
 
-/* the pane area: one pane, or two side by side (lib/split.ts). Each half is a pane slot with its
-   own tab strip and terminal; slot b exists only while split, and the halves keep their slots
-   when they trade sides, drawn by order */
+/* the pane area: one pane, or columns side by side (lib/split.ts). Each column is a pane slot with
+   its own tab strip and terminal; the columns keep their slots when others come and go, placed by
+   order (App) */
 .pane-split {
   position: relative;
   display: flex;
@@ -1775,17 +1775,12 @@ button {
   min-height: 0;
 }
 
-.pane-slot[data-side="left"] {
-  order: 0;
+.pane-split.is-split > .pane-slot:not([data-side="right"]) {
   border-right: var(--hairline) solid var(--border-strong);
 }
 
-.pane-slot[data-side="right"] {
-  order: 1;
-}
-
-/* a half's close sits at the end of its tab strip (TabStrip.css); a half with no strip (its pane
-   gone, or crashed) keeps it in a bar of its own. The active half's row carries the accent, as
+/* a column's close sits at the end of its tab strip (TabStrip.css); a column with no strip (its pane
+   gone, or crashed) keeps it in a bar of its own. The active column's row carries the accent, as
    the pane the header, the palette and the shortcuts act on */
 .pane-slot-bar {
   display: flex;
@@ -1828,7 +1823,7 @@ button {
   white-space: nowrap;
 }
 
-/* the half's grip: the free end of its row, which drags its pane to a half (App), with its close */
+/* the column's grip: the free end of its row, which drags its pane to a column (App), with its close */
 .pane-slot-grip {
   display: flex;
   align-items: center;
@@ -1854,7 +1849,7 @@ button {
   height: 14px;
 }
 
-/* the inactive half is a step quieter, so the one keys go to reads at a glance */
+/* the inactive columns are a step quieter, so the one keys go to reads at a glance */
 .pane-slot.is-inactive .terminal-host {
   opacity: 0.88;
 }

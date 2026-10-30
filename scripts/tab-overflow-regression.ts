@@ -100,13 +100,13 @@ export async function checkTabOverflow(browser: Browser, origin: string): Promis
       // a split restored beside the strip, then closed: the strip is drawn as a new node, which
       // the wheel must still reach
       await page.evaluate((other) => {
-        sessionStorage.setItem("ovis:split", JSON.stringify({ other: { machineId: "local", paneId: other }, bSide: "right", active: "a" }));
+        sessionStorage.setItem("ovis:split", JSON.stringify({ order: ["a", "b"], active: "a", panes: { b: { machineId: "local", paneId: other } } }));
       }, few.root_pane.pane_id);
       await page.goto(`${origin}/?pane=${encodeURIComponent(first)}`);
       await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 2, null, { timeout: 15_000 });
       // the split half's own strip is drawn (the roster arrived) before the split closes under it
       await page.locator('.pane-slot[data-side="left"] .tab-strip [role="tab"]', { hasText: /^last-tab$/ }).waitFor({ state: "attached", timeout: 15_000 });
-      await page.locator('.pane-slot[data-side="right"]').getByRole("button", { name: "Close this half", exact: true }).click();
+      await page.locator('.pane-slot[data-side="right"]').getByRole("button", { name: "Close this column", exact: true }).click();
       await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 1 && document.querySelectorAll(".tab-strip").length === 1, null, { timeout: 15_000 });
       await overflowing();
       await wheelScrolls("after a split closed");

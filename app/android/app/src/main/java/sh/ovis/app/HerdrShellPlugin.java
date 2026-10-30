@@ -207,19 +207,6 @@ public class HerdrShellPlugin extends Plugin {
         reopen(window().origin());
     }
 
-    /** url: an address of this window's PC, opened in another window beside this one (MainActivity.openWindow). */
-    @PluginMethod
-    public void openWindow(PluginCall call) {
-        String url = call.getString("url");
-        String own = window().origin();
-        if (url == null || own == null || !own.equals(PCStore.origin(url))) {
-            call.reject("A new window opens only an address of this window's PC.");
-            return;
-        }
-        getActivity().runOnUiThread(() -> window().openWindow(url));
-        call.resolve();
-    }
-
     private MainActivity window() {
         return (MainActivity) getActivity();
     }

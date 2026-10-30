@@ -11,7 +11,7 @@ interface CapacitorBridge {
   nativePromise?: (plugin: string, method: string, options?: Record<string, unknown>) => Promise<unknown>;
   nativeCallback?: (plugin: string, method: string, options: Record<string, unknown>, callback: (data: unknown) => void) => string;
   /** the app's native plugins, announced to the page before its first script runs */
-  PluginHeaders?: ReadonlyArray<{ name?: unknown; methods?: { name: string }[] }>;
+  PluginHeaders?: ReadonlyArray<{ name?: unknown }>;
 }
 
 /** The app's push plugin: app/ios/App/App/OvisPushPlugin.swift and app/android/ovis-push. */
@@ -62,19 +62,6 @@ export async function changePc(): Promise<void> {
  */
 export function nativeCallAudio(): boolean {
   return inAndroidApp();
-}
-
-/**
- * The Android app opens another window of itself (HerdrShellPlugin.openWindow), which Android's
- * split screen and free windows show beside this one. An app built before it lacks the method.
- */
-export function nativeWindows(): boolean {
-  return inAndroidApp() && bridge()?.PluginHeaders?.some((plugin) => plugin.name === "HerdrShell" && plugin.methods?.some((method) => method.name === "openWindow")) === true;
-}
-
-/** Opens `search`, a place's query (lib/deepLink.ts), on this PC in another window of the app. */
-export function openNativeWindow(search: string): void {
-  void bridge()?.nativePromise?.("HerdrShell", "openWindow", { url: `${window.location.origin}${window.location.pathname}${search}` })?.catch(() => undefined);
 }
 
 /**

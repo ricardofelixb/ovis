@@ -1,6 +1,5 @@
 package sh.ovis.app;
 
-import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
@@ -59,11 +58,8 @@ public class MainActivity extends BridgeActivity {
         "  else apply();" +
         "})();";
 
-    /** The PC a window opened beside another (openWindow) shows, and the one a window keeps in its saved state: "" is the connect screen. */
+    /** The PC a window keeps in its saved state: "" is the connect screen. */
     private static final String EXTRA_ORIGIN = "sh.ovis.app.ORIGIN";
-
-    /** The address on that PC a window opened beside another starts at. */
-    private static final String EXTRA_START = "sh.ovis.app.START";
 
     /** This window's PC, an origin; null on the connect screen. */
     private String origin;
@@ -82,15 +78,14 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(HerdrShellPlugin.class);
         // a window keeps its PC through reopen and the app's process being killed (its saved state),
         // so another window choosing a PC leaves it where it is; a window the launcher opens shows
-        // the app's current PC, and one opened beside another the PC it was opened from
-        Intent launch = getIntent();
+        // the app's current PC
         String chosen = savedInstanceState != null && savedInstanceState.containsKey(EXTRA_ORIGIN)
             ? savedInstanceState.getString(EXTRA_ORIGIN)
-            : launch.hasExtra(EXTRA_ORIGIN) ? launch.getStringExtra(EXTRA_ORIGIN) : PCStore.current(this);
+            : PCStore.current(this);
         String origin = chosen == null || chosen.isEmpty() ? null : chosen;
         this.origin = origin;
         // a pairing link (PCStore.open) comes first; startPath drops one of another PC
-        String start = PCStore.pendingStart != null ? PCStore.pendingStart : launch.getStringExtra(EXTRA_START);
+        String start = PCStore.pendingStart;
         String host = origin == null ? null : Uri.parse(origin).getHost();
         if (host != null) {
             boolean debuggable = (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
@@ -395,7 +390,7 @@ public class MainActivity extends BridgeActivity {
         }, "ovis-redirect").start();
     }
 
-    /** The path and query of `start` (a pairing link, a window's place) on `origin`, else the PC's root. */
+    /** The path and query of `start` (a pairing link) on `origin`, else the PC's root. */
     static String startPath(String start, String origin) {
         if (start == null || !origin.equals(PCStore.origin(start))) return "/";
         Uri uri = Uri.parse(start);
@@ -437,16 +432,5 @@ public class MainActivity extends BridgeActivity {
     public void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putString(EXTRA_ORIGIN, origin == null ? "" : origin);
-    }
-
-    /**
-     * Opens `start`, an address of this window's PC, in another window of the app beside this one,
-     * as Chrome's "New window" does: split screen when there is room, else a window of its own in
-     * Recents.
-     */
-    void openWindow(String start) {
-        Intent intent = new Intent(this, MainActivity.class).putExtra(EXTRA_ORIGIN, origin).putExtra(EXTRA_START, start);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_MULTIPLE_TASK | Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT);
-        startActivity(intent);
     }
 }

@@ -3,7 +3,7 @@ import { ArchiveRestore, Columns2, Ellipsis, Eraser, Maximize2, MoveHorizontal, 
 import { createPortal } from "react-dom";
 import type { HerdrPane, PaneLayoutSnapshot, SessionSnapshot } from "../../shared/protocol.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
-import { PANE_DRAG_TYPE, paneDragData, type SplitSide } from "../lib/split.ts";
+import { PANE_DRAG_TYPE, paneDragData } from "../lib/split.ts";
 import { PaneSubmitRetention } from "../lib/paneSubmitRetention.ts";
 import { PaneCachedContext, PanePresentedContext, PaneShownContext, PaneSubmitContext } from "../lib/paneSubmitContext.ts";
 import { cachedPaneCells, visitPaneTab } from "../lib/paneTabCache.ts";
@@ -34,8 +34,8 @@ interface Props {
   renderPane: (pane: HerdrPane | null, active: boolean, split: boolean) => ReactNode;
   /** filled with this canvas's pane actions on each render: a phone's tab menu offers them for the open pane (TabStrip) */
   actionsRef?: MutableRefObject<((target: HerdrPane) => RowMenuItem[]) | null>;
-  /** where the split view can be drawn: a pane opened in a half of it, from its menu or by dragging its title (lib/split.ts) */
-  onOpenInHalf?: (paneId: string, side: SplitSide) => void;
+  /** where the split view can be drawn: a pane's title dragged onto the pane area opens it in a column (lib/split.ts) */
+  titleDrag?: boolean;
   /** the PC's panes are mirrored (no terminal attach there): their grid can be wider than this screen */
   mirrored?: boolean;
   /** opens Recover unsent text for the pane, offered while earlier herdrs' panes left some (UnsentText) */
@@ -62,7 +62,7 @@ interface Drag {
 }
 
 /** The active tab, drawn from herdr's rectangles. No browser-owned layout or PTY state. */
-export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged, renderPane, actionsRef, onOpenInHalf, mirrored = false, onRecoverUnsent }: Props) {
+export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged, renderPane, actionsRef, titleDrag = false, mirrored = false, onRecoverUnsent }: Props) {
   const t = useT();
   const { settings, update: updateSettings } = useSettings();
   const narrowScreen = useMediaQuery(MIRROR_WRAP_QUERY);
@@ -282,7 +282,7 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
           if (event.button === 0 && !paneContextPress(event, apple) && !coarse && titleOrFrame && !element?.closest("button")) {
             // Cancelling pointerdown also cancels the title's native mouse drag.
             // A click focuses below; a drag suppresses that click.
-            if (onOpenInHalf && element?.closest(".pane-frame-head")) return;
+            if (titleDrag && element?.closest(".pane-frame-head")) return;
             // A title has no native focus action. Prevent its default blur and take typing
             // even when this pane was already selected but a menu/tab still held focus.
             event.preventDefault();
@@ -304,9 +304,9 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
           if (paneContextPress(event, apple) && !paneFieldTarget(event.target)) { event.preventDefault(); event.stopPropagation(); }
         }}
         onContextMenuCapture={(event) => context(event, item)}>
-        <div className="pane-frame-head" draggable={onOpenInHalf !== undefined && !coarse}
+        <div className="pane-frame-head" draggable={titleDrag && !coarse}
           onClick={(event) => {
-            if (!onOpenInHalf || coarse || paneContextPress(event, apple) || (event.target instanceof Element && event.target.closest("button"))) return;
+            if (!titleDrag || coarse || paneContextPress(event, apple) || (event.target instanceof Element && event.target.closest("button"))) return;
             const frame = event.currentTarget.parentElement;
             const input = frame?.querySelector<HTMLElement>(".secret-input input")
               ?? frame?.querySelector<HTMLElement>(".find-bar input")
@@ -316,7 +316,7 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
             input?.focus({ preventScroll: true });
           }}
           onDragStart={(event: DragEvent<HTMLDivElement>) => {
-            // dropped on a half of the pane area, the title opens its pane there (App's drop)
+            // dropped on the pane area, the title opens its pane in a column there (App's drop)
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData(PANE_DRAG_TYPE, paneDragData({ machineId, paneId: item.pane_id }));
           }}>
