@@ -1,9 +1,10 @@
-import { type Dispatch, type DragEvent, type RefObject, type SetStateAction, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { type Dispatch, type DragEvent, type RefObject, type SetStateAction, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { HerdrPane, HerdrWorkspace } from "../../shared/protocol.ts";
 import { paneStorageId, type Machine } from "../../shared/machines.ts";
 import { fetchSession, type HealthInfo } from "./api.ts";
 import { activateColumn, closeColumn, columnsFit, dockPane, draggedPane, dropAt, inColumn, PANE_DRAG_TYPE, shownColumns, storedSplit, storeSplit, type SplitDrop, type SplitSlot, type SplitState, type SplitTarget } from "./split.ts";
 import { paneDrag, type PaneDrag } from "./paneDrag.ts";
+import { columnPlaces, slideColumns } from "./columnMotion.ts";
 
 const SELECTION_KEY = "ovis:selection";
 type StoredSelection = { machine_id?: string; pane_id?: string | null };
@@ -162,6 +163,17 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
   useEffect(() => () => observed.current?.observer.disconnect(), []);
   const fit = areaWidth > 0 ? columnsFit(areaWidth) : 2;
   const shown: SplitSlot[] = splitOn ? shownColumns(split, fit) : [split ? split.active : soloSlot];
+  // a change to the columns drawn slides them from where they were (lib/columnMotion.ts): their
+  // places are read just before the change, and a render that drew the same columns forgets them
+  const placesBefore = useRef<Map<string, number> | null>(null);
+  const shownKey = shown.join();
+  const shownBefore = useRef(shownKey);
+  useLayoutEffect(() => {
+    const before = placesBefore.current;
+    placesBefore.current = null;
+    if (before && shownBefore.current !== shownKey) slideColumns(paneAreaRef.current, before);
+    shownBefore.current = shownKey;
+  });
 
   const columnOf = (target: SplitTarget): SplitColumn => {
     const machine = machines.find((m) => m.id === target.machineId);
@@ -199,6 +211,7 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     const open = splitRef.current;
     if (!open || !open.order.includes(slot) || slot === open.active) return;
     const order = open.order.filter((item) => item !== slot);
+    placesBefore.current = columnPlaces(paneAreaRef.current);
     if (order.length < 2) { endSplit(open.active); return; }
     const panes = { ...open.panes };
     delete panes[slot];
@@ -252,6 +265,7 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     const was = splitOn ? split : null;
     const before = after === (was ? was.active : soloSlot) ? current() : was?.panes[after] ?? null;
     if (before === null || before.machineId !== select.machineId) { setConnected(false); setConnectedBefore(false); }
+    placesBefore.current = columnPlaces(paneAreaRef.current);
     if (next === null) endSplit(after); else setSplit(next);
     setSelectedMachineId(select.machineId); setSelectedPaneId(select.paneId); setAutoSelected(keepFocus); setOutputStopped(false);
     storeSelection(select.machineId, select.paneId);
