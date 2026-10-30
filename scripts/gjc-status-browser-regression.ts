@@ -115,7 +115,7 @@ async function conversation(paneId: string): Promise<string> {
 }
 function agentRow(paneId: string) {
   assert.ok(page);
-  return page.locator(`.agents-sidebar .agent-item[data-machine="local"][data-pane="${paneId}"]`);
+  return page.locator(`.workspace-agents .agent-item[data-machine="local"][data-pane="${paneId}"]`);
 }
 // the pane on screen was looked at: its row draws herdr's DONE as ready, as herdr's own client does (#1279)
 let onScreen: string | null = null;
@@ -130,7 +130,7 @@ async function settled(paneId: string, status: Status, start?: number): Promise<
 async function checkpoint(name: string): Promise<void> {
   if (evidenceDirectory && page) {
     await page.screenshot({ path: join(evidenceDirectory, `gjc-status-${name}.png`), fullPage: true });
-    await page.locator(".agents-sidebar").screenshot({ path: join(evidenceDirectory, `gjc-status-${name}-agents.png`) });
+    await page.locator(".machine-list").screenshot({ path: join(evidenceDirectory, `gjc-status-${name}-agents.png`) });
   }
 }
 async function staysDone(paneId: string, start: number): Promise<void> {

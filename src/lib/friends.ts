@@ -11,6 +11,9 @@ let asked = "";
 const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 const current = () => friends;
 
+/** The friends as this browser last heard, for a reader that leaves the asking to App (useWorkspaceFriends). */
+export const useFriends = (): Record<string, Friend> => useSyncExternalStore(subscribe, current, current);
+
 /** The friend a workspace wears, as this browser last heard: for alerts raised in App's event handlers. */
 export const workspaceFriend = (machineId: string, workspaceId: string): Friend | undefined => friends[friendKey(machineId, workspaceId)];
 
@@ -35,5 +38,5 @@ export function useWorkspaceFriends(machines: readonly Machine[]): Record<string
       })
       .catch(() => { if (asked === request) asked = ""; });
   }, [request, ids.length]);
-  return useSyncExternalStore(subscribe, current, current);
+  return useFriends();
 }

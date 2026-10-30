@@ -85,9 +85,6 @@ try {
           await page.goto(`http://127.0.0.1:${server.port}/?pane=${encodeURIComponent(panes.shell)}`);
           if (phone) {
             await page.getByRole("button", { name: "Open workspace list", exact: true }).click();
-            // the phone's drawer starts with Agents folded
-            const toggle = page.locator(".agent-section-toggle");
-            if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
           }
           const label = `${phone ? "phone" : "desktop"} ${rows === "one" ? "One line" : "Two lines"}`;
 
@@ -116,7 +113,7 @@ try {
           assert.equal(sizes.color, sizes.place, "dim as the place");
           if (evidence) {
             mkdirSync(evidence, { recursive: true });
-            await page.locator(".agents-sidebar").screenshot({ path: join(evidence, `tokens-${phone ? "phone" : "desktop"}-${rows}-line.png`) });
+            await page.locator(".machine-list").screenshot({ path: join(evidence, `tokens-${phone ? "phone" : "desktop"}-${rows}-line.png`) });
           }
 
           // a phone's ⋯ sheet says the cut text whole
@@ -168,7 +165,7 @@ try {
           await page.waitForFunction((pane) => document.querySelector(`.agent-list .agent-item[data-pane="${pane}"] .agent-tokens`)?.textContent === "5h 40% · Wk 70%", panes.api);
           await page.evaluate((pane) => (window as unknown as { __tokens: { report(paneId: string, tokens: object): void } }).__tokens.report(pane, { quota: "0% left" }), panes.api);
           await page.waitForFunction((pane) => document.querySelector(`.agent-list .agent-item[data-pane="${pane}"] .agent-tokens`) === null, panes.api);
-          if (evidence && !phone && rows === "one") await page.locator(".agents-sidebar").screenshot({ path: join(evidence, "tokens-desktop-herdr-rows.png") });
+          if (evidence && !phone && rows === "one") await page.locator(".machine-list").screenshot({ path: join(evidence, "tokens-desktop-herdr-rows.png") });
           assert.deepEqual(errors, []);
           console.log(`PASS ${label}: plugin tokens draw a dim line of their own, cut with the whole text in the tooltip${phone ? " and the sheet" : ""}, follow herdr's rows and change live`);
         } finally { await context.close(); }

@@ -4,8 +4,6 @@
  * Register and fixed terms follow ../i18n.ja.ts; a key another feature also uses goes there.
  */
 export const SIDEBAR_JA: Record<string, string> = {
-  "Pin agent": "エージェントを固定",
-  "Unpin agent": "エージェントの固定を解除",
   "Mute alerts": "通知をミュート",
   "Unmute alerts": "通知のミュートを解除",
   "Alerts muted": "通知ミュート中",
@@ -15,9 +13,7 @@ export const SIDEBAR_JA: Record<string, string> = {
   "Background tasks running: {count}": "実行中のバックグラウンドタスク: {count}",
   "Agent waiting on background work": "エージェントがバックグラウンドの作業を待っています",
   "Agent {status}": "エージェント {status}",
-  "Loading agents…": "エージェントを読み込み中…",
   "Herdr workspaces": "herdr ワークスペース",
-  "No agents running": "実行中のエージェントはありません",
   "Expand worktrees of {name}": "{name} のワークツリーを展開",
   "Collapse worktrees of {name}": "{name} のワークツリーを折りたたむ",
   "Agents: {names}": "エージェント: {names}",

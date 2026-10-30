@@ -289,7 +289,6 @@ describe("telemetry settings snapshot", () => {
       theme: "light",
       density: "compact",
       sidebarRows: "one",
-      agentOrder: "activity",
       agentMarks: "mono",
       statusIndicators: "symbols",
       palette: "catppuccin",
@@ -322,7 +321,8 @@ describe("telemetry settings snapshot", () => {
       theme: "light",
       density: "compact",
       sidebarRows: "one",
-      agentOrder: "activity",
+      // the setting is gone; the deployed Worker still expects its key
+      agentOrder: "workspace",
       agentMarks: "mono",
       statusIndicators: "symbols",
       palette: "catppuccin",

@@ -11,10 +11,11 @@ import type { AppActions } from "../lib/actions.ts";
 import { indicatorGlyph, knownStatus, rollupStatus, STATUS_WORD } from "../lib/status.ts";
 import { WorkspaceFavicon } from "./WorkspaceFavicon.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import { WorkspaceAgents } from "./AgentSidebar.tsx";
 import { RowMenu, type RowMenuItem } from "./RowMenu.tsx";
 import { WorktreeDialog, type WorktreeDialogMode } from "./WorktreeDialog.tsx";
 import { focusWorkspaceListToggle } from "../lib/focus.ts";
-import { folderName, shortPathTitle, stripPaneChrome, taskRowLines } from "../lib/paneName.ts";
+import { shortPathTitle, stripPaneChrome } from "../lib/paneName.ts";
 import { ApiError } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
 import { userErrorMessage } from "../lib/userError.ts";
@@ -31,7 +32,7 @@ import { watchTouchReorder } from "../lib/touchReorder.ts";
 import { placeBlock, workspaceMoves, worktreeGroups as groupWorktrees } from "../lib/workspaceOrder.ts";
 import { worktreeLabel } from "../lib/worktreeName.ts";
 import { lastViewedPane, rememberViewedPane } from "../lib/lastViewedPane.ts";
-import { sidebarAgents, workspaceAgentLabels } from "../lib/sidebarAgents.ts";
+import { sidebarAgents, workspaceAgentLabels, type SidebarAgent } from "../lib/sidebarAgents.ts";
 import { PANE_DRAG_TYPE, paneDragData } from "../lib/split.ts";
 import { publishWorkspaceRows, workspaceRows } from "../lib/adjacentTarget.ts";
 import { currentSidebarPins, pinnedGroupIds, pinnedWorkspaceIds, pruneWorkspacePins, reorderWorkspacePins, setSidebarPins, splitPinnedGroups, subscribeSidebarPins, toggleSidebarPin, workspacePinKey, type WorkspaceGroup } from "../lib/sidebarPins.ts";
@@ -140,10 +141,6 @@ export function PlanBadge({ plan }: { plan?: PlanSummary }) {
   );
 }
 
-function cwdBasename(cwd: string | null | undefined): string {
-  return cwd ? folderName(cwd) : "unknown directory";
-}
-
 interface InlineError {
   workspaceId?: string;
   message: string;
@@ -188,8 +185,6 @@ export interface SidebarProps {
  */
 export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = false }: SidebarProps) {
   const t = useT();
-  const { settings } = useSettings();
-  const twoLine = settings.sidebarRows === "two";
   const machineId = useMachineId();
   const activity = useSidebarActivity();
   const { closeWorkspace, listWorktrees, moveWorkspace, removeWorktree, renameWorkspace } = useMachineApi();
@@ -313,6 +308,12 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   const agentRows = useMemo(() => sidebarAgents(snapshot), [snapshot]);
   const agentByPane = useMemo(() => new Map(agentRows.map((entry) => [entry.pane.pane_id, entry])), [agentRows]);
   const agentNames = useMemo(() => workspaceAgentLabels(agentRows), [agentRows]);
+  // each workspace lists its agents under its row, in herdr's tab and pane order
+  const agentsByWorkspace = useMemo(() => {
+    const byWorkspace = new Map<string, SidebarAgent[]>();
+    for (const entry of agentRows) byWorkspace.set(entry.workspace.workspace_id, [...byWorkspace.get(entry.workspace.workspace_id) ?? [], entry]);
+    return byWorkspace;
+  }, [agentRows]);
   // a repository's worktree workspaces hang under one on its main checkout (lib/workspaceOrder.ts)
   const worktreeGroups = useMemo(() => groupWorktrees(orderedWorkspaces), [orderedWorkspaces]);
   // pinned workspaces stand first, in a card, in pin order (shared with the other browsers,
@@ -634,7 +635,9 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     const panes = roster.filter((pane) => pane.workspace_id === workspace.workspace_id);
     if (panes.length === 0) return null;
     const pane = currentPane(workspace, panes);
-    const selected = panes.some((candidate) => candidate.pane_id === selectedPaneId);
+    const agents = agentsByWorkspace.get(workspace.workspace_id) ?? [];
+    // a selected agent's own row under it says so; the workspace row does for its other panes
+    const selected = panes.some((candidate) => candidate.pane_id === selectedPaneId) && !agents.some((entry) => entry.pane.pane_id === selectedPaneId);
     const repoKey = workspace.worktree?.repo_key;
     const linked = workspace.worktree?.is_linked_worktree === true;
     const branch = branches.get(workspace.workspace_id);
@@ -646,7 +649,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     // as herdr's own sidebar: a top-level git workspace says its branch on a second line, while an
     // indented worktree (its name already the branch's), a pinned row (the card stays compact; the
     // branch is in its tooltip and menu) and a folder outside git keep one line
-    const branchLine = !twoLine && !nested && !pinnedIds.includes(workspace.workspace_id) && branchTitle ? branchTitle : null;
+    const branchLine = !nested && !pinnedIds.includes(workspace.workspace_id) && branchTitle ? branchTitle : null;
     // the tooltip and the menu keep the exact branch (its slashes) even where the row does not repeat it
     const branchNote = branchTitle && branchTitle !== workspace.label ? branchTitle : null;
     const paths = [...new Set([workspace.worktree?.checkout_path, pane.cwd].filter((path): path is string => Boolean(path)))];
@@ -654,13 +657,13 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     // and the selected one says so in words; a fold with a match in it stands open while the filter lasts
     const context = filtered !== null && !filtered.matchedWorkspaces.has(workspace.workspace_id);
     const collapsed = children.length > 0 && repoKey !== undefined && worktreesFolded(repoKey, children);
-    // a folded group's parent stands for its worktrees too, as herdr's collapsed parent does:
-    // a checkout that waits or has finished must not hide behind the fold
-    const statusPanes = collapsed ? [...panes, ...children.flatMap((child) => roster.filter((candidate) => candidate.workspace_id === child.workspace_id))] : panes;
-    // on two lines the row says what its pane is doing, and the workspace it has named until now sits under that
-    const lines = twoLine ? taskRowLines({ paneTitle: displayPaneTitle(pane), labelled: Boolean(pane.label?.trim()), folder: cwdBasename(pane.cwd), workspace: rowTitle, alias: secondaryBranch }) : null;
     // a folded group still shows the checkout that is open; the count is of the ones put away
-    const foldedCount = collapsed ? children.filter((child) => !roster.some((candidate) => candidate.workspace_id === child.workspace_id && candidate.pane_id === selectedPaneId)).length : 0;
+    const foldedAway = collapsed ? children.filter((child) => !roster.some((candidate) => candidate.workspace_id === child.workspace_id && candidate.pane_id === selectedPaneId)) : [];
+    const foldedCount = foldedAway.length;
+    // the agent rows under it say their own state: the row says the state of what it does not show, its
+    // panes when no agent row stands for them and, as herdr's collapsed parent does, the worktrees put
+    // away by a fold, so a checkout that waits or has finished does not hide behind it
+    const statusPanes = [...agents.length === 0 ? panes : [], ...foldedAway.flatMap((child) => roster.filter((candidate) => candidate.workspace_id === child.workspace_id))];
     const editingWorkspace = editingWorkspaceId === workspace.workspace_id;
     const fixed = fixedIds.has(workspace.workspace_id) || filtered !== null;
     const filterNote = context && selected ? <span className="sidebar-filter-note">{t("Selected")}</span> : null;
@@ -729,14 +732,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
               if (event.key === "Enter") saveWorkspaceRename(workspace.workspace_id);
               if (event.key === "Escape") setEditingWorkspaceId(null);
             }}
-          /> : lines ? <span className="workspace-copy is-two-line">
-            <span className="workspace-line">
-              <span className="workspace-name">{lines.title}</span>
-              {foldedCount > 0 && <span className="workspace-fold-count" aria-hidden="true">+{foldedCount}</span>}
-              {filterNote}
-            </span>
-            {lines.place && <span className="workspace-place">{lines.place}</span>}
-          </span> : branchLine ? <span className="workspace-copy is-branch-line">
+          /> : branchLine ? <span className="workspace-copy is-branch-line">
             <span className="workspace-line">
               <span className="workspace-name">{rowTitle}</span>
               {foldedCount > 0 && <span className="workspace-fold-count" aria-hidden="true">+{foldedCount}</span>}
@@ -751,7 +747,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
           </span>}
           <span className="sidebar-pane-meta">
             <span className="visually-hidden">{markName(pane)}</span>
-            {online && pane.restore_error ? <RestoreErrorBadge reason={pane.restore_error} /> : <StatusBadge compact status={online ? rollupStatus(statusPanes.map((candidate) => activity.status(machineId, candidate))) : undefined} />}
+            {online && pane.restore_error ? <RestoreErrorBadge reason={pane.restore_error} /> : statusPanes.length > 0 && <StatusBadge compact status={online ? rollupStatus(statusPanes.map((candidate) => activity.status(machineId, candidate))) : undefined} />}
           </span>
         </div>
         <div className="workspace-actions">
@@ -761,6 +757,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
         </div>
       </div>
       {inlineError?.workspaceId === workspace.workspace_id && <p className="sidebar-inline-error" role="alert">{inlineError.message}{inlineError.detail !== null && <><br /><code>{inlineError.detail}</code></>}</p>}
+      <WorkspaceAgents agents={agents} tabs={snapshot?.tabs.filter((tab) => tab.workspace_id === workspace.workspace_id) ?? []} snapshot={snapshot} online={online} selectedPaneId={selectedPaneId} watching={watching} onSelect={actions.selectPane} />
     </li>;
   };
 
@@ -786,7 +783,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   };
 
   return (
-    <div className={`machine-workspaces${twoLine ? " is-two-line" : ""}`} ref={workspaceRoot}>
+    <div className="machine-workspaces" ref={workspaceRoot}>
       <nav className="sidebar-list" aria-label={t("Herdr workspaces")}>
         <>
           <p className={loadingWords === null ? "visually-hidden" : "tree-state"} role="status">{loadingWords}</p>

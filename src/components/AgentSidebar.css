@@ -1,85 +1,45 @@
-/* Agents takes the height of its rows, at most half the sidebar, docked above the footer; the
-   workspace list has the rest. Parted from it by space, not a rule. */
-.agents-sidebar {
-  display: flex;
-  flex: 0 1 auto;
-  flex-direction: column;
-  min-height: 0;
-  max-height: 50%;
-  padding: var(--space-2) var(--side-gutter) 0;
-}
-
-.agents-sidebar.is-collapsed,
-.agents-sidebar.is-empty { flex: 0 0 auto; }
-
-/* A visible Agents list fills the space released by folded PC groups, up to its existing cap. */
-.sidebar-shell:not(:has(.machine-list .machine-workspaces)):has(.agents-sidebar:not(.is-collapsed):not(.is-empty)) .agents-sidebar {
-  flex: 1 1 auto;
-}
-
-/* positioned: a row's visually hidden label is absolute, and must not size the page instead */
-.agent-list-contents {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scroll-padding-bottom: var(--space-4);
-}
-
-.agents-sidebar.is-empty .agent-list-contents { flex: 0 0 auto; }
-
-/* a list that is cut fades out; at the end of its scroll the fade lies over its own spare space */
-.agent-list-contents::after {
-  content: "";
-  position: sticky;
-  bottom: 0;
-  display: block;
-  height: var(--space-4);
-  background: linear-gradient(transparent, var(--bg-panel));
-  pointer-events: none;
-}
-
-.agents-sidebar.is-empty .agent-list-contents::after { display: none; }
-
-.agent-section-toggle {
-  flex: 0 0 auto;
-  width: 100%;
-  cursor: pointer;
-}
-
-/* the fold's caret hangs in the leading cell and shows when it is of use */
-.agent-section-caret {
-  flex: none;
-  width: var(--space-4);
-  height: var(--space-4);
-  margin-inline: calc((var(--side-box) - var(--space-4)) / 2);
-  opacity: 0;
-}
-
-.agent-section-toggle:focus-visible .agent-section-caret,
-.agents-sidebar.is-collapsed .agent-section-caret { opacity: 1; }
-
-@media (hover: hover) {
-  .agent-section-toggle:hover .agent-section-caret { opacity: 1; }
-}
-
-/* a folded list still says how many agents it holds */
-.agent-section-count {
-  width: var(--side-box);
-  margin-left: auto;
-  font-size: var(--fs-xs);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-
 .agent-list {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* Pinned agents stand first in a card (Sidebar.css); the Agents head stays the list's only head. */
+/* A workspace's agents hang under its row, one indent level in, on herdr's dim branch as a linked
+   worktree hangs under its repository (Sidebar.css): a tee for each but the last, an elbow for the
+   last unless the repository's worktrees follow. A worktree's agents sit one level further in. The
+   fill stays as wide as the list and the row's content moves. */
+.workspace-agents {
+  --agent-indent: var(--side-box);
+}
+
+.worktree-children .workspace-agents { --agent-indent: calc(2 * var(--side-box)); }
+
+.workspace-agents > .agent-item { padding-left: var(--agent-indent); }
+
+.workspace-agents > .agent-item::before,
+.workspace-agents > .agent-item::after {
+  position: absolute;
+  left: calc(var(--agent-indent) - var(--side-box) / 2);
+  content: "";
+  background: var(--border-strong);
+  pointer-events: none;
+}
+
+.workspace-agents > .agent-item::before {
+  top: 0;
+  bottom: 0;
+  width: var(--hairline);
+}
+
+.workspace-agents > .agent-item:last-child::before { bottom: 50%; }
+
+.workspace-group:has(+ .worktree-children:not([hidden])) > .workspace-agents > .agent-item:last-child::before { bottom: 0; }
+
+.workspace-agents > .agent-item::after {
+  top: 50%;
+  width: calc(var(--side-box) / 2 - var(--space-1));
+  height: var(--hairline);
+}
 
 /* The agent row selects its pane; its ⋯ (or a right-click) opens its pin menu. */
 /* The trailing padding keeps the state cell, which the row draws at its right edge after the ⋯, as
@@ -116,33 +76,30 @@
   .agent-item:has(> .agent-row:enabled):hover { background: var(--side-hover); }
 }
 
-/* as a selected workspace row's (Sidebar.css): its leading stroke, not the fill, is what reads as selected */
-.agent-item.is-selected {
-  background: var(--side-selected);
-  box-shadow: inset calc(2 * var(--hairline)) 0 0 var(--text-dim);
+/* The selected row's own branch is its cue, bright and as wide as a workspace row's stroke, instead
+   of a stroke beside it; the fill is the whole row's. */
+.agent-item.is-selected { background: var(--side-selected); }
+
+.workspace-agents > .agent-item.is-selected::before {
+  width: 0;
+  border-left: calc(2 * var(--hairline)) solid var(--text-dim);
+  background: none;
 }
 
-/* as a workspace row's: the selection's stroke continues inside the focus ring that covers the leading edge */
-.agent-item.is-selected:has(> .agent-row:focus-visible) {
-  box-shadow: inset calc(var(--ring-offset) + 2 * var(--hairline)) 0 0 var(--text-dim);
+.workspace-agents > .agent-item.is-selected::after {
+  height: calc(2 * var(--hairline));
+  background: var(--text-dim);
 }
 
-/* as a workspace row's in forced colors (Sidebar.css): a Highlight leading bar instead of the dropped stroke,
-   drawn inside the row, since the list scrolls and would clip anything pulled into its edge; beside the focus
-   ring, which the row's button draws over its leading edge, rather than under it */
+/* forced colors drop the fill and the tree's lines: the branch stays, in Highlight */
 @media (forced-colors: active) {
-  .agent-item.is-selected::before {
-    position: absolute;
-    inset: 0;
-    border-inline-start: calc(2 * var(--hairline)) solid Highlight;
-    border-radius: inherit;
-    content: "";
-    pointer-events: none;
+  .workspace-agents > .agent-item.is-selected::before,
+  .workspace-agents > .agent-item.is-selected::after {
+    forced-color-adjust: none;
+    border-left-color: Highlight;
   }
 
-  .agent-item.is-selected:has(> .agent-row:focus-visible)::before {
-    inset-inline-start: var(--ring-offset);
-  }
+  .workspace-agents > .agent-item.is-selected::after { background: Highlight; }
 }
 
 /* As a workspace row's: the ⋯ takes no room until the row is hovered, focused, selected or its
@@ -235,18 +192,18 @@
 /* Settings -> Sidebar rows -> One line: a workspace row's height, the place dim after the title.
    The title keeps its width first; the place takes what is left and gives way with an ellipsis.
    A pane's plugin tokens add their line under it. */
-.agents-sidebar.is-one-line .agent-row { min-height: var(--side-row); }
+.workspace-agents.is-one-line .agent-row { min-height: var(--side-row); }
 
-.agents-sidebar.is-one-line .agent-main {
+.workspace-agents.is-one-line .agent-main {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
   min-width: 0;
 }
 
-.agents-sidebar.is-one-line .agent-title-line { flex: 0 1 auto; }
+.workspace-agents.is-one-line .agent-title-line { flex: 0 1 auto; }
 
-.agents-sidebar.is-one-line .agent-context {
+.workspace-agents.is-one-line .agent-context {
   flex: 1 1 0;
   min-width: 0;
 }
@@ -297,8 +254,6 @@
 }
 
 @media (pointer: coarse) {
-  .agent-section-caret { opacity: 1; }
-
   /* Row menus stay visible on touch. */
   .agent-actions {
     width: auto;

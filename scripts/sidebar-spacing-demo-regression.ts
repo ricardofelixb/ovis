@@ -1,6 +1,6 @@
 /**
- * Purpose: verify sidebar spacing when PC groups fold in a real browser, and that picking an agent of a folded PC
- * keeps its fold. The demo's roster is rewritten into two PCs (the Host "Laptop" and "Work PC"): a lone Host is
+ * Purpose: verify sidebar spacing when PC groups fold in a real browser, their agents folding with them.
+ * The demo's roster is rewritten into two PCs (the Host "Laptop" and "Work PC"): a lone Host is
  * drawn without its header and has no fold (MachineSidebar.tsx).
  * Tags: sidebar, spacing, responsive, browser, regression.
  * Usage: bun scripts/sidebar-spacing-demo-regression.ts
@@ -54,8 +54,8 @@ const twoPcs = `(() => {
 })();`;
 
 /**
- * Closes every demo workspace that runs an agent, through the demo's own API, so the Agents list
- * says "No agents running" while the shell workspace keeps the PC's own list in place.
+ * Closes every demo workspace that runs an agent, through the demo's own API, so no agent row is
+ * left while the shell workspace keeps the PC's own list in place.
  */
 const closeAgentWorkspaces = (page: Page) => page.evaluate(async () => {
   for (let closed = 0; closed < 32; closed++) {
@@ -105,53 +105,21 @@ try {
       if (mobile) await page.locator(".drawer-toggle").tap();
       const machineToggles = page.locator(".machine-toggle");
       const machineToggle = machineToggles.first();
-      const agentToggle = page.locator(".agents-sidebar .agent-section-toggle");
       await machineToggles.nth(1).waitFor();
-      if (empty) await page.locator(".agents-sidebar.is-empty .agent-empty").waitFor({ state: "attached" });
-      if (await agentToggle.getAttribute("aria-expanded") !== "true") await agentToggle.click();
-      const before = await page.locator(".agents-sidebar .agent-title").allTextContents();
-      assert.equal(before.length > 0, !empty, `${label} ${empty ? "has no agent rows" : "has agent rows"} before folding`);
+      const agentRows = await page.locator(".workspace-agents .agent-title").count();
+      assert.equal(agentRows > 0, !empty, `${label} ${empty ? "has no agent rows" : "has agent rows"} before folding`);
       assert.equal(await machineToggle.getAttribute("aria-expanded"), "true");
 
       for (const toggle of await machineToggles.all()) await toggle.click();
       await page.waitForFunction(() => !document.querySelector(".machine-workspaces"));
+      assert.equal(await page.locator(".workspace-agents").count(), 0, `${label} a folded PC folds its agents with it`);
       const metrics = await page.evaluate(() => {
-        const box = (selector: string) => document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
-        const shell = box(".sidebar-shell")!;
-        const machine = [...document.querySelectorAll<HTMLElement>(".machine-group")].at(-1)!.getBoundingClientRect();
-        const list = box(".machine-list")!;
-        const agents = box(".agents-sidebar")!;
-        const contents = document.querySelector<HTMLElement>(".agent-list-contents")!;
-        const footer = box(".sidebar-footer")!;
-        return {
-          shellHeight: shell.height,
-          machineBottom: machine.bottom,
-          listBottom: list.bottom,
-          agentsTop: agents.top,
-          agentsHeight: agents.height,
-          contentsOverflow: getComputedStyle(contents).overflowY,
-          footerBottom: footer.bottom,
-          shellBottom: shell.bottom,
-        };
+        const box = (selector: string) => document.querySelector<HTMLElement>(selector)!.getBoundingClientRect();
+        const [first, second] = [...document.querySelectorAll<HTMLElement>(".machine-group")].map((group) => group.getBoundingClientRect());
+        return { machineGap: second!.top - first!.bottom, footerBottom: box(".sidebar-footer").bottom, shellBottom: box(".sidebar-shell").bottom };
       });
-      assert.ok(metrics.agentsTop - metrics.machineBottom <= spacing, `${label} folded PC gap is ${metrics.agentsTop - metrics.machineBottom}px`);
-      assert.ok(metrics.listBottom - metrics.machineBottom <= spacing, `${label} folded list padding is ${metrics.listBottom - metrics.machineBottom}px`);
-      assert.ok(metrics.agentsHeight <= metrics.shellHeight / 2 + 1, `${label} Agents keeps its half-sidebar cap`);
-      assert.equal(metrics.contentsOverflow, "auto", `${label} Agents keeps scroll ownership`);
+      assert.ok(metrics.machineGap <= spacing, `${label} folded PC gap is ${metrics.machineGap}px`);
       assert.equal(Math.round(metrics.footerBottom), Math.round(metrics.shellBottom), `${label} footer stays at the bottom`);
-      assert.deepEqual(await page.locator(".agents-sidebar .agent-title").allTextContents(), before, `${label} agent order is unchanged`);
-      // Agents is global to the sidebar: a pane picked from it on a folded PC opens, and the PC stays folded
-      // (a phone's pick closes the drawer, so the desktop checks it)
-      if (!mobile && !empty) {
-        const agent = page.locator('.agents-sidebar .agent-item[data-machine="local"] .agent-select').first();
-        await agent.click();
-        await page.locator('.agents-sidebar .agent-item[data-machine="local"] .agent-select[aria-current="true"]').waitFor();
-        assert.deepEqual(await machineToggles.evaluateAll((toggles) => toggles.map((toggle) => toggle.getAttribute("aria-expanded"))), ["false", "false"], `${label} picking an agent keeps its PC folded`);
-      }
-
-      await agentToggle.click();
-      assert.equal(await agentToggle.getAttribute("aria-expanded"), "false");
-      assert.equal(await page.locator(".agent-list-contents").getAttribute("hidden"), "");
       console.log(`PASS ${label} sidebar spacing after folding the PC section`);
       await context.close();
     } finally {
