@@ -23,10 +23,8 @@ import { applyThemeEntry, DARK_QUERY, readStoredAppearance, resolveTheme, saniti
 export { resolveTheme };
 export type { ResolvedTheme, ThemeSetting };
 export type Density = "compact" | "comfortable";
-/** One line names the workspace; two lines say what its pane is doing, with the workspace under it. */
+/** One line puts an agent row's details after its name; two lines put them under it. */
 export type SidebarRows = "one" | "two";
-/** the Agents list's order: herdr's workspace order, or a waiting agent first and then the latest change */
-export type AgentOrder = "workspace" | "activity";
 /** how agent logos are drawn: in their brand colors, or without color: Claude's in the text color, the others in grey (data-marks on <html>) */
 export type AgentMarks = "color" | "mono";
 /** what the plan meters count: the share of a limit used, or what is left of it */
@@ -86,8 +84,6 @@ export interface Settings {
   /** the Filter field above the sidebar's lists (components/MachineSidebar.tsx); off, the command palette's
    *  Filter workspaces and agents still opens it for the time it holds words or the focus */
   sidebarFilter: boolean;
-  /** The Agents list's order. Activity is display-only: herdr's own order never changes. */
-  agentOrder: AgentOrder;
   /** Agent logos: brand colors, or without color, so a list of one agent is not a stripe of tiles */
   agentMarks: AgentMarks;
   /** the sidebar's state marks: this app's own, or herdr's dots or symbols, as its `[ui] status_indicators` (lib/status.ts) */
@@ -238,7 +234,8 @@ export function telemetrySettingsSnapshot(settings: Settings): TelemetrySettings
     theme: settings.theme,
     density: settings.density,
     sidebarRows: settings.sidebarRows,
-    agentOrder: settings.agentOrder,
+    // agents sit under their workspace in herdr's order: the deployed Worker still expects the key
+    agentOrder: "workspace",
     agentMarks: settings.agentMarks,
     statusIndicators: settings.statusIndicators,
     palette: settings.palette,
@@ -294,7 +291,7 @@ export function telemetrySettingsSnapshot(settings: Settings): TelemetrySettings
  * must be placed here, or the build fails; when in doubt it is the device's.
  */
 export const SETTING_SCOPE = {
-  theme: "shared", palette: "shared", darkTheme: "shared", lightTheme: "shared", language: "shared", sidebarRows: "shared", agentOrder: "shared",
+  theme: "shared", palette: "shared", darkTheme: "shared", lightTheme: "shared", language: "shared", sidebarRows: "shared",
   agentMarks: "shared", autoSendQueued: "shared", showThinking: "shared", quickReplies: "shared",
   showQuickReplies: "shared", showUsage: "shared", usageCount: "shared",
   usageGlance: "shared", usageOrder: "shared", usageHidden: "shared", defaultView: "device", suggestionChip: "device",
@@ -336,7 +333,6 @@ export const DEFAULT_SETTINGS: Settings = {
   density: "comfortable",
   sidebarRows: "one",
   sidebarFilter: true,
-  agentOrder: "workspace",
   agentMarks: "color",
   statusIndicators: "classic",
   palette: DEFAULT_THEME,
@@ -519,7 +515,6 @@ export function sanitizeSettings(raw: unknown): Settings {
     density: density === "compact" || density === "comfortable" ? density : DEFAULT_SETTINGS.density,
     sidebarRows: record["sidebarRows"] === "one" || record["sidebarRows"] === "two" ? record["sidebarRows"] : DEFAULT_SETTINGS.sidebarRows,
     sidebarFilter: typeof record["sidebarFilter"] === "boolean" ? record["sidebarFilter"] : DEFAULT_SETTINGS.sidebarFilter,
-    agentOrder: record["agentOrder"] === "workspace" || record["agentOrder"] === "activity" ? record["agentOrder"] : DEFAULT_SETTINGS.agentOrder,
     agentMarks: record["agentMarks"] === "color" || record["agentMarks"] === "mono" ? record["agentMarks"] : DEFAULT_SETTINGS.agentMarks,
     statusIndicators: record["statusIndicators"] === "classic" || record["statusIndicators"] === "dots" || record["statusIndicators"] === "symbols" ? record["statusIndicators"] : DEFAULT_SETTINGS.statusIndicators,
     darkTheme,

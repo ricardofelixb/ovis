@@ -5,10 +5,11 @@ import { create, type ReactTestRenderer } from "react-test-renderer";
 import type { Machine } from "../../shared/machines.ts";
 import machinesFixture from "../../site/demo/fixtures/machines.json";
 import { currentAgentRowTokens, setAgentRowTokens } from "../lib/agentRowTokens.ts";
+import { MachineContext } from "../lib/machineContext.tsx";
+import { currentPaneMutes, setPaneMutes } from "../lib/paneMutes.ts";
 import { SettingsProvider } from "../lib/settings.ts";
-import type { SidebarFilter } from "../lib/sidebarFilter.ts";
-import { SidebarFilterProvider } from "../lib/sidebarFilterContext.ts";
-import { AgentSidebar } from "./AgentSidebar.tsx";
+import { sidebarAgents } from "../lib/sidebarAgents.ts";
+import { WorkspaceAgents } from "./AgentSidebar.tsx";
 
 const fixture: Machine[] = JSON.parse(JSON.stringify(machinesFixture.machines));
 const paneId = "w1C:p1";
@@ -23,18 +24,22 @@ function roster(tokens: Record<string, string> = { quota: "95%" }): Machine[] {
   }));
 }
 
-describe("AgentSidebar phone sheet live row", () => {
+describe("WorkspaceAgents phone sheet live row", () => {
   const descriptors = new Map<string, PropertyDescriptor | undefined>();
   let renderer: ReactTestRenderer | undefined;
   let historyState: unknown;
   let steppedBack: Promise<void>;
   let originalTokens: ReturnType<typeof currentAgentRowTokens>;
+  let originalMutes: ReturnType<typeof currentPaneMutes>;
   // RowMenu asks the anchor whether it sits inside a dialog; this row is not in one.
   const anchor = { isConnected: true, focus() {}, querySelector: () => null, closest: () => null };
 
   beforeEach(() => {
     originalTokens = currentAgentRowTokens();
     setAgentRowTokens(null);
+    // a server that keeps the shared mutes: the row offers its menu
+    originalMutes = currentPaneMutes();
+    setPaneMutes([]);
     for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) {
       descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     }
@@ -76,6 +81,7 @@ describe("AgentSidebar phone sheet live row", () => {
     // leaveSheet schedules history cleanup; await that signal before restoring window.
     if (historyState !== null) await steppedBack;
     setAgentRowTokens(originalTokens);
+    setPaneMutes(originalMutes);
     for (const [key, descriptor] of descriptors) {
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
@@ -83,9 +89,15 @@ describe("AgentSidebar phone sheet live row", () => {
     descriptors.clear();
   });
 
-  const view = (machines: Machine[]) => <SettingsProvider>
-    <AgentSidebar machines={machines} selectedMachineId="local" selectedPaneId={paneId} stateWord={(machine) => machine.state} onSelect={() => {}} />
-  </SettingsProvider>;
+  // the agents of the selected pane's workspace on the local PC, as its workspace row draws them
+  const view = (machines: Machine[]) => {
+    const machine = machines.find((candidate) => candidate.id === "local");
+    const snapshot = machine?.snapshot ?? null;
+    const agents = sidebarAgents(snapshot).filter((entry) => entry.workspace.workspace_id === "w1C");
+    return <SettingsProvider><MachineContext.Provider value="local">
+      <WorkspaceAgents agents={agents} tabs={snapshot?.tabs ?? []} snapshot={snapshot} online={machine?.state === "connected"} selectedPaneId={paneId} watching={false} onSelect={() => {}} />
+    </MachineContext.Provider></SettingsProvider>;
+  };
 
   async function open() {
     await act(async () => {
@@ -131,24 +143,8 @@ describe("AgentSidebar phone sheet live row", () => {
     expect(mounted.root.findAllByProps({ className: "row-sheet-detail" })).toHaveLength(0);
   });
 
-  for (const state of ["connecting", "reconnecting"] as const) {
-    it(`keeps the sheet open when its PC briefly enters ${state} then recovers`, async () => {
-      // Given an open sheet whose row and anchor will remain present.
-      const { mounted, row, update } = await open();
-      // When a transient connection state is followed by a recovered roster.
-      await update(roster().map((machine) => ({ ...machine, state })));
-      expect(mounted.root.findAllByProps({ role: "dialog" })).toHaveLength(1);
-      expect(row().findByProps({ className: "sidebar-row-action row-menu-toggle" }).props["aria-expanded"]).toBe(true);
-      expect(row().findAllByProps({ className: "agent-tokens" })).toHaveLength(0);
-      expect(mounted.root.findAllByProps({ className: "row-sheet-detail" })).toHaveLength(0);
-      await update(roster({ quota: "40%" }));
-      // Then the same open sheet resumes showing the row's current values.
-      expect(mounted.root.findAllByProps({ role: "dialog" })).toHaveLength(1);
-      expect(mounted.root.findByProps({ className: "row-sheet-detail" }).children).toEqual(["40%"]);
-    });
-  }
-
-  for (const state of ["disconnected", "error"] as const) {
+  // its rows sit in the PC's group, which an offline PC makes inert: any state but connected closes the sheet
+  for (const state of ["connecting", "reconnecting", "disconnected", "error"] as const) {
     it(`closes the sheet when its PC enters ${state} with a cached roster`, async () => {
       // Given an open sheet and a cached row.
       const { mounted, row, update } = await open();
@@ -157,7 +153,7 @@ describe("AgentSidebar phone sheet live row", () => {
       // Then the row remains available but its sheet is closed.
       expect(row().findByProps({ className: "agent-select agent-row" }).props.disabled).toBe(true);
       expect(mounted.root.findAllByProps({ role: "dialog" })).toHaveLength(0);
-      expect(row().findByProps({ className: "sidebar-row-action row-menu-toggle" }).props["aria-expanded"]).toBe(false);
+      expect(row().findAllByProps({ className: "sidebar-row-action row-menu-toggle" })).toHaveLength(0);
     });
   }
 
@@ -177,124 +173,5 @@ describe("AgentSidebar phone sheet live row", () => {
     await update(roster());
     // Then removal has retired the menu state, not merely hidden the sheet.
     expect(mounted.root.findAllByProps({ role: "dialog" })).toHaveLength(0);
-  });
-});
-
-describe("AgentSidebar fold memory", () => {
-  const descriptors = new Map<string, PropertyDescriptor | undefined>();
-  const FOLD_KEY = "ovis:agents-collapsed";
-  let renderer: ReactTestRenderer | undefined;
-  let stored: Map<string, string>;
-  let writes: string[];
-  let phone: boolean;
-
-  beforeEach(() => {
-    for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) {
-      descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    }
-    stored = new Map();
-    writes = [];
-    phone = false;
-    const events = new EventTarget();
-    const localStorage = {
-      getItem: (key: string) => stored.get(key) ?? null,
-      setItem: (key: string, value: string) => { writes.push(key); stored.set(key, value); },
-      removeItem: (key: string) => { writes.push(key); stored.delete(key); },
-    };
-    Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
-    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["en-US"] } });
-    Object.defineProperty(globalThis, "window", { configurable: true, value: {
-      localStorage,
-      matchMedia: () => ({ matches: phone, addEventListener() {}, removeEventListener() {} }),
-      addEventListener: events.addEventListener.bind(events),
-      removeEventListener: events.removeEventListener.bind(events),
-      requestAnimationFrame: () => 1,
-      cancelAnimationFrame() {},
-      location: { href: "http://localhost/" },
-    } });
-    Object.defineProperty(globalThis, "document", { configurable: true, value: {
-      body: { nodeType: 1, children: [] },
-      documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } },
-      querySelector: () => null,
-      addEventListener: events.addEventListener.bind(events),
-      removeEventListener: events.removeEventListener.bind(events),
-    } });
-    Object.defineProperty(globalThis, "getComputedStyle", { configurable: true, value: () => ({ getPropertyValue: () => "" }) });
-  });
-
-  afterEach(async () => {
-    await act(async () => { renderer?.unmount(); });
-    renderer = undefined;
-    for (const [key, descriptor] of descriptors) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
-    descriptors.clear();
-  });
-
-  const inactive: SidebarFilter = { query: "", active: false, machines: new Map(), matches: 0 };
-  const view = (filter: SidebarFilter) => <SettingsProvider>
-    <SidebarFilterProvider value={{ filter, reportBranches: () => {} }}>
-      <AgentSidebar machines={roster()} selectedMachineId="local" selectedPaneId={null} stateWord={(machine) => machine.state} onSelect={() => {}} />
-    </SidebarFilterProvider>
-  </SettingsProvider>;
-
-  async function mount(filter = inactive) {
-    await act(async () => { renderer = create(view(filter)); });
-    if (!renderer) throw new Error("sidebar did not mount");
-    const mounted = renderer;
-    const toggle = () => mounted.root.findByProps({ className: "agent-section-toggle sidebar-section-label" });
-    return {
-      expanded: (): boolean => toggle().props["aria-expanded"],
-      click: async () => { await act(async () => { toggle().props.onClick(); }); },
-      remount: async (next = filter) => {
-        await act(async () => { mounted.unmount(); });
-        return mount(next);
-      },
-    };
-  }
-
-  it("keeps the defaults with nothing stored: open on a desktop, folded in the phone drawer", async () => {
-    expect((await mount()).expanded()).toBe(true);
-    await act(async () => { renderer?.unmount(); });
-    phone = true;
-    expect((await mount()).expanded()).toBe(false);
-    expect(writes).toEqual([]);
-  });
-
-  it("remembers the reader's fold across a reload", async () => {
-    // Given a desktop list the reader folds.
-    const sidebar = await mount();
-    await sidebar.click();
-    expect(sidebar.expanded()).toBe(false);
-    // When the page loads again, the fold is still there.
-    const reloaded = await sidebar.remount();
-    expect(reloaded.expanded()).toBe(false);
-    // And opening it again is remembered too.
-    await reloaded.click();
-    expect((await reloaded.remount()).expanded()).toBe(true);
-  });
-
-  it("lets a stored choice win over the screen's default", async () => {
-    phone = true;
-    stored.set(FOLD_KEY, "0");
-    expect((await mount()).expanded()).toBe(true);
-    await act(async () => { renderer?.unmount(); });
-    phone = false;
-    stored.set(FOLD_KEY, "1");
-    expect((await mount()).expanded()).toBe(false);
-  });
-
-  it("never writes the filter's temporary fold", async () => {
-    // Given a filter that keeps no agent rows.
-    const sidebar = await mount({ query: "nothing", active: true, machines: new Map(), matches: 0 });
-    const before = sidebar.expanded();
-    // When the reader folds and opens the list during the filter.
-    await sidebar.click();
-    expect(sidebar.expanded()).toBe(!before);
-    await sidebar.click();
-    // Then nothing is stored, and the list comes back with the screen's default.
-    expect(writes).toEqual([]);
-    expect((await sidebar.remount(inactive)).expanded()).toBe(true);
   });
 });
