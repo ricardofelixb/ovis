@@ -1096,7 +1096,7 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   setting off while the field holds words keeps it, as one the palette opened. The matcher is the command palette's fuzzy one
   (`matchesQuery`, lib/paletteSearch.ts), its membership alone, never its rank: rows keep herdr's
   order, their PC, their group, their card and their pins (lib/sidebarFilter.ts). It reads only what
-  a row shows: the PC's name, a workspace's name and the branch under it, an agent row's title, its
+  a row shows: the PC's name, a workspace's name and the branch after it, an agent row's title, its
   agent's kind and name and the tab name on its context line; never a working directory, a
   transcript, an environment, a token value or an id. A match keeps its worktrees and its agent
   rows; a match keeps its repository head and its PC; a PC without one is hidden, its roster still
@@ -1345,11 +1345,10 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   shell shows the terminal glyph, and a linked worktree without an agent the branch glyph. The
   mark never stands for another pane's agent; the row's tooltip lists every agent in the
   workspace. A custom worktree workspace name follows the branch on the same line in dim text.
-  On One line, as in herdr's own sidebar, a top-level git workspace (a repository, or a worktree
-  whose repository is not open) says its branch under its name in `--text-dim` `--fs-xs`, on a
-  two-line row's height (`--side-row-2`); an indented worktree, whose name already comes from its
-  branch, a pinned workspace in its card (the branch stays in its tooltip and menu) and a folder
-  outside git stay one line. The branch is read with the worktree inventory
+  A top-level git workspace (a repository, or a worktree whose repository is not open) says its
+  branch after its name on the same line in `--text-dim` `--fs-xs`, as a worktree does; a name
+  that already says the branch, a pinned workspace in its card (the branch stays in its tooltip
+  and menu) and a folder outside git show no branch. The branch is read with the worktree inventory
   (`useWorktreeBranches`), a repository without worktrees and a git workspace herdr has not marked
   included. As herdr draws its tree, each indented worktree hangs from its repository's folder on
   a `--hairline` `--border-strong` branch in the indent: a tee for each but the last, an elbow for
@@ -1915,6 +1914,9 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   title may shorten with an ellipsis; the crumb never does: when it does not fit whole beside the
   whole title it is not drawn, and the title has the row. The full path is in the context's
   tooltip and at the top of the More menu. With no selection, the brand fills the context slot.
+  When the pane's checkout has a known branch, the branch takes the crumb's place on a dim line
+  under the title (`HeaderBranch.tsx`), on a phone and a desktop alike, within the one-line
+  header's height; a cut name opens whole in a bubble on a press.
 - The More menu (`.header-more-button`, the `RowMenu` popover, a bottom sheet at `<=640px`) opens
   with the location on two lines, "PC › workspace" then the full path in mono. Its first item,
   at every width, is **Search panes and actions**, which opens the command palette (its shortcut
@@ -2431,22 +2433,6 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   on the left the add button (lucide `Plus`, named "Attach files"), the mic when voice input
   shows it (see Voice input), and the background-task chip; on the right the status content and ONE round Send/Stop button.
   The message's text starts `--space-4` in (`--space-3` on a phone, `480px` and below).
-- The strip (`.composer-strip`) tucked under the card, as t3code's composer context strip: the
-  card's own `--bg-elevated` with a `--border` hairline, inset on each side by the card's radius
-  (`--radius-2xl`, never under `--space-5`) so it stays under the card's straight bottom edge,
-  its top `--space-4` under the card, where the card's hairline and `--shadow-card` part the two,
-  and only its bottom corners rounded (`--radius-xl`); `--space-5` top padding (so `--space-1`
-  shows under the card), `--space-3` at the sides, `--space-1` under. It names the pane's
-  working folder at its start (lucide `Folder`, the folder's last name, the whole path in its
-  `title`) and the branch at its end (lucide `GitBranch`), each a glyph the text's size and a
-  name in `--text-dim` at `--fs-xs`, `--chip-h` tall; a name that does not fit is cut short.
-  A linked worktree's folder takes lucide `FolderGit2` and the word Worktree after its name, in
-  a `--border` hairline box with `--radius-sm` corners.
-  Nothing in it is pressed. `composerStrip` (`src/lib/composerStrip.ts`) decides what it draws from
-  the composer's optional `cwd` and `branch`: a blank one is absent, and with neither there is no
-  strip at all. A phone (`640px` and below, or a coarse pointer) draws no strip: the screen is the
-  conversation's. The card stands over it (`z-index: 1`, so its popovers go with it and still rise
-  over the transcript).
 - Empty chat (`.composer-greeting`): one line on the composer's column, directly over it,
   `What should <agent> do in <folder>?` in `--text-strong`, `--fs-display`, `--fw-semibold`, `--tracking-display`, centred,
   and under it `PC · full path` in `--text-dim`, `--fs-sm`. Both wrap anywhere. While dictation's

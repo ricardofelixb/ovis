@@ -364,6 +364,9 @@ const BASE: Record<string, string> = {
   "Show plan limits": "プランの上限を表示",
   "Session": "セッション",
   "Weekly": "週次",
+  "Close pane {name}?": "ペイン{name}を閉じますか？",
+  "The pane's running processes will stop. Closing its last pane also closes the workspace.": "ペインで実行中のプロセスが停止します。最後のペインを閉じるとワークスペースも閉じます。",
+  "Close pane": "ペインを閉じる",
 };
 
 /** The parts JA is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */

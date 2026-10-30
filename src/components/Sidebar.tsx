@@ -645,11 +645,10 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     // the row says the workspace's name, the one its owner gave it or herdr made from the branch; the
     // branch itself is the tooltip's and the menu's, where the name does not already say it
     const rowTitle = workspace.label;
-    const secondaryBranch = linked && branchTitle && workspace.label !== branchTitle && workspace.label !== worktreeLabel(branchTitle) ? branchTitle : null;
-    // as herdr's own sidebar: a top-level git workspace says its branch on a second line, while an
-    // indented worktree (its name already the branch's), a pinned row (the card stays compact; the
-    // branch is in its tooltip and menu) and a folder outside git keep one line
-    const branchLine = !nested && !pinnedIds.includes(workspace.workspace_id) && branchTitle ? branchTitle : null;
+    // the branch follows the name on the same line, for a worktree and a top-level checkout alike, where
+    // the name does not already say it; a pinned top-level row stays compact, its branch in the tooltip and menu
+    const secondaryBranch = branchTitle && (linked || (!nested && !pinnedIds.includes(workspace.workspace_id)))
+      && workspace.label !== branchTitle && workspace.label !== worktreeLabel(branchTitle) ? branchTitle : null;
     // the tooltip and the menu keep the exact branch (its slashes) even where the row does not repeat it
     const branchNote = branchTitle && branchTitle !== workspace.label ? branchTitle : null;
     const paths = [...new Set([workspace.worktree?.checkout_path, pane.cwd].filter((path): path is string => Boolean(path)))];
@@ -732,14 +731,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
               if (event.key === "Enter") saveWorkspaceRename(workspace.workspace_id);
               if (event.key === "Escape") setEditingWorkspaceId(null);
             }}
-          /> : branchLine ? <span className="workspace-copy is-branch-line">
-            <span className="workspace-line">
-              <span className="workspace-name">{rowTitle}</span>
-              {foldedCount > 0 && <span className="workspace-fold-count" aria-hidden="true">+{foldedCount}</span>}
-              {filterNote}
-            </span>
-            <span className="workspace-place workspace-branch">{branchLine}</span>
-          </span> : <span className="workspace-copy">
+          /> : <span className="workspace-copy">
             <span className="workspace-name">{rowTitle}</span>
             {secondaryBranch && <span className="worktree-workspace-label">{secondaryBranch}</span>}
             {foldedCount > 0 && <span className="workspace-fold-count" aria-hidden="true">+{foldedCount}</span>}

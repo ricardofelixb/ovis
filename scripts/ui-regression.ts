@@ -785,22 +785,18 @@ try {
   assert.deepEqual(await sidebarWidths(), defaultWidths, "a double-click goes back to the default width and forgets the stored one");
   console.log("PASS the sidebar's edge drags, steps from the keyboard, remembers its width and resets on a double-click");
 
-  // Sidebar rows: a workspace row is its name until Settings → Sidebar rows → Two lines says
-  // what its pane is doing over its place, on a taller row
-  const oneLineHeight = await page.locator(".workspace-header").first().evaluate((row) => row.getBoundingClientRect().height);
+  // Sidebar rows: an agent row is its title until Settings → Sidebar rows → Two lines says
+  // what it is doing over its place, on a taller row; workspace rows stay one line
   const oneLineAgentHeight = await page.locator(".workspace-agents .agent-row").first().evaluate((row) => row.getBoundingClientRect().height);
-  assert.equal(await page.locator(".workspace-copy.is-two-line").count(), 0, "rows are one line until two are chosen");
   assert.ok(await page.locator(".workspace-agents.is-one-line").count() > 0, "agent rows follow the one-line choice");
   await page.keyboard.press("ControlOrMeta+Shift+Comma");
   const rowsSetting = page.locator('.settings-dialog .segmented[aria-label="Sidebar rows"]');
   await rowsSetting.getByRole("button", { name: "Two lines", exact: true }).click();
-  await page.locator(".workspace-copy.is-two-line").first().waitFor();
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("ovis:settings") ?? "{}").sidebarRows), "two");
-  assert.ok(await page.locator(".workspace-header").first().evaluate((row) => row.getBoundingClientRect().height) > oneLineHeight, "a two-line row is taller");
   await page.waitForFunction(() => document.querySelector(".workspace-agents.is-one-line") === null);
   assert.ok(await page.locator(".workspace-agents .agent-row").first().evaluate((row) => row.getBoundingClientRect().height) > oneLineAgentHeight, "a two-line agent row is taller");
   await rowsSetting.getByRole("button", { name: "One line", exact: true }).click();
-  await page.locator(".workspace-copy.is-two-line").first().waitFor({ state: "detached" });
+  await page.locator(".workspace-agents.is-one-line").first().waitFor();
   await page.getByRole("button", { name: "Close settings", exact: true }).click();
   console.log("PASS sidebar rows switch between one line and two");
 

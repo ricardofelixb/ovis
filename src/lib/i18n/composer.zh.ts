@@ -146,8 +146,6 @@ export const COMPOSER_ZH: Record<string, string> = {
   "Compact context": "压缩上下文",
   "Dismiss notice": "关闭提示",
   "Notices": "提示",
-  "Working folder": "工作文件夹",
-  "Worktree": "工作树",
   "Start live voice": "开始实时语音",
   "Listening": "正在聆听",
   "Working on it": "正在处理",

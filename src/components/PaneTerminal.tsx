@@ -26,7 +26,6 @@ import { autoReturnArmed, paneLensFlags, screenReturnArmed, type PeekRequest, ty
 import { FrameGate, inputRowState, readScreen, readScreenLines, readsInputRow, type InputRowState } from "../lib/inputRow.ts";
 import { outcomeCommand } from "../lib/outcomeChip.ts";
 import { composerLift, greetingMemory, greetingFits, greetingFolder, roomOverComposer, showsGreeting } from "../lib/greeting.ts";
-import { DETACHED, usePaneBranch } from "../lib/paneBranch.ts";
 import { answerHint } from "../lib/promptAnswer.ts";
 import { composerPayload } from "../lib/compose.ts";
 import { composerDrafts } from "../lib/composerDraft.ts";
@@ -104,10 +103,6 @@ export interface PaneTerminalProps {
   backgroundWait?: boolean;
   /** the pane's working directory and its PC's name: an empty chat's greeting names them */
   cwd?: string | null;
-  /** the pane's workspace: its checkout's branch stands beside the folder under the composer */
-  workspaceId?: string | null;
-  /** that workspace is a linked worktree of this repository (its name, as herdr gives it); null: it is not one */
-  worktreeRepo?: string | null;
   machineName?: string;
   /** the lens over the pane: the chat transcript, or the live xterm grid (App remembers it per pane) */
   view: PaneView;
@@ -171,8 +166,6 @@ export function PaneTerminal({
   plan = null,
   backgroundWait = false,
   cwd = null,
-  workspaceId = null,
-  worktreeRepo = null,
   machineName = "",
   view,
   findRequest = 0,
@@ -207,7 +200,6 @@ export function PaneTerminal({
   const commands = usePaneCommands(paneId, agent);
   const openWebRef = useRef((uri: string, shiftKey: boolean) => openWebPage?.(uri, shiftKey, machineId) ?? false);
   openWebRef.current = (uri, shiftKey) => openWebPage?.(uri, shiftKey, machineId) ?? false;
-  const branchWord = usePaneBranch(machineId, workspaceId);
   const machineSessions = useMachineSessions();
   const sessionRef = useRef<MachineSession | null>(null);
   const submitRetention = useContext(PaneSubmitContext);
@@ -1323,8 +1315,6 @@ export function PaneTerminal({
           paneId={paneId}
           inert={peek !== null}
           cwd={cwd}
-          branch={branchWord === DETACHED ? t("Detached HEAD") : branchWord}
-          worktreeRepo={worktreeRepo}
           autoFocus={active && !autoSelected && !coarse}
           active={active}
           agent={agent}

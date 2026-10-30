@@ -1,10 +1,9 @@
 import { useSyncExternalStore } from "react";
-import { useMediaQuery } from "./useMediaQuery.ts";
 import type { WorkspaceBranch } from "./worktreeBranches.ts";
 
 /**
  * The branch of each workspace's checkout, as the sidebar's roster read it (useWorktreeBranches),
- * for the strip under a pane's composer. The roster stays the one reader of the git inventory:
+ * for the header's line under a pane's title. The roster stays the one reader of the git inventory:
  * a second reader per pane would ask every repository twice. A PC whose roster is folded away
  * publishes nothing, and its panes name their folder alone.
  */
@@ -44,11 +43,4 @@ function subscribe(listener: () => void): () => void {
 
 export function usePaneBranch(machineId: string, workspaceId: string | null): string | null {
   return useSyncExternalStore(subscribe, () => publishedBranch(machineId, workspaceId));
-}
-
-/** The branch the header shows: only where the composer drops its folder-and-branch strip (Composer.tsx). */
-export function useHeaderBranch(machineId: string, workspaceId: string | null): string | null {
-  const inHeader = useMediaQuery("(max-width: 640px), (pointer: coarse)");
-  const branch = usePaneBranch(machineId, workspaceId);
-  return inHeader ? branch : null;
 }

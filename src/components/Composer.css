@@ -702,66 +702,6 @@
   }
 }
 
-/* The strip tucked under the card, as t3code's composer context strip: the card's own surface,
-   inset on each side by the card's radius (never less than --space-5, for a sharp palette), so it
-   stays under the card's straight bottom edge; its top --space-4 under the card, where the card's
-   hairline and shadow part the two (the seam), and only its bottom corners rounded. It names the
-   pane's working folder (the whole path in its title) at its start and the branch at its end,
-   each a glyph and a name in --text-dim at --fs-xs, and nothing in it is pressed. Composer.tsx
-   draws it only with a folder or a branch to name; a name that does not fit is cut short */
-.composer-strip {
-  --composer-strip-inset: max(var(--radius-2xl), var(--space-5));
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  width: calc(min(100%, var(--chat-w)) - 2 * var(--composer-strip-inset));
-  margin: calc(-1 * var(--space-4)) auto 0;
-  padding: var(--space-5) var(--space-3) var(--space-1);
-  border: var(--hairline) solid var(--border);
-  border-top: 0;
-  border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-  background: var(--bg-elevated);
-  color: var(--text-dim);
-  font-size: var(--fs-xs);
-}
-
-.composer-strip-item {
-  display: inline-flex;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: var(--space-1);
-  min-width: 0;
-  height: var(--chip-h);
-}
-
-/* a linked worktree says what it is: the folder's name alone reads like any checkout's */
-.composer-strip-kind {
-  flex: none;
-  padding: 0 var(--space-1);
-  border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.composer-strip-branch {
-  margin-inline-start: auto;
-}
-
-/* the glyph is the text's size, as the task chip's is */
-.composer-strip-item svg {
-  flex: none;
-  width: var(--fs-xs);
-  height: var(--fs-xs);
-}
-
-.composer-strip-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .composer-menu {
   position: absolute;
   right: 0;

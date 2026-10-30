@@ -146,8 +146,6 @@ export const COMPOSER_JA: Record<string, string> = {
   "Compact context": "コンテキストを圧縮",
   "Dismiss notice": "通知を閉じる",
   "Notices": "お知らせ",
-  "Working folder": "作業フォルダ",
-  "Worktree": "ワークツリー",
   "Start live voice": "ライブ音声を開始",
   "Listening": "聞いています",
   "Working on it": "作業中",
