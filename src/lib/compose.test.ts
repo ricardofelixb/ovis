@@ -386,9 +386,6 @@ describe("composer presentation helpers", () => {
     expect(composerPrimaryAction({ ...idle, working: true, text: "check the tests" })).toBe("send");
     expect(composerPrimaryAction({ ...idle, working: true, sending: true })).toBe("send");
     // during the pane's call an empty box hangs up, over Stop too; a message is still a Send
-    expect(composerPrimaryAction({ ...idle, canStartVoice: false, inCall: true })).toBe("hangup");
-    expect(composerPrimaryAction({ ...idle, working: true, inCall: true })).toBe("hangup");
-    expect(composerPrimaryAction({ ...idle, working: true, inCall: true, text: "and the docs" })).toBe("send");
   });
 
   it("uses one Stop or Send control and queues all agents' working-turn messages", () => {

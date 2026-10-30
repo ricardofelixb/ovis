@@ -2836,19 +2836,24 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   Amber only; `--danger` stays for errors.
 
 ### Live voice (Pi panes)
-- Design followed: the ChatGPT app's full-screen voice mode for the layout (one orb, Mute and End
-  within thumb reach) and the agents app for the orb and its motion. It differs from the agents app's
-  144 px floating voice dock: a call with a coding agent needs an explicit Mute and End and the last
-  words of both sides in view, so it is a full-screen dialog, not a dock.
+- Design followed: Android's chat bubbles and Messenger's chat heads for the floating orb that a
+  drag carries anywhere and that snaps to a side, and the agents app for the orb and its motion.
+  There is no full-screen call: the chat stays in view and usable for the whole call.
 - Where the orb is offered: the composer's Send becomes a small orb (`.composer-voice`) while the
-  box is empty, on a Pi pane of this PC that the viewer may drive and whose Pi has the live bridge
-  (`GET /api/pane/pi-voice`). Typing brings Send back; a working agent keeps Stop. The mic button
-  for dictation stays as it is.
-- The call (`.pi-voice`, mounted once in App): a full-screen dialog (focus trapped, the phone's Back
-  ends the call) with the pane's folder and the phase (Connecting, Listening, Working on it,
-  Speaking, Muted), the orb, the last thing each side said (a polite live region, four lines at
-  most), and two round buttons: Mute (pressed state) and End (`--status-blocked`). A call that cannot
-  start or was cut off says why, with Close.
+  box is empty, on a Pi pane that the viewer may drive and whose Pi has the live bridge
+  (`GET /api/pane/pi-voice`). Typing brings Send back; a working agent keeps Stop. The composer
+  only starts calls; the mic button for dictation stays as it is.
+- The call (`.pi-voice-float`, mounted once in App): the orb alone, at the side and height it was
+  last dropped at on this device (`ovis:voice-orb`, `src/lib/orbPlace.ts`), between the header and
+  the screen's foot; with the keyboard up it keeps to the upper half. Only a drag moves it. A tap
+  slides out Mute (pressed state) and End (`--status-blocked`), a little smaller than the orb, away
+  from the nearer edge; they tuck back after 4 s untouched, a press elsewhere or Escape. Muted, the
+  orb wears a small crossed mic. The phase is read out in a polite live region.
+- The call follows the selected agent: selecting another one ends it at once, and once the
+  selection has held for a second on a Pi that can take a call, a new call starts there (Pi gives
+  it the chat so far, earlier calls included). With no call there the orb dims and says why beside
+  it for a few seconds ("No voice here", or why the last call stopped). End, or Pi ending the call
+  itself, puts the orb away and stops following; a refused microphone stops asking.
 - The orb is the WebGL glass-liquid sphere (`VoiceOrb.tsx`); where WebGL is missing it is a disc in
   `--primary`. It swells with the reply, draws in while the user speaks, dims when muted, and with
   reduced motion it is drawn once and only swells.

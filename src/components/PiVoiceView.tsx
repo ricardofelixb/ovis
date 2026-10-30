@@ -1,69 +1,33 @@
-import { ChevronDown, Mic, MicOff, PhoneOff } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { Mic, MicOff, PhoneOff } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 
 import { useT } from "../lib/i18n.ts";
-import { useMachineId } from "../lib/machineContext.tsx";
-import { useOrbDrag } from "../lib/orbDrag.ts";
-import {
-  dismissPiVoice,
-  endPiVoice,
-  piVoiceLevels,
-  setPiVoiceExpanded,
-  setPiVoiceMuted,
-  usePiVoice,
-  usePiVoiceDock,
-  usePiVoiceDocked,
-  type PiVoiceEnd,
-  type PiVoiceState,
-} from "../lib/piVoiceSession.ts";
-import { usePhoneSheetBack } from "../lib/sheetHistory.ts";
-import { useFocusTrap } from "../lib/useFocusTrap.ts";
+import { storedOrbPlace, useOrbPlacement, type OrbPlace } from "../lib/orbPlace.ts";
+import { endPiVoice, piVoiceLevels, setPiVoiceMuted, usePiVoice, type PiVoiceEnd, type PiVoiceState } from "../lib/piVoiceSession.ts";
 import { VoiceOrb } from "./VoiceOrb.tsx";
 import "./PiVoiceView.css";
 
-const expand = () => setPiVoiceExpanded(true);
-const collapse = () => setPiVoiceExpanded(false);
-
 /**
- * The live voice call with a Pi pane. Like the agents app, its orb sits over the composer while
- * the chat stays in view and usable (PiVoiceDock); a drag up on the orb, or a tap, opens the
- * full-screen call, which follows the ChatGPT app's voice mode (one orb, what was said, Mute and
- * End within thumb reach), and a drag down puts it back. Mounted once in App, which shows the
- * full call, and the dock at the screen's foot when no composer of the call's pane is in view.
+ * The live voice call with a Pi pane: a small orb that floats over the app, after Android's chat
+ * bubbles and Messenger's chat heads. A drag carries it anywhere and it snaps to the nearer side,
+ * where this device keeps it; a tap slides out Mute and End, which tuck away again on their own.
+ * The call follows the selected agent (piVoiceSession.ts), and with none there the orb dims and
+ * says why for a moment.
+ * Mounted once in App.
  */
 export function PiVoiceView() {
   const voice = usePiVoice();
-  const docked = usePiVoiceDocked();
-  const floating = voice.status === "live" && !voice.expanded && !docked;
-  const leaving = useDockExit(floating, voice);
-  if ((voice.status === "live" || voice.status === "ended") && voice.expanded) return <PiVoiceDialog voice={voice} />;
-  if (floating) return <PiVoiceDock voice={voice} floating />;
-  return leaving ? <PiVoiceDock voice={leaving} floating leaving /> : null;
+  const shown = voice.status !== "idle";
+  const leaving = useOrbExit(shown, voice);
+  if (shown) return <PiVoiceFloat voice={voice} />;
+  return leaving ? <PiVoiceFloat voice={leaving} leaving /> : null;
 }
 
-/** The call's orb over the composer of its pane, while the call is not full-screen. */
-export function PiVoiceDockHost({ paneId }: { paneId: string }) {
-  const voice = usePiVoice();
-  const machineId = useMachineId();
-  // only once the call is ready to talk, as in the agents app: while it connects, the composer's button shows it
-  const shown = voice.status === "live" && !voice.expanded && voice.machineId === machineId && voice.paneId === paneId;
-  const leaving = useDockExit(shown, voice);
-  usePiVoiceDock(shown || leaving !== null);
-  if (shown) return <PiVoiceDock voice={voice} />;
-  return leaving ? <PiVoiceDock voice={leaving} leaving /> : null;
-}
+/** How long the orb takes to shrink away once the call is put away: the agents app's exit wait. */
+const ORB_EXIT_MS = 280;
 
-/** How long the orb takes to shrink away once its call ends: the agents app's exit wait. */
-const DOCK_EXIT_MS = 280;
-
-/** A dock showing this soon after its call became ready is the call opening. */
-const ENTER_WINDOW_MS = 400;
-
-/**
- * The call as the dock last showed it, for the moment its orb shrinks away once the call ends.
- * Opening the full call or moving to another pane is no ending: the dock goes at once.
- */
-function useDockExit(shown: boolean, voice: PiVoiceState): PiVoiceState | null {
+/** The call as the orb last showed it, for the moment it shrinks away after End. */
+function useOrbExit(shown: boolean, voice: PiVoiceState): PiVoiceState | null {
   const last = useRef<PiVoiceState | null>(null);
   const [leaving, setLeaving] = useState<PiVoiceState | null>(null);
   useLayoutEffect(() => {
@@ -76,109 +40,82 @@ function useDockExit(shown: boolean, voice: PiVoiceState): PiVoiceState | null {
     }
     const was = last.current;
     last.current = null;
-    if (!was || voice.status !== "idle") return;
+    if (!was) return;
     setLeaving(was);
-    const timer = setTimeout(() => setLeaving(null), DOCK_EXIT_MS);
+    const timer = setTimeout(() => setLeaving(null), ORB_EXIT_MS);
     return () => clearTimeout(timer);
   }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
   return leaving;
 }
 
-function PiVoiceDock({ voice, floating = false, leaving = false }: { voice: PiVoiceState; floating?: boolean; leaving?: boolean }) {
+/** How long the opened Mute and End wait untouched before they tuck away again. */
+const CONTROLS_IDLE_MS = 4000;
+
+function PiVoiceFloat({ voice, leaving = false }: { voice: PiVoiceState; leaving?: boolean }) {
   const t = useT();
-  // a call opens on the orb growing in; putting the full call back is no opening
-  const [entering] = useState(() => Date.now() - voice.readyAt < ENTER_WINDOW_MS);
+  const controlsId = useId();
+  const [place, setPlace] = useState<OrbPlace>(storedOrbPlace);
+  const [open, setOpen] = useState(false);
   const surface = useRef<HTMLDivElement>(null);
   const orb = useRef<HTMLButtonElement>(null);
-  useOrbDrag(orb, surface, "up", expand);
-  const classes = ["pi-voice-dock", floating && "is-floating", entering && "is-entering", leaving && "is-leaving"].filter(Boolean).join(" ");
+  useOrbPlacement(orb, surface, setPlace);
+  useControlsTuck(open, surface, setOpen);
+  const away = voice.status === "away";
+  // the controls open away from the nearer edge, so neither they nor the orb leave the screen
+  const classes = ["pi-voice-float", `is-${place.side}`, place.y > 0.5 ? "opens-up" : "opens-down", open && "is-open",
+    away && "is-away", voice.muted && "is-muted", !leaving && "is-entering", leaving && "is-leaving"].filter(Boolean).join(" ");
   return (
-    <div className={classes} ref={surface} role="group" aria-label={t("Live voice")} aria-hidden={leaving || undefined}>
-      <span className="visually-hidden" aria-live="polite">{phaseText(voice, t)}</span>
-      <button type="button" className="pi-voice-button is-compact" aria-pressed={voice.muted} aria-label={voice.muted ? t("Unmute") : t("Mute")}
-        title={voice.muted ? t("Unmute") : t("Mute")} disabled={voice.status !== "live"} onClick={() => setPiVoiceMuted(!voice.muted)}>
-        {voice.muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+    <div className={classes} ref={surface} role="group" aria-label={t("Live voice")} aria-hidden={leaving || undefined}
+      style={{ "--pi-voice-y": place.y } as CSSProperties}>
+      <span className="visually-hidden" aria-live="polite">{away ? "" : phaseText(voice, t)}</span>
+      <button type="button" className={`pi-voice-float-orb is-${voice.phase}`} ref={orb} aria-label={t("Call controls")}
+        title={t("Call controls")} aria-expanded={open} aria-controls={controlsId} onClick={() => setOpen((now) => !now)}>
+        <VoiceOrb phase={away ? "ended" : voice.phase} levels={piVoiceLevels} />
+        {voice.muted && <span className="pi-voice-float-badge" aria-hidden="true"><MicOff /></span>}
       </button>
-      <button type="button" className={`pi-voice-dock-orb is-${voice.phase}`} ref={orb} aria-label={t("Open call")} title={t("Open call")} onClick={expand}>
-        <VoiceOrb phase={voice.phase} levels={piVoiceLevels} />
-      </button>
-      {/* over a composer, its button hangs up; at the screen's foot there is none to */}
-      {floating && (
-        <button type="button" className="pi-voice-button is-compact is-end" aria-label={t("End call")} title={t("End call")} onClick={endPiVoice}>
+      <div className="pi-voice-float-controls" id={controlsId} inert={!open}>
+        <button type="button" className="pi-voice-button" aria-pressed={voice.muted} aria-label={voice.muted ? t("Unmute") : t("Mute")}
+          title={voice.muted ? t("Unmute") : t("Mute")} disabled={voice.status !== "live"} onClick={() => setPiVoiceMuted(!voice.muted)}>
+          {voice.muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
+        </button>
+        <button type="button" className="pi-voice-button is-end" aria-label={t("End call")} title={t("End call")} onClick={endPiVoice}>
           <PhoneOff aria-hidden="true" />
         </button>
-      )}
+      </div>
+      {/* keyed by what it says, so a new reason shows again before it fades */}
+      {away && (voice.end
+        ? <p key={endText(voice.end, t)} className="pi-voice-float-note" role="alert">{endText(voice.end, t)}</p>
+        : <p key="none" className="pi-voice-float-note" role="status">{t("No voice here")}</p>)}
     </div>
   );
 }
 
-function PiVoiceDialog({ voice }: { voice: PiVoiceState }) {
-  const t = useT();
-  const over = voice.status === "ended";
-  const primary = useRef<HTMLButtonElement>(null);
-  const surface = useFocusTrap<HTMLDivElement>(true, { initialFocus: primary });
-  const stage = useRef<HTMLButtonElement>(null);
-  useOrbDrag(stage, surface, "down", collapse);
-  // the phone's Back puts the call back over the composer, as it closes any sheet
-  usePhoneSheetBack(over ? dismissPiVoice : collapse);
-  const status = over ? "" : phaseText(voice, t);
-  const transcript = useRef<HTMLDivElement>(null);
-  // the newest words stay in view while the reply grows, unless a finger scrolled back to read
-  const following = useRef(true);
-  useLayoutEffect(() => {
-    const box = transcript.current;
-    if (voice.assistantText === "") following.current = true;
-    if (box && following.current) box.scrollTop = box.scrollHeight;
-  }, [voice.assistantText]);
-  return (
-    <div className="pi-voice" role="dialog" aria-modal="true" aria-label={t("Live voice")} ref={surface} tabIndex={-1}
-      onKeyDown={(event) => { if (event.key === "Escape") (over ? dismissPiVoice : collapse)(); }}>
-      <header className="pi-voice-header">
-        {!over && (
-          <button type="button" className="pi-voice-collapse" aria-label={t("Minimize call")} title={t("Minimize call")} onClick={collapse}>
-            <ChevronDown aria-hidden="true" />
-          </button>
-        )}
-        <span className="pi-voice-label">{voice.label}</span>
-        <span className="pi-voice-status" aria-live="polite">{status}</span>
-      </header>
-      {over ? (
-        <div className="pi-voice-stage is-over">
-          <VoiceOrb phase="ended" levels={piVoiceLevels} />
-        </div>
-      ) : (
-        <button type="button" className={`pi-voice-stage is-${voice.phase}`} ref={stage} tabIndex={-1} aria-label={t("Minimize call")} onClick={collapse}>
-          <VoiceOrb phase={voice.phase} levels={piVoiceLevels} />
-        </button>
-      )}
-      {over ? (
-        <>
-          <p className="pi-voice-end" role="alert">{endText(voice.end, t)}</p>
-          <div className="pi-voice-controls">
-            <button type="button" className="btn" ref={primary} onClick={dismissPiVoice}>{t("Close")}</button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="pi-voice-transcript" ref={transcript} aria-live="polite" onScroll={(event) => {
-            const box = event.currentTarget;
-            following.current = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
-          }}>
-            {voice.assistantText !== "" && <p className="pi-voice-line"><span className="visually-hidden">{t("Pi said")}: </span>{voice.assistantText}</p>}
-          </div>
-          <div className="pi-voice-controls">
-            <button type="button" className="pi-voice-button" aria-pressed={voice.muted} aria-label={voice.muted ? t("Unmute") : t("Mute")}
-              title={voice.muted ? t("Unmute") : t("Mute")} disabled={voice.status !== "live"} onClick={() => setPiVoiceMuted(!voice.muted)}>
-              {voice.muted ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
-            </button>
-            <button type="button" className="pi-voice-button is-end" ref={primary} aria-label={t("End call")} title={t("End call")} onClick={endPiVoice}>
-              <PhoneOff aria-hidden="true" />
-            </button>
-          </div>
-        </>
-      )}
-    </div>
-  );
+/** Opened controls tuck away after a while untouched, on a press outside the orb, or on Escape. */
+function useControlsTuck(open: boolean, surface: RefObject<HTMLElement | null>, setOpen: (open: boolean) => void) {
+  useEffect(() => {
+    if (!open) return;
+    let timer = setTimeout(() => setOpen(false), CONTROLS_IDLE_MS);
+    const touched = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => setOpen(false), CONTROLS_IDLE_MS);
+    };
+    const outside = (event: PointerEvent) => {
+      if (!surface.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const node = surface.current;
+    node?.addEventListener("pointerdown", touched);
+    document.addEventListener("pointerdown", outside, true);
+    document.addEventListener("keydown", escape);
+    return () => {
+      clearTimeout(timer);
+      node?.removeEventListener("pointerdown", touched);
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open, surface, setOpen]);
 }
 
 function phaseText(voice: PiVoiceState, t: ReturnType<typeof useT>): string {
@@ -192,8 +129,8 @@ function phaseText(voice: PiVoiceState, t: ReturnType<typeof useT>): string {
   }
 }
 
-function endText(end: PiVoiceEnd | null, t: ReturnType<typeof useT>): string {
-  switch (end?.kind) {
+function endText(end: PiVoiceEnd, t: ReturnType<typeof useT>): string {
+  switch (end.kind) {
     case "error": return end.message;
     case "denied": return t("Microphone access was denied.");
     case "no_mic": return t("No microphone found");

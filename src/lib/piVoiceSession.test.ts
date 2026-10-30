@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { dismissPiVoice, endPiVoice, piVoiceState, setPiVoiceExpanded, startPiVoice } from "./piVoiceSession.ts";
+import type { PiVoiceStatus } from "../../shared/pi-voice.ts";
+import { endPiVoice, FOLLOW_SETTLE_MS, followPiVoice, piVoiceState, startPiVoice } from "./piVoiceSession.ts";
 
 /** What the call touches of the browser: a microphone whose permission prompt the test settles, and sockets it can drive. */
 class FakeSocket {
@@ -59,7 +60,6 @@ beforeEach(() => {
 
 afterEach(() => {
   endPiVoice();
-  dismissPiVoice();
   for (const [name, descriptor] of originals) {
     if (descriptor) Object.defineProperty(globalThis, name, descriptor);
     else delete (globalThis as Record<string, unknown>)[name];
@@ -84,7 +84,7 @@ describe("starting a call from the phone", () => {
     // Pi's answer to a start it cannot take arrives with nothing else in between
     socket.receive({ type: "ready", pid: 1, busy: false });
     socket.receive({ type: "ended", error: "Live voice is already on in this Pi." });
-    expect(piVoiceState()).toMatchObject({ status: "ended", end: { kind: "error", message: "Live voice is already on in this Pi." } });
+    expect(piVoiceState()).toMatchObject({ status: "away", end: { kind: "error", message: "Live voice is already on in this Pi." } });
     expect(socket.closed).toBe(true);
     // the microphone goes quiet at once, and is let go once the close chime has played
     expect(tracks.every((track) => !track.enabled && !track.stopped)).toBe(true);
@@ -107,23 +107,11 @@ describe("starting a call from the phone", () => {
     startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
     deny?.();
     await flush();
-    expect(piVoiceState()).toMatchObject({ status: "ended", end: { kind: "denied" } });
+    expect(piVoiceState()).toMatchObject({ status: "away", end: { kind: "denied" } });
     expect(FakeSocket.all).toHaveLength(0);
-  });
-
-  it("starts over the composer, opens full-screen when asked, and shows what went wrong full-screen", async () => {
-    startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
-    expect(piVoiceState().expanded).toBe(false);
-    setPiVoiceExpanded(true);
-    expect(piVoiceState().expanded).toBe(true);
-    setPiVoiceExpanded(false);
-    expect(piVoiceState().expanded).toBe(false);
-    deny?.();
-    await flush();
-    expect(piVoiceState()).toMatchObject({ status: "ended", expanded: true });
-    dismissPiVoice();
-    setPiVoiceExpanded(true);
-    expect(piVoiceState()).toMatchObject({ status: "idle", expanded: false });
+    // End puts the orb away
+    endPiVoice();
+    expect(piVoiceState()).toMatchObject({ status: "idle", end: null });
   });
 
   it("lets go of a microphone that is allowed after the call was ended", async () => {
@@ -134,5 +122,136 @@ describe("starting a call from the phone", () => {
     expect(piVoiceState().status).toBe("idle");
     expect(tracks.every((track) => track.stopped)).toBe(true);
     expect(FakeSocket.all).toHaveLength(0);
+  });
+});
+
+/** A timer the test fires by hand, and a status the test answers. */
+function followDeps(answer: PiVoiceStatus = { available: true, busy: false }) {
+  const pending: (() => void)[] = [];
+  const asked: string[] = [];
+  return {
+    pending,
+    asked,
+    deps: {
+      after: (run: () => void, ms: number) => {
+        expect(ms).toBe(FOLLOW_SETTLE_MS);
+        pending.push(run);
+        return () => { pending.splice(pending.indexOf(run), 1); };
+      },
+      status: (paneId: string) => {
+        asked.push(paneId);
+        return Promise.resolve(answer);
+      },
+    },
+  };
+}
+
+const pi = (paneId: string) => ({ machineId: "local", paneId, agent: "pi", label: "cwd" });
+
+async function liveOn(paneId: string): Promise<FakeSocket> {
+  startPiVoice({ machineId: "local", paneId, label: "cwd" });
+  grant?.();
+  await flush();
+  const socket = FakeSocket.all.at(-1)!;
+  socket.open();
+  socket.receive({ type: "phase", phase: "listening" });
+  return socket;
+}
+
+describe("following the selected agent", () => {
+  it("does nothing while no call was started", () => {
+    const { deps, pending } = followDeps();
+    followPiVoice(pi("w1:p2"), deps);
+    expect(pending).toHaveLength(0);
+    expect(piVoiceState().status).toBe("idle");
+  });
+
+  it("ends the call on another agent at once, and calls the Pi there once the selection holds", async () => {
+    const first = await liveOn("w1:p1");
+    expect(piVoiceState().status).toBe("live");
+    const { deps, pending, asked } = followDeps();
+    followPiVoice(pi("w1:p2"), deps);
+    expect(first.closed).toBe(true);
+    expect(first.sent.map((text) => JSON.parse(text).type)).toContain("stop");
+    expect(piVoiceState()).toMatchObject({ status: "away", paneId: "w1:p2", end: null });
+    expect(FakeSocket.all).toHaveLength(1);
+    pending[0]!();
+    await flush();
+    expect(asked).toEqual(["w1:p2"]);
+    expect(piVoiceState().status).toBe("starting");
+    grant?.();
+    await flush();
+    expect(FakeSocket.all.at(-1)!.url).toBe("wss://ovis.test/ws/pi-voice?pane_id=w1%3Ap2");
+  });
+
+  it("opens nothing for a selection that moved on before it held", async () => {
+    await liveOn("w1:p1");
+    const { deps, pending } = followDeps();
+    const cancel = followPiVoice(pi("w1:p2"), deps);
+    cancel();
+    expect(pending).toHaveLength(0);
+    expect(piVoiceState().status).toBe("away");
+  });
+
+  it("waits with no voice on an agent that is not Pi, or a Pi that cannot take a call", async () => {
+    await liveOn("w1:p1");
+    const shell = followDeps();
+    followPiVoice({ machineId: "local", paneId: "w1:p2", agent: null, label: "cwd" }, shell.deps);
+    expect(shell.pending).toHaveLength(0);
+    expect(piVoiceState()).toMatchObject({ status: "away", end: null });
+    const unready = followDeps({ available: false, busy: false });
+    followPiVoice(pi("w1:p3"), unready.deps);
+    unready.pending[0]!();
+    await flush();
+    expect(piVoiceState()).toMatchObject({ status: "away", end: null });
+  });
+
+  it("says so when the Pi there already has a call", async () => {
+    await liveOn("w1:p1");
+    const { deps, pending } = followDeps({ available: true, busy: true });
+    followPiVoice(pi("w1:p2"), deps);
+    pending[0]!();
+    await flush();
+    expect(piVoiceState()).toMatchObject({ status: "away", end: { kind: "busy" } });
+  });
+
+  it("keeps the call on the same agent", async () => {
+    const socket = await liveOn("w1:p1");
+    const { deps, pending } = followDeps();
+    followPiVoice(pi("w1:p1"), deps);
+    expect(socket.closed).toBe(false);
+    expect(pending).toHaveLength(0);
+    expect(piVoiceState().status).toBe("live");
+  });
+
+  it("stops following on End, and on Pi ending the call itself", async () => {
+    await liveOn("w1:p1");
+    endPiVoice();
+    const ended = followDeps();
+    followPiVoice(pi("w1:p2"), ended.deps);
+    expect(ended.pending).toHaveLength(0);
+    const socket = await liveOn("w1:p1");
+    socket.receive({ type: "ended" });
+    expect(piVoiceState().status).toBe("idle");
+  });
+
+  it("keeps following after a call is cut off, and the next agent clears why", async () => {
+    const socket = await liveOn("w1:p1");
+    socket.receive({ type: "ended", code: "closed" });
+    expect(piVoiceState()).toMatchObject({ status: "away", end: { kind: "closed" } });
+    const { deps, pending } = followDeps();
+    followPiVoice(pi("w1:p2"), deps);
+    expect(piVoiceState()).toMatchObject({ status: "away", end: null });
+    expect(pending).toHaveLength(1);
+  });
+
+  it("does not ask for a refused microphone again on the next agent", async () => {
+    startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
+    deny?.();
+    await flush();
+    const { deps, pending } = followDeps();
+    followPiVoice(pi("w1:p2"), deps);
+    expect(pending).toHaveLength(0);
+    expect(piVoiceState()).toMatchObject({ status: "away", end: { kind: "denied" } });
   });
 });

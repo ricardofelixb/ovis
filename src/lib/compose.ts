@@ -288,12 +288,10 @@ export function composerSendShown(state: { working: boolean; text: string }): bo
 /**
  * The composer's big button: Stop for the working agent, Send for a message, and a voice call
  * where there is nothing to send and one can start (the orb replaces Send in an empty box, as in
- * the agents app's composer). During this pane's call, an empty box hangs it up instead, even
- * while the agent works: the call's own dock has no End.
+ * the agents app's composer). A call's End is on its own orb (PiVoiceView).
  */
-export function composerPrimaryAction(state: { sending: boolean; working: boolean; text: string; hasAttachments: boolean; canStartVoice: boolean; inCall?: boolean }): "send" | "stop" | "voice" | "hangup" {
+export function composerPrimaryAction(state: { sending: boolean; working: boolean; text: string; hasAttachments: boolean; canStartVoice: boolean }): "send" | "stop" | "voice" {
   const empty = !state.sending && state.text.trim().length === 0 && !state.hasAttachments;
-  if (empty && state.inCall) return "hangup";
   if (!state.sending && !composerSendShown(state)) return "stop";
   return empty && state.canStartVoice ? "voice" : "send";
 }
