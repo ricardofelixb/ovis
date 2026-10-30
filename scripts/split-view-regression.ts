@@ -204,7 +204,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       // the half dropped on the right is slot b, which draws on a connection of its own (App's SlotSessions)
       assert.equal(sockets.length, 2, "the second half opens a second socket to the PC");
       // the right half is active: closing the left one must not mount its pane again
-      await half(page, "left").getByRole("button", { name: "Close this half", exact: true }).click();
+      await half(page, "left").getByRole("button", { name: "Close this column", exact: true }).click();
       await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 1);
       await settled(page);
       assert.equal(await kept.evaluate((element) => element.isConnected), true, "the active half's terminal stays mounted");
@@ -252,7 +252,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       };
 
       await preview(false, null);
-      assert.equal(await guide.locator(".split-drop-half").count(), 2, "both drop guides stay mounted");
+      assert.equal(await guide.locator(".split-drop-column").count(), 2, "both drop guides stay mounted");
       assert.equal(await guide.locator(".split-drop-target").count(), 1, "one indicator moves between the guides");
       const indicator = (await guide.locator(".split-drop-target").elementHandle())!;
       await start();
@@ -555,7 +555,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       const frames: string[] = [];
       const { page, errors } = await open([first, beside], "terminal", async (context) => {
         await context.addInitScript(([other]) => {
-          sessionStorage.setItem("ovis:split", JSON.stringify({ other: { machineId: "local", paneId: other }, bSide: "right", active: "a" }));
+          sessionStorage.setItem("ovis:split", JSON.stringify({ order: ["a", "b"], active: "a", panes: { b: { machineId: "local", paneId: other } } }));
         }, [first] as const);
         // what the page asks of the PC's socket: attach/detach/input frames tell an attachment lost from one never made
         const note = (direction: string, payload: string | Buffer): void => {
@@ -624,7 +624,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       await page.keyboard.type("echo split-ok-42\n");
       await reaches("split-ok-42", "drawn in both halves");
       // the duplicate closed: its socket's detach is its own, the left half's terminal still types
-      await half(page, "right").getByRole("button", { name: "Close this half", exact: true }).click();
+      await half(page, "right").getByRole("button", { name: "Close this column", exact: true }).click();
       await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 1);
       await settled(page);
       // one pane again: its slot has no side
@@ -880,8 +880,8 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       const [pane] = await panesFor("removed-machine") as [string];
       const { page, errors } = await open([pane], "chat", (context) => context.addInitScript(() => {
         sessionStorage.setItem("ovis:split", JSON.stringify({
-          other: { machineId: "removed-split-fixture", paneId: "missing-pane" },
-          bSide: "right", active: "a",
+          order: ["a", "b"], active: "a",
+          panes: { b: { machineId: "removed-split-fixture", paneId: "missing-pane" } },
         }));
       }));
       await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 1

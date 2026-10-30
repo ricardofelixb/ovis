@@ -79,7 +79,7 @@ const BASE: Record<string, string> = {
   "Pane closed": "ペインは閉じられました",
   "Show the terminal": "ターミナルを表示",
   "Show the chat": "チャットを表示",
-  "Close this half": "この半分を閉じる",
+  "Close this column": "この列を閉じる",
   "Toggle sidebar (⌘⇧B)": "サイドバーの切り替え (⌘⇧B)",
   "Chat transcript (⌘⇧J)": "チャット履歴 (⌘⇧J)",
   "Live terminal (⌘⇧J)": "ライブターミナル (⌘⇧J)",

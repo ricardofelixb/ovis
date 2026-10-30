@@ -21,7 +21,7 @@
   gap: var(--space-2);
 }
 
-.split-drop-half {
+.split-drop-column {
   position: relative;
   display: flex;
   flex: 1 1 0;
@@ -42,25 +42,23 @@
   font-size: var(--fs-xs);
 }
 
-/* Move one highlight instead of flashing between two newly mounted halves. */
+/* Move one highlight instead of flashing between newly mounted columns: `--drop-at` of
+   `--drop-count` equal columns (SplitDropPreview) */
 .split-drop-target {
+  --drop-width: calc((100% - (var(--drop-count, 2) - 1) * var(--space-2)) / var(--drop-count, 2));
   position: absolute;
   inset: 0 auto 0 0;
-  width: calc((100% - var(--space-2)) / 2);
+  width: var(--drop-width);
   border: 2px solid var(--accent);
   border-radius: var(--radius-md);
   background: var(--accent-tint);
   opacity: 0;
-  transform: translateX(0);
-  transition: transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
+  transform: translateX(calc(var(--drop-at, 0) * (100% + var(--space-2))));
+  transition: transform var(--dur-fast) var(--ease-out), width var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out);
 }
 
 .split-drop[data-side] .split-drop-target {
   opacity: 1;
-}
-
-.split-drop[data-side="right"] .split-drop-target {
-  transform: translateX(calc(100% + var(--space-2)));
 }
 
 @media (prefers-reduced-motion: reduce) {

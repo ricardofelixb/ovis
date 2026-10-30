@@ -759,7 +759,7 @@ try {
     await context.addInitScript(({ pane, other }) => {
       localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", theme: "light", darkTheme: "amber", lightTheme: "amber", autoSendQueued: true }));
       localStorage.setItem(`ovis:view:${pane}`, "chat");
-      sessionStorage.setItem("ovis:split", JSON.stringify({ other: { machineId: "local", paneId: other }, bSide: "right", active: "a" }));
+      sessionStorage.setItem("ovis:split", JSON.stringify({ order: ["a", "b"], active: "a", panes: { b: { machineId: "local", paneId: other } } }));
     }, { pane: owner, other: panes.api });
     const page = await context.newPage();
     const errors: string[] = [];

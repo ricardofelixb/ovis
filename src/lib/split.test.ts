@@ -1,119 +1,97 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { activateOther, dockPane, draggedPane, dropSide, paneDragData, slotSide, storedSplit, storeSplit, type SplitState } from "./split.ts";
+import { activateColumn, closeColumn, columnsFit, dockPane, draggedPane, dropAt, paneDragData, shownColumns, storedSplit, storeSplit, type SplitState } from "./split.ts";
 
 const A = { machineId: "local", paneId: "w1:p1" };
 const B = { machineId: "local", paneId: "w1:p2" };
 const C = { machineId: "pc2", paneId: "w1:p1" };
+const D = { machineId: "local", paneId: "w2:p1" };
 
 describe("split view", () => {
   it("opens a dropped pane beside the single one, on the side it was dropped on", () => {
-    expect(dockPane(null, A, B, "right")).toEqual({ split: { other: A, bSide: "right", active: "b" }, select: B });
-    expect(dockPane(null, A, B, "left")).toEqual({ split: { other: A, bSide: "left", active: "b" }, select: B });
-    // the single pane's slot keeps it, on the other side
-    expect(slotSide({ other: A, bSide: "left", active: "b" }, "a")).toBe("right");
+    expect(dockPane(null, A, B, { index: 1, insert: true })).toEqual({ split: { order: ["a", "b"], active: "b", panes: { a: A } }, select: B });
+    expect(dockPane(null, A, B, { index: 0, insert: true })).toEqual({ split: { order: ["b", "a"], active: "b", panes: { a: A } }, select: B });
   });
 
-  it("opens a dropped pane in the other slot when the single pane is in slot b", () => {
-    // a split closed from its left half leaves its pane in slot b: dropping again keeps it there
-    const next = dockPane(null, A, B, "right", "b")!;
-    expect(next).toEqual({ split: { other: A, bSide: "left", active: "a" }, select: B });
-    expect(slotSide(next.split, "a")).toBe("right");
-    expect(slotSide(next.split, "b")).toBe("left");
+  it("keeps the single pane in its own slot when that is not slot a", () => {
+    // a split closed from its left column leaves its pane in slot b: dropping again keeps it there
+    expect(dockPane(null, A, B, { index: 1, insert: true }, "b")).toEqual({ split: { order: ["b", "a"], active: "a", panes: { b: A } }, select: B });
   });
 
-  it("does nothing for a pane dropped onto the active half that shows it, or with nothing open", () => {
-    expect(dockPane(null, null, B, "left")).toBeNull();
-    const split: SplitState = { other: A, bSide: "right", active: "b" };
-    expect(dockPane(split, B, B, "right")).toBeNull();
+  it("does nothing for a pane dropped into the active column that shows it, or with nothing open", () => {
+    expect(dockPane(null, null, B, { index: 0, insert: true })).toBeNull();
+    const split: SplitState = { order: ["a", "b"], active: "b", panes: { a: A } };
+    expect(dockPane(split, B, B, { index: 1, insert: false })).toBeNull();
   });
 
-  it("opens the single pane beside itself when it is dropped on a half", () => {
-    expect(dockPane(null, A, A, "left")).toEqual({ split: { other: A, bSide: "left", active: "b" }, select: A });
+  it("opens a pane dropped into a column there, making that column active and keeping the others", () => {
+    const split: SplitState = { order: ["a", "b"], active: "b", panes: { a: A } };
+    expect(dockPane(split, B, C, { index: 1, insert: false })).toEqual({ split, select: C });
+    expect(dockPane(split, B, C, { index: 0, insert: false })).toEqual({ split: { order: ["a", "b"], active: "a", panes: { b: B } }, select: C });
   });
 
-  it("opens a pane dropped on the active half there, and on the other half there, making it active", () => {
-    // B active on the right (slot b), A on the left (slot a)
-    const split: SplitState = { other: A, bSide: "right", active: "b" };
-    expect(dockPane(split, B, C, "right")).toEqual({ split, select: C });
-    expect(dockPane(split, B, C, "left")).toEqual({ split: { other: B, bSide: "right", active: "a" }, select: C });
+  it("adds a third column between two, in a free slot, and the dropped pane is selected there", () => {
+    const split: SplitState = { order: ["a", "b"], active: "b", panes: { a: A } };
+    expect(dockPane(split, B, C, { index: 1, insert: true })).toEqual({ split: { order: ["a", "c", "b"], active: "c", panes: { a: A, b: B } }, select: C });
+    expect(dockPane(split, B, C, { index: 2, insert: true })).toEqual({ split: { order: ["a", "b", "c"], active: "c", panes: { a: A, b: B } }, select: C });
   });
 
-  it("shows a half's own pane in the other half too, never trading sides", () => {
-    const split: SplitState = { other: A, bSide: "right", active: "b" };
-    // the active B dropped on the left: the left half shows B as well and is active, the right keeps B
-    expect(dockPane(split, B, B, "left")).toEqual({ split: { other: B, bSide: "right", active: "a" }, select: B });
-    // the other pane A dropped on the active right half: the right shows A as well, the left keeps A
-    expect(dockPane(split, B, A, "right")).toEqual({ split, select: A });
+  it("refuses a new column once every slot is taken", () => {
+    const split: SplitState = { order: ["a", "b", "c", "d", "e", "f"], active: "a", panes: { b: B, c: B, d: B, e: B, f: B } };
+    expect(dockPane(split, A, C, { index: 0, insert: true })).toBeNull();
   });
 
-  it("makes the other half active without moving either pane", () => {
-    const split: SplitState = { other: A, bSide: "right", active: "b" };
-    const next = activateOther(split, B);
-    expect(next).toEqual({ split: { other: B, bSide: "right", active: "a" }, select: A });
-    expect(slotSide(next.split, "a")).toBe("left");
+  it("maps a drop on the drawn columns to the split's own order when not all of them are drawn", () => {
+    const split: SplitState = { order: ["a", "b", "c", "d", "e"], active: "c", panes: { a: A, b: B, d: D, e: D } };
+    const shown = shownColumns(split, 3);
+    expect(shown).toEqual(["b", "c", "d"]);
+    expect(dockPane(split, C, A, { index: 0, insert: false }, "a", shown)).toEqual({ split: { order: ["a", "b", "c", "d", "e"], active: "b", panes: { a: A, c: C, d: D, e: D } }, select: A });
   });
 
-  it("tells the half by the middle of the area, and reads only a pane's drag data", () => {
-    expect(dropSide(100, 0, 400)).toBe("left");
-    expect(dropSide(250, 0, 400)).toBe("right");
+  it("makes another column active without moving any pane", () => {
+    const split: SplitState = { order: ["a", "b", "c"], active: "b", panes: { a: A, c: C } };
+    expect(activateColumn(split, "c", B)).toEqual({ split: { order: ["a", "b", "c"], active: "c", panes: { a: A, b: B } }, select: C });
+    expect(activateColumn(split, "b", B)).toBeNull();
+  });
+
+  it("closes a column: the others stay, and the active one hands over to its neighbour", () => {
+    const split: SplitState = { order: ["a", "b", "c"], active: "b", panes: { a: A, c: C } };
+    expect(closeColumn(split, "a", B)).toEqual({ split: { order: ["b", "c"], active: "b", panes: { c: C } }, select: B, remaining: "b" });
+    expect(closeColumn(split, "b", B)).toEqual({ split: { order: ["a", "c"], active: "c", panes: { a: A } }, select: C, remaining: "c" });
+    // the last column closed hands over to the one on its left; two columns end the split
+    expect(closeColumn({ order: ["a", "b"], active: "b", panes: { a: A } }, "b", B)).toEqual({ split: null, select: A, remaining: "a" });
+  });
+
+  it("draws as many columns as fit, two at least, keeping the active one drawn", () => {
+    expect(columnsFit(500)).toBe(2);
+    expect(columnsFit(900)).toBe(3);
+    expect(columnsFit(10_000)).toBe(6);
+    const split: SplitState = { order: ["a", "b", "c", "d"], active: "d", panes: { a: A, b: B, c: C } };
+    expect(shownColumns(split, 4)).toEqual(["a", "b", "c", "d"]);
+    expect(shownColumns(split, 3)).toEqual(["b", "c", "d"]);
+    expect(shownColumns({ ...split, active: "a" }, 3)).toEqual(["a", "b", "c"]);
+  });
+
+  it("splits a single pane on the side of the drop, held near the middle", () => {
+    expect(dropAt(100, 0, 400, 1, true)).toEqual({ index: 0, insert: true });
+    expect(dropAt(250, 0, 400, 1, true)).toEqual({ index: 1, insert: true });
+    expect(dropAt(212, 0, 400, 1, true, { index: 0, insert: true })).toEqual({ index: 0, insert: true });
+    expect(dropAt(213, 0, 400, 1, true, { index: 0, insert: true })).toEqual({ index: 1, insert: true });
+    expect(dropAt(188, 100, 400, 1, true, { index: 1, insert: true })).toEqual({ index: 0, insert: true });
+  });
+
+  it("opens a new column at a column's edge while there is room, else in the column", () => {
+    // two columns of 300 from x 100
+    expect(dropAt(150, 100, 600, 2, true)).toEqual({ index: 0, insert: true });
+    expect(dropAt(250, 100, 600, 2, true)).toEqual({ index: 0, insert: false });
+    expect(dropAt(390, 100, 600, 2, true)).toEqual({ index: 1, insert: true });
+    expect(dropAt(690, 100, 600, 2, true)).toEqual({ index: 2, insert: true });
+    expect(dropAt(690, 100, 600, 2, false)).toEqual({ index: 1, insert: false });
+  });
+
+  it("reads only a pane's drag data", () => {
     expect(draggedPane(paneDragData(C))).toEqual(C);
     expect(draggedPane("{\"workspace_id\":\"w1\"}")).toBeNull();
     expect(draggedPane("not json")).toBeNull();
-  });
-
-  it("uses the exact midpoint on first entry, including an offset pane area", () => {
-    expect(dropSide(299, 100, 400)).toBe("left");
-    expect(dropSide(300, 100, 400)).toBe("right");
-    expect(dropSide(301, 100, 400, null)).toBe("right");
-  });
-
-  it("keeps either preview side until the pointer crosses the 12px band", () => {
-    expect(dropSide(212, 0, 400, "left")).toBe("left");
-    expect(dropSide(213, 0, 400, "left")).toBe("right");
-    expect(dropSide(188, 0, 400, "right")).toBe("right");
-    expect(dropSide(187, 0, 400, "right")).toBe("left");
-  });
-
-  it("keeps the preview steady while the pointer moves back and forth around the middle", () => {
-    let previous = dropSide(199, 0, 400);
-    for (const x of [201, 198, 204, 212, 190]) {
-      previous = dropSide(x, 0, 400, previous);
-      expect(previous).toBe("left");
-    }
-    previous = dropSide(213, 0, 400, previous);
-    expect(previous).toBe("right");
-    for (const x of [205, 199, 201, 188]) {
-      previous = dropSide(x, 0, 400, previous);
-      expect(previous).toBe("right");
-    }
-  });
-
-  it("shrinks the band for narrow areas and caps it for wide ones", () => {
-    expect(dropSide(30, 0, 40, "left")).toBe("left");
-    expect(dropSide(31, 0, 40, "left")).toBe("right");
-    expect(dropSide(10, 0, 40, "right")).toBe("right");
-    expect(dropSide(9, 0, 40, "right")).toBe("left");
-    expect(dropSide(1_012, 0, 2_000, "left")).toBe("left");
-    expect(dropSide(1_013, 0, 2_000, "left")).toBe("right");
-  });
-
-  it("measures the band relative to an area with negative viewport coordinates", () => {
-    expect(dropSide(-301, -500, 400)).toBe("left");
-    expect(dropSide(-300, -500, 400)).toBe("right");
-    expect(dropSide(-288, -500, 400, "left")).toBe("left");
-    expect(dropSide(-287, -500, 400, "left")).toBe("right");
-    expect(dropSide(-312, -500, 400, "right")).toBe("right");
-    expect(dropSide(-313, -500, 400, "right")).toBe("left");
-  });
-
-  it("commits to the previewed half when released inside the band", () => {
-    const preview = dropSide(205, 0, 400, "left");
-    expect(preview).toBe("left");
-    expect(dropSide(205, 0, 400)).toBe("right");
-    const committed = dropSide(208, 0, 400, preview);
-    const result = dockPane(null, A, B, committed)!;
-    expect(slotSide(result.split, result.split.active)).toBe(preview);
-    expect(result.select).toEqual(B);
   });
 });
 
@@ -139,11 +117,15 @@ describe("split storage", () => {
       value: { sessionStorage: storage(session), localStorage: storage(local) },
     });
 
-    const split: SplitState = { other: A, bSide: "right", active: "b" };
+    const split: SplitState = { order: ["a", "c", "b"], active: "c", panes: { a: A, b: B } };
     storeSplit(split);
     expect(session.get(storageKey)).toBe(JSON.stringify(split));
     expect(local.has(storageKey)).toBe(false);
     expect(storedSplit()).toEqual(split);
+
+    // a split saved by the two-half version opens as a single pane
+    session.set(storageKey, JSON.stringify({ other: A, bSide: "right", active: "b" }));
+    expect(storedSplit()).toBeNull();
 
     storeSplit(null);
     expect(session.has(storageKey)).toBe(false);
@@ -163,7 +145,7 @@ describe("split storage", () => {
     });
 
     expect(storedSplit()).toBeNull();
-    expect(() => storeSplit({ other: A, bSide: "right", active: "b" })).not.toThrow();
+    expect(() => storeSplit({ order: ["a", "b"], active: "b", panes: { a: A } })).not.toThrow();
     expect(() => storeSplit(null)).not.toThrow();
   });
 });

@@ -77,7 +77,7 @@ const BASE: Record<string, string> = {
   "Pane closed": "창이 닫혔습니다",
   "Show the terminal": "터미널 보기",
   "Show the chat": "채팅 보기",
-  "Close this half": "이쪽 화면 닫기",
+  "Close this column": "이 열 닫기",
   "Toggle sidebar (⌘⇧B)": "사이드바 토글 (⌘⇧B)",
   "Chat transcript (⌘⇧J)": "채팅 기록 (⌘⇧J)",
   "Live terminal (⌘⇧J)": "실시간 터미널 (⌘⇧J)",
