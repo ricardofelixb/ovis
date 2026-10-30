@@ -16,7 +16,7 @@ import { NO_STICKY_MODIFIERS, type StickyModifiers } from "../lib/keys.ts";
 import { EMPTY_DRAFT, draftIsEmpty, restoreDraft, type InputDraft } from "../lib/draft.ts";
 import { messageQueues } from "../lib/messageQueue.ts";
 import { pendingMessages } from "../lib/pendingMessages.ts";
-import { currentWaitingSends, subscribeWaitingSends, waitingKey } from "../lib/sentWaiting.ts";
+import { currentWaitingSends, subscribeWaitingSends, WAITING_HINT_MS, waitingKey } from "../lib/sentWaiting.ts";
 import { heldCountShown, heldOpenAtFold, heldOpenOnFocus, heldRefocusDue, heldRowError, heldRowsFold, heldRowsHidden, heldToggleShown, SHORT_PHONE_QUERY } from "../lib/heldRows.ts";
 import { arrangeNotices, dismissNotice, NO_DISMISSALS, settleDismissed, type DismissedNotices } from "../lib/composerNotices.ts";
 import { MAX_COMPOSER_CHARS, QUEUE_READY_STATUS, agentDisplayLabel, claudeMainAtRest, typedTerminalCommand } from "../lib/compose.ts";
@@ -586,9 +586,20 @@ export function PaneTerminal({
   const pending = useSyncExternalStore(pendingMessages.subscribe, () => pendingMessages.read(queueOwner ?? ""));
   const waitingSends = useSyncExternalStore(subscribeWaitingSends, () => currentWaitingSends(waitingKey(machineId, paneId ?? "")));
   // a Pi receipt the chat already shows as the faded bubble of its send is not listed twice: the row
-  // would come and go under the chat as Pi confirms it. Without that bubble (a reload) it stays.
+  // would come and go under the chat as Pi confirms it. The receipt can come a frame before that
+  // bubble, so a new one waits as long as the bubble's own clock; without the bubble (a reload) it stays.
+  const [, setPendingTick] = useState(0);
+  const receiptShownAt = (message: { created_at: string }): number => Date.parse(message.created_at) + WAITING_HINT_MS;
+  const renderedAt = Date.now();
   const listedPending = pending.filter((message) => message.error?.code !== "pi_transcript_pending"
-    || !waitingSends.some((send) => send.text.trim() === message.text.trim()));
+    || (receiptShownAt(message) <= renderedAt && !waitingSends.some((send) => send.text.trim() === message.text.trim())));
+  const nextReceiptShown = Math.min(...pending.filter((message) => message.error?.code === "pi_transcript_pending")
+    .map(receiptShownAt).filter((at) => at > renderedAt));
+  useEffect(() => {
+    if (!Number.isFinite(nextReceiptShown)) return;
+    const timer = setTimeout(() => setPendingTick((tick) => tick + 1), Math.max(0, nextReceiptShown - Date.now()));
+    return () => clearTimeout(timer);
+  }, [nextReceiptShown]);
   useEffect(() => {
     if (!paneId || !queueOwner || !submitRetention) return;
     let release: (() => void) | undefined;
