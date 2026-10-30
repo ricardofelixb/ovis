@@ -248,8 +248,9 @@ export function matchPiDeliveries(path: string, candidates: readonly PiDeliveryC
       }
       if (parent !== anchor.leaf) { changed.push(candidate.id); continue; }
       const key = (entry: BranchEntry): string => JSON.stringify([path, file, session, entry.id]);
+      // Pi trims what it submits, and a phone keyboard leaves a space after the last word
       const same = chain.reverse().filter((entry) => entry.start > afterMatched && entry.role === "user"
-        && entry.text === candidate.text && !consumedEntries.has(key(entry)));
+        && entry.text === candidate.text.trim() && !consumedEntries.has(key(entry)));
       const match = same.find((entry) => entry.at === null || entry.at >= anchor.at);
       const earlier = match ? undefined : same[0];
       if (match) consumed.push(candidate.id);
@@ -261,7 +262,7 @@ export function matchPiDeliveries(path: string, candidates: readonly PiDeliveryC
       // earlier than a later same-text receipt's capture (a clock set back between captures) may be
       // that receipt's own record, so it stays.
       const laterCapture = Math.min(...candidates.slice(index + 1)
-        .filter((later) => later.text === candidate.text).map((later) => later.anchor.at));
+        .filter((later) => later.text.trim() === candidate.text.trim()).map((later) => later.anchor.at));
       for (const entry of same) {
         if (entry === used || entry.start < used.start && entry.at !== null && entry.at < laterCapture) matchedEntries.push(key(entry));
       }

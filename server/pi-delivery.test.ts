@@ -238,6 +238,14 @@ describe("Pi delivery transcript matching", () => {
     expect(matchPiDeliveries(path, [candidate("r1", "later", anchor!)])).toEqual({ consumed: ["r1"], changed: [], retry: false });
   });
 
+  it("confirms text a phone keyboard left a trailing space on, which Pi trims when it submits", () => {
+    const path = join(dir(), "session.jsonl");
+    writeFileSync(path, header() + entry("a0", null, "assistant", "working"));
+    const anchor = capturePiDeliveryAnchor(path)!;
+    appendFileSync(path, entry("u1", "a0", "user", "voice works"));
+    expect(matchPiDeliveries(path, [candidate("r1", "voice works ", anchor)])).toEqual({ consumed: ["r1"], changed: [], retry: false });
+  });
+
   it("matches duplicate Ovis text by FIFO occurrence and consumes one receipt per entry", () => {
     const path = join(dir(), "session.jsonl");
     writeFileSync(path, header() + entry("a0", null, "assistant", "working"));
