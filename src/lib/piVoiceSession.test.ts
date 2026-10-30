@@ -71,7 +71,7 @@ const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("starting a call from the phone", () => {
   it("opens the connection only once the microphone is allowed, and listens to it from its first frame", async () => {
-    startPiVoice({ paneId: "w1:p1", label: "cwd" });
+    startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
     // the permission prompt can stay open for as long as the user likes: Pi may give up meanwhile
     expect(FakeSocket.all).toHaveLength(0);
     grant?.();
@@ -92,8 +92,16 @@ describe("starting a call from the phone", () => {
     expect(tracks.every((track) => track.stopped)).toBe(true);
   });
 
+  it("names the PC of a pane on another one, so this server calls through to it", async () => {
+    startPiVoice({ machineId: "mac mini", paneId: "w1:p1", label: "cwd", voice: "vale" });
+    grant?.();
+    await flush();
+    expect(FakeSocket.all[0]!.url).toBe("wss://ovis.test/ws/pi-voice?pane_id=w1%3Ap1&machine_id=mac%20mini&voice=vale");
+    expect(piVoiceState()).toMatchObject({ machineId: "mac mini", paneId: "w1:p1" });
+  });
+
   it("opens nothing when the microphone is refused", async () => {
-    startPiVoice({ paneId: "w1:p1", label: "cwd" });
+    startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
     deny?.();
     await flush();
     expect(piVoiceState()).toMatchObject({ status: "ended", end: { kind: "denied" } });
@@ -101,7 +109,7 @@ describe("starting a call from the phone", () => {
   });
 
   it("starts over the composer, opens full-screen when asked, and shows what went wrong full-screen", async () => {
-    startPiVoice({ paneId: "w1:p1", label: "cwd" });
+    startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
     expect(piVoiceState().expanded).toBe(false);
     setPiVoiceExpanded(true);
     expect(piVoiceState().expanded).toBe(true);
@@ -116,7 +124,7 @@ describe("starting a call from the phone", () => {
   });
 
   it("lets go of a microphone that is allowed after the call was ended", async () => {
-    startPiVoice({ paneId: "w1:p1", label: "cwd" });
+    startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
     endPiVoice();
     grant?.();
     await flush();

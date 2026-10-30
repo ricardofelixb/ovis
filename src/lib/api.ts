@@ -806,8 +806,8 @@ export async function fetchPaneCommands(paneId: string, machineId = "local"): Pr
 }
 
 /** GET /api/pane/pi-voice: whether the pane's Pi can take a live voice call from this phone, and whether one is on. */
-export async function fetchPiVoiceStatus(paneId: string): Promise<PiVoiceStatus> {
-  return getJson<PiVoiceStatus>(`/api/pane/pi-voice?pane_id=${encodeURIComponent(paneId)}`);
+export async function fetchPiVoiceStatus(paneId: string, machineId = "local"): Promise<PiVoiceStatus> {
+  return getJson<PiVoiceStatus>(machinePath(machineId, `pane/pi-voice?pane_id=${encodeURIComponent(paneId)}`));
 }
 
 /**

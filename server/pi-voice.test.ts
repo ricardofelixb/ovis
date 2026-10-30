@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PiVoiceHub, type PiVoiceSocket } from "./pi-voice.ts";
+import { PiVoiceHub, type PiVoiceSocket, type PiVoiceSocketData, withPiVoiceSockets } from "./pi-voice.ts";
 import { piVoiceSocketCandidates } from "./pi.ts";
 
 const PANE = "w2W:p1";
@@ -341,6 +341,75 @@ describe("the relay between a phone and a Pi", () => {
     revokes[0]!();
     expect(phone.closed).toBe(true);
     // a real socket reports its own close; the fake is told
+    hub.close(phone);
+    await until(() => pi.closed(), "Pi closed");
+  });
+});
+
+describe("a call with the Pi of a pane on another PC", () => {
+  const bridges: Array<{ stop(force?: boolean): unknown }> = [];
+  afterEach(() => { for (const bridge of bridges.splice(0)) bridge.stop(true); });
+
+  /** That PC's bridge: its own hub behind /ws/pi-voice, for this token only. */
+  function remoteBridge(candidates: Array<{ pid: number; path: string }> | null) {
+    const hub = new PiVoiceHub({ candidates: async () => candidates });
+    const bridge = Bun.serve<PiVoiceSocketData>({
+      port: 0,
+      hostname: "127.0.0.1",
+      fetch(request, server) {
+        const url = new URL(request.url);
+        if (request.headers.get("authorization") !== "Bearer pc-token" || url.pathname !== "/ws/pi-voice") return new Response("no", { status: 404 });
+        const voice = url.searchParams.get("voice");
+        const data = { piVoice: { paneId: url.searchParams.get("pane_id")!, deviceId: undefined, ...(voice ? { voice: voice as "vale" } : {}) } };
+        return server.upgrade(request, { data }) ? undefined : new Response("upgrade", { status: 426 });
+      },
+      websocket: withPiVoiceSockets({ message() {} }, hub),
+    });
+    bridges.push(bridge);
+    return `http://127.0.0.1:${bridge.port}`;
+  }
+
+  function phoneOn(url: string, token = "pc-token") {
+    const tracked: Array<() => void> = [];
+    const phone = fakePhone();
+    phone.data.piVoice.machine = { endpoint: { url, token }, track: (close) => { tracked.push(close); return () => {}; } };
+    return { phone, tracked };
+  }
+
+  it("reaches that PC's Pi through its bridge, both ways", async () => {
+    const pi = await fakePi(join(root, "agent"), 77);
+    const url = remoteBridge([{ pid: 77, path: pi.path }]);
+    const hub = new PiVoiceHub({ candidates: async () => { throw new Error("this PC's Pi is not asked"); } });
+    const { phone } = phoneOn(url);
+    phone.data.piVoice.voice = "vale";
+    await hub.open(phone);
+    hub.message(phone, frame({ type: "hello" }));
+    await until(() => pi.received.length >= 2, "start and hello on the other PC");
+    expect(pi.received).toEqual([{ v: 1, type: "start", voice: "vale" }, { v: 1, type: "hello" }]);
+    pi.send({ type: "phase", phase: "listening" });
+    await until(() => phone.sent.length === 1, "Pi's frame");
+    expect(phone.sent[0]).toEqual({ v: 1, type: "phase", phase: "listening" });
+    hub.close(phone);
+    await until(() => pi.closed(), "Pi closed");
+  });
+
+  it("says a PC whose bridge has no voice is unavailable", async () => {
+    const url = remoteBridge(null);
+    const { phone } = phoneOn(url, "wrong-token");
+    await new PiVoiceHub().open(phone);
+    await until(() => phone.closed, "phone closed");
+    expect(phone.sent).toEqual([{ v: 1, type: "ended", code: "unavailable" }]);
+  });
+
+  it("ends the call when the PC disconnects", async () => {
+    const pi = await fakePi(join(root, "agent"), 77);
+    const url = remoteBridge([{ pid: 77, path: pi.path }]);
+    const { phone, tracked } = phoneOn(url);
+    const hub = new PiVoiceHub();
+    await hub.open(phone);
+    await until(() => pi.received.length >= 1, "start");
+    tracked[0]!();
+    expect(phone.closed).toBe(true);
     hub.close(phone);
     await until(() => pi.closed(), "Pi closed");
   });

@@ -1041,11 +1041,11 @@ export function Composer({
   const statusCompact = composerStatusCompact(cardWidth);
   const voiceAvailable = usePiVoiceAvailable(paneId, agent);
   const voice = usePiVoice();
-  const inCall = (voice.status === "starting" || voice.status === "live") && voice.paneId === paneId;
+  const inCall = (voice.status === "starting" || voice.status === "live") && voice.machineId === machineId && voice.paneId === paneId;
   // the orb shows once the call is ready to talk; until then the hang-up turns, and still cancels it
   const callConnecting = inCall && voice.status === "starting";
   // an orb where there is nothing to send: a live call with the Pi in this pane, from a phone or a PC alike
-  const primaryAction = composerPrimaryAction({ sending, working: isWorking, text, hasAttachments: attachments.length > 0, canStartVoice: voiceAvailable && role !== "observe" && connected && machineId === "local", inCall });
+  const primaryAction = composerPrimaryAction({ sending, working: isWorking, text, hasAttachments: attachments.length > 0, canStartVoice: voiceAvailable && role !== "observe" && connected, inCall });
   const hint = composerStatusHint({ uploading, connected, text, noRoom: roomless !== undefined });
   const models = agent === "pi" && role !== "observe" && metadata?.models?.length ? metadata.models : undefined;
   // a switch shows at once: pi applies it in a moment, but its transcript reaches the pill a read later
@@ -1515,7 +1515,7 @@ export function Composer({
               title={t("Start live voice")}
               // the tap is the gesture that lets the browser open the microphone and play the reply
               onPointerDown={(event) => event.preventDefault()}
-              onClick={() => startPiVoice({ paneId, label: cwd?.split("/").filter(Boolean).at(-1) ?? "Pi", ...(settings.liveVoice !== "pi" ? { voice: settings.liveVoice } : {}) })}
+              onClick={() => startPiVoice({ machineId, paneId, label: cwd?.split("/").filter(Boolean).at(-1) ?? "Pi", ...(settings.liveVoice !== "pi" ? { voice: settings.liveVoice } : {}) })}
             >
               <AudioLines aria-hidden="true" />
             </button>

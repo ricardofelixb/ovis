@@ -412,6 +412,14 @@ export function createServer(
       // a live voice call with the Pi in a pane (server/pi-voice.ts), and whether the pane can take one
       if (pathname === PI_VOICE_PATH || pathname === PI_VOICE_STATUS_PATH) {
         const deviceId = access.level === "full" ? access.device?.id : undefined;
+        // a pane on another PC is called through that PC's server; its status comes through the PC proxy
+        const machineId = pathname === PI_VOICE_PATH ? url.searchParams.get("machine_id") : null;
+        if (machineId && machineId !== "local") {
+          const endpoint = machines?.endpoint(machineId);
+          if (!endpoint) return jsonResponse({ error: { code: "machine_offline", message: "This PC is disconnected" } }, 503);
+          const machine = { endpoint, track: (close: () => void) => machines!.trackTerminal(machineId, close) };
+          return handlePiVoiceRequest(request, url, bunServer, piVoice, { readOnly, deviceId, headers, machine });
+        }
         return handlePiVoiceRequest(request, url, bunServer, piVoice, { readOnly, deviceId, headers });
       }
 
