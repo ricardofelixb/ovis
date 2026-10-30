@@ -336,7 +336,7 @@ try {
           if (!mobile) {
             // a Back to the pane before, under the open sheet (a desktop's Back is the panes'): the read's answer opens nothing there
             const select = async (pane: string): Promise<void> => {
-              await page.locator(`.agents-sidebar .agent-item[data-pane="${pane}"] .agent-select`).click();
+              await page.locator(`.workspace-agents .agent-item[data-pane="${pane}"] .agent-select`).click();
               await page.waitForFunction((pane) => new URL(location.href).searchParams.get("pane") === pane, pane);
             };
             await select(panes.api);

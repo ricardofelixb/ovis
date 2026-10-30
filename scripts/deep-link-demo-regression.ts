@@ -18,8 +18,8 @@ const DOCS = panes.hermes;
 const wsOf = (pane: string) => pane.split(":")[0]!;
 
 const query = (page: Page) => page.evaluate(() => Object.fromEntries(new URLSearchParams(window.location.search)));
-const selected = (page: Page) => page.locator('.agents-sidebar .agent-select[aria-current="true"]').evaluate((node) => node.closest(".agent-item")?.getAttribute("data-pane"));
-const waitSelected = (page: Page, pane: string) => page.waitForFunction((id) => document.querySelector('.agents-sidebar .agent-select[aria-current="true"]')?.closest(".agent-item")?.getAttribute("data-pane") === id, pane, { timeout: 10_000 });
+const selected = (page: Page) => page.locator('.workspace-agents .agent-select[aria-current="true"]').evaluate((node) => node.closest(".agent-item")?.getAttribute("data-pane"));
+const waitSelected = (page: Page, pane: string) => page.waitForFunction((id) => document.querySelector('.workspace-agents .agent-select[aria-current="true"]')?.closest(".agent-item")?.getAttribute("data-pane") === id, pane, { timeout: 10_000 });
 const waitQuery = (page: Page, name: string, value: string | null) => page.waitForFunction(([key, want]) => new URLSearchParams(window.location.search).get(key) === want, [name, value] as const, { timeout: 10_000 });
 
 async function withPage(browser: Browser, search: string, run: (page: Page) => Promise<void>): Promise<void> {
@@ -32,7 +32,7 @@ async function withPage(browser: Browser, search: string, run: (page: Page) => P
     await page.goto(`${url}${search}`);
     await page.locator(".conn-live").waitFor({ state: "attached" });
     // attached, not visible: a link can open with the sidebar collapsed
-    await page.locator(".agents-sidebar .agent-item").first().waitFor({ state: "attached" });
+    await page.locator(".workspace-agents .agent-item").first().waitFor({ state: "attached" });
     await run(page);
     assert.deepEqual(errors, []);
   } finally {
@@ -84,7 +84,7 @@ try {
         await waitSelected(page, INFRA);
         assert.equal(await page.locator('.view-switch button[aria-pressed="true"]').innerText(), "Chat", "the linked lens is the one shown");
         const start = await page.evaluate(() => history.length);
-        await page.locator(`.agents-sidebar .agent-item[data-pane="${DOCS}"] .agent-select`).click();
+        await page.locator(`.workspace-agents .agent-item[data-pane="${DOCS}"] .agent-select`).click();
         await waitQuery(page, "pane", DOCS);
         assert.equal(await page.evaluate(() => history.length), start + 1, "opening another pane is an entry");
         await page.locator(".view-switch button", { hasText: "Terminal" }).click();
@@ -184,7 +184,7 @@ try {
         await waitQuery(page, "machine", "removed");
         await page.evaluate(() => (window as unknown as { __releaseRoster: () => void }).__releaseRoster());
         await page.locator(".header-note", { hasText: "That link's PC is not set up here" }).waitFor();
-        await page.locator('.agents-sidebar .agent-select[aria-current="true"]').waitFor();
+        await page.locator('.workspace-agents .agent-select[aria-current="true"]').waitFor();
         await waitQuery(page, "machine", null);
         assert.deepEqual(errors, []);
       } finally {
@@ -402,7 +402,7 @@ try {
       // a link to a PC this app does not have opens this PC, and says so
       await withPage(browser, `?machine=nope&pane=${encodeURIComponent(INFRA)}`, async (page) => {
         await page.locator(".header-note", { hasText: "That link's PC is not set up here" }).waitFor();
-        await page.locator('.agents-sidebar .agent-select[aria-current="true"]').waitFor();
+        await page.locator('.workspace-agents .agent-select[aria-current="true"]').waitFor();
         await waitQuery(page, "machine", null);
       });
       console.log("PASS a link to a PC that is not set up here opens this PC's pane in front, and says so");
@@ -486,7 +486,7 @@ try {
       // the app picked becomes one the user picked must leave it in the modal (#675 review)
       await withPage(browser, `?ws=${wsOf(INFRA)}&pane=${encodeURIComponent(INFRA)}&view=terminal`, async (page) => {
         await waitSelected(page, INFRA);
-        await page.locator(`.agents-sidebar .agent-item[data-pane="${DOCS}"] .agent-select`).click();
+        await page.locator(`.workspace-agents .agent-item[data-pane="${DOCS}"] .agent-select`).click();
         await waitQuery(page, "pane", DOCS);
         // the selected pane closes: the app picks the pane herdr has in front (autoSelected)
         await page.evaluate((pane) => fetch("/api/pane/close", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pane_id: pane }) }), DOCS);
@@ -560,7 +560,7 @@ try {
         await page.locator(".conn-live").waitFor({ state: "attached" });
         await waitSelected(page, INFRA);
         // the sidebar is a closed drawer on a phone: a click on its row in the page is enough here
-        await page.locator(`.agents-sidebar .agent-item[data-pane="${DOCS}"] .agent-select`).evaluate((node) => (node as HTMLElement).click());
+        await page.locator(`.workspace-agents .agent-item[data-pane="${DOCS}"] .agent-select`).evaluate((node) => (node as HTMLElement).click());
         await waitQuery(page, "pane", DOCS);
         const length = await page.evaluate(() => history.length);
         const more = page.locator(".header-more-button");
@@ -595,7 +595,7 @@ try {
         assert.equal(await selected(page), DOCS, "Back closed the dialog and left the pane alone");
         // every other dialog is a sheet on a phone too: the plan and the palette close on Back
         const API = panes.api;
-        await page.locator(`.agents-sidebar .agent-item[data-pane="${API}"] .agent-select`).evaluate((node) => (node as HTMLElement).click());
+        await page.locator(`.workspace-agents .agent-item[data-pane="${API}"] .agent-select`).evaluate((node) => (node as HTMLElement).click());
         await waitQuery(page, "pane", API);
         const atApi = await page.evaluate(() => history.length);
         // the plan lives in the composer's background-task chip now (#846): its list is a phone dialog too
