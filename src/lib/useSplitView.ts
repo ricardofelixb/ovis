@@ -2,7 +2,7 @@ import { type Dispatch, type DragEvent, type RefObject, type SetStateAction, use
 import type { HerdrPane, HerdrWorkspace } from "../../shared/protocol.ts";
 import { paneStorageId, type Machine } from "../../shared/machines.ts";
 import { fetchSession, type HealthInfo } from "./api.ts";
-import { activateColumn, closeColumn, columnsFit, dockPane, draggedPane, dropAt, PANE_DRAG_TYPE, shownColumns, storedSplit, storeSplit, type SplitDrop, type SplitSlot, type SplitState, type SplitTarget } from "./split.ts";
+import { activateColumn, closeColumn, columnsFit, dockPane, draggedPane, dropAt, inColumn, PANE_DRAG_TYPE, shownColumns, storedSplit, storeSplit, type SplitDrop, type SplitSlot, type SplitState, type SplitTarget } from "./split.ts";
 import { paneDrag, type PaneDrag } from "./paneDrag.ts";
 
 const SELECTION_KEY = "ovis:selection";
@@ -278,8 +278,8 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     const result = active ? activateColumn(open, slot, active) : null;
     if (result) applySplit(result.split, { machineId, paneId }, slot, !focusInput);
   };
-  /** A pane opened by a drop: the column under it, or a new one, shows it and is the active one; the
-   *  other columns keep what they show, the same tab included (lib/split.ts). */
+  /** A pane opened by a drop: the column under it, or a new one, shows it and is the active one; a
+   *  pane another column shows moves with that column instead (lib/split.ts). */
   const dock = (dragged: SplitTarget, drop: SplitDrop): void => {
     if (!wideScreen || selectedPaneId === null) return;
     const result = dockPane(splitOn ? split : null, current(), dragged, drop, soloSlot, shown);
@@ -288,20 +288,21 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     // a new column that needs the docked sidebar's room hides the sidebar, as its button would
     if (result.split.order.length > fit) setSidebarCollapsed(true);
   };
-  /** The drop a point over the pane area would make, if it is over it. */
-  const dropOver = (x: number, y: number): SplitDrop | null => {
+  /** The drop a point over the pane area would make with `dragged`, if it is over it. */
+  const dropOver = (x: number, y: number, dragged: SplitTarget | null): SplitDrop | null => {
     const box = paneAreaRef.current?.getBoundingClientRect();
     const inside = !!box && x >= box.left && x < box.right && y >= box.top && y < box.bottom;
     if (!box || !inside) return null;
     // a drop opens a new column only while every column is drawn and one more fits, counting the
     // docked sidebar's width: the drag mostly starts there, and dock hides it for the column
     const sidebar = sidebarCollapsed ? 0 : document.getElementById("workspace-drawer")?.offsetWidth ?? 0;
-    const room = !splitOn || (split.order.length === shown.length && shown.length < columnsFit(box.width + sidebar));
+    // a pane a column shows moves that column, which needs no room
+    const room = !splitOn || (split.order.length === shown.length && (shown.length < columnsFit(box.width + sidebar) || (dragged !== null && inColumn(split, current(), dragged))));
     return dropAt(x, box.left, box.width, splitOn ? shown.length : 1, room, dropTargetRef.current);
   };
   /** A pane dropped at a point: the column under it, or a new one at its edge, opens the pane. */
   const dockAt = (dragged: SplitTarget, x: number, y: number): void => {
-    const drop = dropOver(x, y);
+    const drop = dropOver(x, y, dragged);
     clearDropPreview();
     if (drop !== null) dock(dragged, drop);
   };
@@ -311,12 +312,14 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     paneDrag.onDrop((target, x, y) => dockAtRef.current(target, x, y));
     return () => paneDrag.onDrop(null);
   }, []);
+  /** the pane a drag from a sidebar row or a title carries: dragover cannot read it */
+  const dragPaneRef = useRef<SplitTarget | null>(null);
   // a tab dragged out of its strip: the guide follows it as a sidebar row's drag does below
   const splitDragOn = wideScreen && selectedPaneId !== null;
   useEffect(() => {
     if (!tabDrag || !splitDragOn) { if (!tabDrag) showDropTarget(null); return; }
     const point = tabDrag.point;
-    showDropTarget(point ? dropOverRef.current(point.x, point.y) : null);
+    showDropTarget(point ? dropOverRef.current(point.x, point.y, tabDrag.target) : null);
   }, [tabDrag, splitDragOn, showDropTarget]);
   // dragenter too: a drop hit-tests once more, and when the node under the pointer was replaced since
   // the last dragover (xterm redraws its rows, a transcript renders again) the new node gets a
@@ -340,7 +343,7 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     markSwap(head);
     setPaneDragging(head === null);
     if (head) { showDropTarget(null); return; }
-    const drop = dropOver(event.clientX, event.clientY);
+    const drop = dropOver(event.clientX, event.clientY, dragPaneRef.current);
     if (drop) showDropTarget(drop);
   };
   const paneDragLeave = (event: DragEvent<HTMLDivElement>): void => {
@@ -371,7 +374,8 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
     const start = (event: globalThis.DragEvent): void => {
       if (event.dataTransfer?.types.includes(PANE_DRAG_TYPE)) {
         const fromTitle = event.target instanceof Element && event.target.closest(".pane-frame-head") !== null;
-        draggedPaneRef.current = fromTitle ? draggedPane(event.dataTransfer.getData(PANE_DRAG_TYPE)) : null;
+        dragPaneRef.current = draggedPane(event.dataTransfer.getData(PANE_DRAG_TYPE));
+        draggedPaneRef.current = fromTitle ? dragPaneRef.current : null;
         showDropTarget(null);
         setPaneDragging(true);
       }

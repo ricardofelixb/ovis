@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Columns2, Ellipsis, FolderOpen, Link, Menu, MessageSquare, Monitor, PanelLeft, Search, SquareTerminal, X } from "lucide-react";
+import { Bell, Ellipsis, FolderOpen, Link, Menu, MessageSquare, Monitor, PanelLeft, Search, SquareTerminal, X } from "lucide-react";
 
 import type { HerdrPane } from "../shared/protocol.ts";
 import { authenticate, createTab, moveTabToWorkspace, shareSeen, signOut, splitPane, swapPaneWith, zoomPane } from "./lib/api.ts";
@@ -20,7 +20,6 @@ import { PiVoiceView } from "./components/PiVoiceView.tsx";
 import { ComputerView } from "./components/ComputerView.tsx";
 import { useComputerView } from "./lib/computerSettings.ts";
 import { DETACHED, useHeaderBranch } from "./lib/paneBranch.ts";
-import { nativeWindows, openNativeWindow } from "./lib/nativeApp.ts";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { SetupGuide, SetupGuideResume } from "./components/SetupGuide.tsx";
 import { useSetupGuide } from "./lib/useSetupGuide.ts";
@@ -608,7 +607,6 @@ export function App() {
     // the address says where the app is (lib/deepLink.ts); a phone has no address bar to copy it from
     { id: "copy-link", label: t("Copy link"), icon: Link, run: () => void copyText(window.location.href).then((ok) => { if (ok) setHeaderNote("copied"); }) },
     // the Android app: this place again in a window of its own, for split screen on a large screen
-    ...(nativeWindows() ? [{ id: "new-window", label: t("Open in new window"), icon: Columns2, run: () => openNativeWindow(window.location.search) }] : []),
     ...(bellVisible ? [{ id: "alerts", label: t("Alerts"), hint: bell.state, checked: bell.on, title: bell.title, icon: Bell, run: () => void bell.run() }] : []),
   ];
 

@@ -361,8 +361,7 @@ pieces are the Java twins of the iOS ones, in `app/android/app/src/main/java/sh/
   old WebView goes with the old activity.
 - Each window of the app is a task of its own (`singleInstancePerTask`, and
   `PROPERTY_SUPPORTS_MULTI_INSTANCE_SYSTEM_UI` for the launcher's New window), so split screen and
-  free windows can show two. The client's Open in new window calls `openWindow`, which starts
-  another task beside this one on an address of the same PC. A window keeps its PC in its saved
+  free windows can show two. A window keeps its PC in its saved
   state, so another window choosing a PC leaves it alone, and starting again (`reopen`) recreates
   it in place: finishing it and starting another would close the window and hand the start to
   another window. A live call belongs to the window that started it.

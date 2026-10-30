@@ -19,8 +19,8 @@
             android:launchMode="singleInstancePerTask"
             android:exported="true">
 
-            <!-- each window is a task of its own, so split screen and free windows can show two
-                 (MainActivity.openWindow); this offers New window in the launcher and taskbar -->
+            <!-- each window is a task of its own, so split screen and free windows can show two;
+                 this offers New window in the launcher and taskbar -->
             <property
                 android:name="android.window.PROPERTY_SUPPORTS_MULTI_INSTANCE_SYSTEM_UI"
                 android:value="true" />

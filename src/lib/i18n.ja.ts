@@ -134,7 +134,6 @@ const BASE: Record<string, string> = {
   "The other PC's answer could not be read": "別の PC の応答を読み取れませんでした",
   "Browse files": "ファイルを参照",
   "Copy link": "リンクをコピー",
-  "Open in new window": "新しいウィンドウで開く",
   "Link copied": "リンクをコピーしました",
   "That agent has closed: its workspace is open": "そのエージェントは閉じられました。代わりにワークスペースを開きました",
   "That link's workspace is closed": "そのリンクのワークスペースは閉じられています",

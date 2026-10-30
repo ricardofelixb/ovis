@@ -5,7 +5,7 @@
  * new column there, while the area has room for one (`MIN_COLUMN_WIDTH`). The selected pane (App's)
  * is the active column's; every other column keeps its own. The columns are independent: several
  * may show one tab (each draws it on a connection of its own), and a pick from the sidebar changes
- * the active column alone.
+ * the active column alone. A dropped pane a column already shows moves that column instead.
  *
  * Each column is a slot (`a` to `f`) that keeps its pane when the active one changes or columns
  * come and go, so no terminal attaches again for a click. A single pane is shown in one of them
@@ -96,15 +96,25 @@ function without(panes: SplitState["panes"], slot: SplitSlot): SplitState["panes
   return next;
 }
 
+/** Whether a column shows `target`: dropped, it moves that column instead of opening in another. */
+export function inColumn(state: SplitState | null, active: SplitTarget | null, target: SplitTarget): boolean {
+  return state !== null && active !== null && slotOf(state, active, target) !== undefined;
+}
+
+/** The column that shows `target`: the active one, else the first other one, if any. */
+function slotOf(state: SplitState, active: SplitTarget, target: SplitTarget): SplitSlot | undefined {
+  return sameTarget(target, active) ? state.active : state.order.find((slot) => sameTarget(state.panes[slot] ?? null, target));
+}
+
 /**
  * A pane dropped on the columns `shown` (all of them, or the active one's neighbours when not all
  * fit): the split after it, and the pane to select (the dropped one, whose column becomes the
- * active one). Null when nothing changes: a pane dropped into the active column that already shows
- * it, or a new column with every slot taken. No column moves: the one under the drop shows the pane,
- * the others keep what they show, and a pane may be shown in several.
+ * active one). Null when nothing changes: a pane dropped where it already is, or a new column with
+ * every slot taken.
  * - Single pane: it stays in its slot (`solo`), and the dropped pane opens in a new column beside it.
- * - Into the active column: the dropped pane opens there.
- * - Into another column: the dropped pane opens there and that column becomes active.
+ * - A pane a column already shows moves with its column: dropped on another column the two trade
+ *   places, and on an edge its column moves there.
+ * - Any other pane opens in the column under the drop, or in a new column at its edge.
  */
 export function dockPane(
   state: SplitState | null,
@@ -117,16 +127,21 @@ export function dockPane(
   if (active === null) return null;
   const current: SplitState = state ?? { order: [solo], active: solo, panes: {} };
   const activePanes = { ...current.panes, [current.active]: active };
+  const from = slotOf(current, active, dragged);
+  if (state === null && from !== undefined) return null;
+  const moved = (order: SplitSlot[], slot: SplitSlot): { split: SplitState; select: SplitTarget } | null =>
+    order.join() === current.order.join() && slot === current.active ? null : { split: { order, active: slot, panes: without(activePanes, slot) }, select: dragged };
   if (drop.insert) {
+    const at = drop.index < shown.length ? current.order.indexOf(shown[drop.index]!) : current.order.indexOf(shown[shown.length - 1]!) + 1;
+    if (from !== undefined) return moved([...current.order.slice(0, at).filter((slot) => slot !== from), from, ...current.order.slice(at).filter((slot) => slot !== from)], from);
     const slot = SPLIT_SLOTS.find((item) => !current.order.includes(item));
     if (slot === undefined) return null;
-    const at = drop.index < shown.length ? current.order.indexOf(shown[drop.index]!) : current.order.indexOf(shown[shown.length - 1]!) + 1;
-    const order = [...current.order.slice(0, at), slot, ...current.order.slice(at)];
-    return { split: { order, active: slot, panes: activePanes }, select: dragged };
+    return { split: { order: [...current.order.slice(0, at), slot, ...current.order.slice(at)], active: slot, panes: activePanes }, select: dragged };
   }
   const slot = shown[drop.index];
   if (state === null || slot === undefined) return null;
-  if (slot === state.active) return sameTarget(dragged, active) ? null : { split: state, select: dragged };
+  if (from !== undefined) return moved(state.order.map((item) => item === slot ? from : item === from ? slot : item), from);
+  if (slot === state.active) return { split: state, select: dragged };
   return { split: { order: state.order, active: slot, panes: without(activePanes, slot) }, select: dragged };
 }
 

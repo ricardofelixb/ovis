@@ -1,4 +1,3 @@
 ### Added
-- The Android app opens a pane or a workspace in a window of its own: Open in new window, in the
-  header's ⋯ menu and in the sidebar rows' menus, puts it beside the current one in split screen,
-  and the launcher and taskbar offer New window. Each window keeps its own PC.
+- The Android app can show two windows of itself side by side: the launcher and taskbar offer New
+  window, and each window keeps its own PC.

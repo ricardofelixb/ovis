@@ -5,6 +5,8 @@ const A = { machineId: "local", paneId: "w1:p1" };
 const B = { machineId: "local", paneId: "w1:p2" };
 const C = { machineId: "pc2", paneId: "w1:p1" };
 const D = { machineId: "local", paneId: "w2:p1" };
+const E = { machineId: "local", paneId: "w2:p2" };
+const F = { machineId: "local", paneId: "w3:p1" };
 
 describe("split view", () => {
   it("opens a dropped pane beside the single one, on the side it was dropped on", () => {
@@ -23,7 +25,7 @@ describe("split view", () => {
     expect(dockPane(split, B, B, { index: 1, insert: false })).toBeNull();
   });
 
-  it("opens a pane dropped into a column there, making that column active and keeping the others", () => {
+  it("opens a pane no column shows in the column it is dropped on, making that column active", () => {
     const split: SplitState = { order: ["a", "b"], active: "b", panes: { a: A } };
     expect(dockPane(split, B, C, { index: 1, insert: false })).toEqual({ split, select: C });
     expect(dockPane(split, B, C, { index: 0, insert: false })).toEqual({ split: { order: ["a", "b"], active: "a", panes: { b: B } }, select: C });
@@ -44,7 +46,31 @@ describe("split view", () => {
     const split: SplitState = { order: ["a", "b", "c", "d", "e"], active: "c", panes: { a: A, b: B, d: D, e: D } };
     const shown = shownColumns(split, 3);
     expect(shown).toEqual(["b", "c", "d"]);
-    expect(dockPane(split, C, A, { index: 0, insert: false }, "a", shown)).toEqual({ split: { order: ["a", "b", "c", "d", "e"], active: "b", panes: { a: A, c: C, d: D, e: D } }, select: A });
+    expect(dockPane(split, C, E, { index: 0, insert: false }, "a", shown)).toEqual({ split: { order: ["a", "b", "c", "d", "e"], active: "b", panes: { a: A, c: C, d: D, e: D } }, select: E });
+  });
+
+  it("swaps two columns when a pane another column shows is dropped on one", () => {
+    const split: SplitState = { order: ["a", "b", "c"], active: "b", panes: { a: A, c: C } };
+    expect(dockPane(split, B, A, { index: 2, insert: false })).toEqual({ split: { order: ["c", "b", "a"], active: "a", panes: { b: B, c: C } }, select: A });
+    // the active column's own pane dropped on another column moves the active column
+    expect(dockPane(split, B, B, { index: 0, insert: false })).toEqual({ split: { order: ["b", "a", "c"], active: "b", panes: { a: A, c: C } }, select: B });
+    // dropped back on its own column, nothing changes
+    expect(dockPane(split, B, B, { index: 1, insert: false })).toBeNull();
+  });
+
+  it("moves a column to the edge its pane is dropped on, without adding one", () => {
+    const split: SplitState = { order: ["a", "b", "c"], active: "b", panes: { a: A, c: C } };
+    expect(dockPane(split, B, A, { index: 3, insert: true })).toEqual({ split: { order: ["b", "c", "a"], active: "a", panes: { b: B, c: C } }, select: A });
+    expect(dockPane(split, B, C, { index: 1, insert: true })).toEqual({ split: { order: ["a", "c", "b"], active: "c", panes: { a: A, b: B } }, select: C });
+    // a full split still moves its columns
+    const full: SplitState = { order: ["a", "b", "c", "d", "e", "f"], active: "a", panes: { b: B, c: C, d: D, e: E, f: F } };
+    expect(dockPane(full, A, F, { index: 0, insert: true })?.split.order).toEqual(["f", "a", "b", "c", "d", "e"]);
+    // dropped next to where it already is, nothing changes
+    expect(dockPane(split, B, B, { index: 2, insert: true })).toBeNull();
+  });
+
+  it("does not split a single pane with itself", () => {
+    expect(dockPane(null, A, A, { index: 1, insert: true })).toBeNull();
   });
 
   it("makes another column active without moving any pane", () => {
