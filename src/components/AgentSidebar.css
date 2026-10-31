@@ -4,10 +4,10 @@
   list-style: none;
 }
 
-/* A workspace's agents hang under its row, one indent level in, on herdr's dim branch as a linked
-   worktree hangs under its repository (Sidebar.css): a tee for each but the last, an elbow for the
-   last unless the repository's worktrees follow. A worktree's agents sit one level further in. The
-   fill stays as wide as the list and the row's content moves. */
+/* A workspace's agents sit one indent level in, on no branch: the indent says whose they are. Only
+   a repository's worktrees hang on herdr's dim branch (Sidebar.css), which runs on past the
+   repository's agents to them. A worktree's agents sit one level further in. The fill stays as
+   wide as the list and the row's content moves. */
 .workspace-agents {
   --agent-indent: var(--side-box);
 }
@@ -16,29 +16,14 @@
 
 .workspace-agents > .agent-item { padding-left: var(--agent-indent); }
 
-.workspace-agents > .agent-item::before,
-.workspace-agents > .agent-item::after {
+.workspace-group:has(+ .worktree-children:not([hidden])) > .workspace-agents > .agent-item::before {
   position: absolute;
-  left: calc(var(--agent-indent) - var(--side-box) / 2);
+  inset-block: 0;
+  left: calc(var(--side-box) / 2);
+  width: var(--hairline);
   content: "";
   background: var(--border-strong);
   pointer-events: none;
-}
-
-.workspace-agents > .agent-item::before {
-  top: 0;
-  bottom: 0;
-  width: var(--hairline);
-}
-
-.workspace-agents > .agent-item:last-child::before { bottom: 50%; }
-
-.workspace-group:has(+ .worktree-children:not([hidden])) > .workspace-agents > .agent-item:last-child::before { bottom: 0; }
-
-.workspace-agents > .agent-item::after {
-  top: 50%;
-  width: calc(var(--side-box) / 2 - var(--space-1));
-  height: var(--hairline);
 }
 
 /* The agent row selects its pane; its ⋯ (or a right-click) opens its pin menu. */
@@ -76,30 +61,15 @@
   .agent-item:has(> .agent-row:enabled):hover { background: var(--side-hover); }
 }
 
-/* The selected row's own branch is its cue, bright and as wide as a workspace row's stroke, instead
-   of a stroke beside it; the fill is the whole row's. */
+/* The selected row is marked by its fill alone, the whole row's. */
 .agent-item.is-selected { background: var(--side-selected); }
 
-.workspace-agents > .agent-item.is-selected::before {
-  width: 0;
-  border-left: calc(2 * var(--hairline)) solid var(--text-dim);
-  background: none;
-}
-
-.workspace-agents > .agent-item.is-selected::after {
-  height: calc(2 * var(--hairline));
-  background: var(--text-dim);
-}
-
-/* forced colors drop the fill and the tree's lines: the branch stays, in Highlight */
+/* forced colors drop the fill: there the selected row keeps a leading border in Highlight, pulled into the gutter */
 @media (forced-colors: active) {
-  .workspace-agents > .agent-item.is-selected::before,
-  .workspace-agents > .agent-item.is-selected::after {
-    forced-color-adjust: none;
-    border-left-color: Highlight;
+  .agent-item.is-selected {
+    margin-inline-start: calc(-2 * var(--hairline));
+    border-inline-start: calc(2 * var(--hairline)) solid Highlight;
   }
-
-  .workspace-agents > .agent-item.is-selected::after { background: Highlight; }
 }
 
 /* As a workspace row's: the ⋯ takes no room until the row is hovered, focused, selected or its

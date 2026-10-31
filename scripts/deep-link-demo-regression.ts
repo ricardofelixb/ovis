@@ -7,6 +7,7 @@ import panes from "../site/demo/fixtures/panes.json";
 import { buildDemoApp } from "./demo-build.ts";
 import { DEMO_FILE_PREVIEW_SCRIPT } from "./demo-file-preview.ts";
 import { chromePath } from "./chrome-path.ts";
+import { pickLens, shownLens } from "./view-menu.ts";
 
 // Deep links (lib/deepLink.ts) on the unmodified app over the demo's fixture transport: an
 // address names the PC, workspace, pane, lens and Settings page, opens there, and follows the app
@@ -82,12 +83,12 @@ try {
       // moving between panes is history; the lens is not; Back and Forward walk it
       await withPage(browser, `?ws=${wsOf(INFRA)}&pane=${encodeURIComponent(INFRA)}&view=chat`, async (page) => {
         await waitSelected(page, INFRA);
-        assert.equal(await page.locator('.view-switch button[aria-pressed="true"]').innerText(), "Chat", "the linked lens is the one shown");
+        assert.equal(await shownLens(page), "chat", "the linked lens is the one shown");
         const start = await page.evaluate(() => history.length);
         await page.locator(`.workspace-agents .agent-item[data-pane="${DOCS}"] .agent-select`).click();
         await waitQuery(page, "pane", DOCS);
         assert.equal(await page.evaluate(() => history.length), start + 1, "opening another pane is an entry");
-        await page.locator(".view-switch button", { hasText: "Terminal" }).click();
+        await pickLens(page, "terminal");
         await waitQuery(page, "view", "terminal");
         assert.equal(await page.evaluate(() => history.length), start + 1, "a lens switch replaces the entry");
         await page.goBack();

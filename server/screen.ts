@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import type { Machine } from "../shared/machines.ts";
 import { jsonResponse } from "./http.ts";
+import { requestOrigin, tailnetDomain } from "./static.ts";
 
 /**
  * The Computer view: a PC's desktop through screen-here's bridge, the script OVIS_SCREEN_BRIDGE
@@ -10,10 +11,17 @@ import { jsonResponse } from "./http.ts";
  * and keep-alive sockets on a one-off 127.0.0.1 address. This server opens one per view and passes
  * it on under /screen/<id>/, behind its own sign-in, with the Host and Origin the bridge admits
  * only from its own window. Without the variable there is no Computer view.
+ *
+ * Opened at a tailnet name, the bridge serves the view from the PC itself (`--direct`): it answers
+ * over https at that PC's tailnet name, and the view frames it there, so the desktop's stream goes
+ * straight from the PC to the browser instead of through this server and the PC it runs on. It
+ * falls back to the address above when it can't.
  */
 
 const SCREEN_PATH = /^\/screen\/([0-9a-f-]{36})\/(.*)$/;
 const BRIDGE_URL = /^http:\/\/127\.0\.0\.1:\d+\/[\w-]+\/$/;
+/** a bridge serving the view from its PC: that PC's tailnet name, the domain captured */
+const DIRECT_URL = /^https:\/\/[a-z0-9-]+\.([a-z0-9-]+\.ts\.net):\d+\/[\w-]+\/$/i;
 /** a bridge exits once its window has been gone a while: the oldest addresses are dead by then */
 const KEPT = 16;
 
@@ -35,7 +43,10 @@ function sshHost(machine: Machine): string | null {
   return target.port ? `ssh://${target.destination}:${target.port}` : target.destination;
 }
 
-/** POST /api/screen {machine_id}: a new bridge to that PC's desktop, as the address its view opens. */
+/**
+ * POST /api/screen {machine_id}: a new bridge to that PC's desktop, as the address its view opens:
+ * `{url}` on the PC itself, or `{path}` here.
+ */
 export async function handleScreenOpen(request: Request, machines: readonly Machine[]): Promise<Response> {
   const script = process.env["OVIS_SCREEN_BRIDGE"];
   if (!script) return jsonResponse({ error: { code: "unavailable", message: "This server has no screen bridge." } }, 404);
@@ -44,12 +55,21 @@ export async function handleScreenOpen(request: Request, machines: readonly Mach
   const machine = machines.find((candidate) => candidate.id === body?.machine_id);
   const host = machine ? sshHost(machine) : null;
   if (!machine || host === null) return jsonResponse({ error: { code: "not_found", message: "No such PC." } }, 404);
-  const bridge = Bun.spawn(["python3", script, host, machine.name], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+  // the page that frames the view: only it may, and only at a tailnet name can a PC's own certificate be had
+  const origin = request.headers.get("origin") ?? requestOrigin(request);
+  let tailnet: string | null = null;
+  try {
+    const page = new URL(origin);
+    tailnet = page.protocol === "https:" ? tailnetDomain(page.hostname) : null;
+  } catch { /* no origin to frame it: served here */ }
+  const direct = tailnet ? ["--direct", origin] : [];
+  const bridge = Bun.spawn(["python3", script, ...direct, host, machine.name], { stdout: "pipe", stderr: "pipe", stdin: "ignore" });
   const timer = setTimeout(() => bridge.kill(), 45_000);
   // the bridge prints its address and forks to keep serving: its first process exits right away
   const [out, err] = await Promise.all([new Response(bridge.stdout).text(), new Response(bridge.stderr).text(), bridge.exited]);
   clearTimeout(timer);
   const address = out.trim();
+  if (tailnet && DIRECT_URL.exec(address)?.[1]?.toLowerCase() === tailnet) return jsonResponse({ url: address });
   if (!BRIDGE_URL.test(address)) {
     const reason = err.trim().split("\n").at(-1) || "its desktop is unreachable.";
     return jsonResponse({ error: { code: "unreachable", message: `${machine.name}: ${reason}` } }, 502);
@@ -112,7 +132,8 @@ function openScreen(ws: ServerWebSocket<ScreenSocketData>): void {
     ws.data.waiting = undefined;
   });
   upstream.addEventListener("message", (event) => {
-    ws.send(typeof event.data === "string" ? event.data : new Uint8Array(event.data as ArrayBuffer));
+    // 0: Bun dropped it, the browser that far behind; a VNC stream short of bytes is broken, so it ends and the view reconnects
+    if (ws.send(typeof event.data === "string" ? event.data : new Uint8Array(event.data as ArrayBuffer)) === 0) ws.close();
   });
   upstream.addEventListener("close", () => ws.close());
   upstream.addEventListener("error", () => ws.close());

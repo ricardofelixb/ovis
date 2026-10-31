@@ -224,10 +224,10 @@
   display: contents;
 }
 
-/* the mark, the model, the level and the ring in one quiet pill, as tall as a control. It is a
-   surface, not a control: no border, no hover, no cursor, and the ring inside it is the only
-   thing to press. It shrinks before its neighbours do, so a name that does not fit is measured
-   clipped inside it (Composer.tsx) and the label steps out */
+/* the ring, the model and the level in one quiet pill, as tall as a control. It is a surface,
+   not a control: no border, no hover, no cursor; the ring and pi's model menu are what to press.
+   It shrinks before its neighbours do, so a name that does not fit is measured clipped inside it
+   (Composer.tsx) and the label steps out */
 .composer-pill {
   display: flex;
   flex: 0 1 auto;
@@ -1476,23 +1476,26 @@
   }
 }
 
-/* pi's pill opens its model menu: the pill's own look, as a button */
-.composer-pill.is-menu {
+/* pi's pill opens its model menu: everything in it after the ring is one button, on the pill's fill */
+.composer-pill-menu {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: 100%;
+  padding: 0;
   border: 0;
+  background: none;
   color: inherit;
   font: inherit;
+  overflow: hidden;
   cursor: pointer;
 }
 
-.composer-pill.is-menu:disabled {
+.composer-pill-menu:disabled {
   cursor: default;
   opacity: 0.6;
-}
-
-/* the model's maker, quiet before its name */
-.composer-pill-mark {
-  flex: none;
-  opacity: 0.8;
 }
 
 .composer-pill-chevron {

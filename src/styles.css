@@ -2005,19 +2005,69 @@ button {
   overflow-wrap: anywhere;
 }
 
-/* the switch keeps its size; the pane title (.context) is the header's one flexible item */
-.view-switch {
-  flex: 0 0 auto;
+/* the open column's tabs (TabStrip, portaled here) are the header's one flexible item: they scroll
+   under the bar's own surface, and the open tab's underline sits on the header's rule */
+.header-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
 }
 
-/* From 769px the lens switch is its icons and nothing around them: no track, the chosen lens on
-   the hover fill. Files follows it as an action of its own, after a hairline. */
+/* a PC's desktop over the pane area hides the tabs: the header names that PC instead */
+.header-tabs[hidden] { display: none; }
+.machine-context-name.header-screen-name { flex: 1 1 auto; min-width: 0; max-width: none; }
+
+.header-tabs .tab-strip {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-bottom: 0;
+  --strip-bg: var(--bg-panel);
+}
+
 @media (min-width: 769px) {
-  .app-header .view-switch {
-    padding: 0;
-    background: transparent;
-    border-color: transparent;
+  .app-header.is-zoned.is-chat .header-tabs .tab-strip {
+    --strip-bg: var(--bg);
   }
+}
+
+/* the open pane's lens: its icon and a chevron, both lenses in its menu (ViewMenu) */
+.view-menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  height: var(--control-h);
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--accent-tint);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.view-menu-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.view-menu-button .view-menu-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--text-dim);
+}
+
+/* a PC's desktop covers the pane: the lens is not what shows */
+.view-menu-button[data-covered] {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.view-menu-button:hover,
+.view-menu-button:focus-visible {
+  border-color: var(--border-strong);
 }
 
 .header-divider {
@@ -2925,20 +2975,17 @@ button {
     height: var(--touch-target-header);
   }
 
-  .app-header .view-switch > button {
+  /* drawn at the bar's control height, tapped at the full target through an invisible expander */
+  .view-menu-button {
     position: relative;
-    /* the drawn height: the density's segmented option (--control-h less the track's inset), so
-       the track keeps clear of the bar in the compact density's 46px header as in the 52px one;
-       the expander below grows it to the tap height */
-    --lens-h: calc(var(--control-h) - var(--segmented-inset));
     min-width: var(--touch-target-header);
-    height: var(--lens-h);
+    justify-content: center;
   }
 
-  .app-header .view-switch > button::before {
+  .view-menu-button::before {
     content: "";
     position: absolute;
-    inset: calc((var(--lens-h) - var(--touch-target-header)) / 2) 0;
+    inset: calc((var(--control-h) - var(--touch-target-header)) / 2) 0;
   }
 }
 

@@ -28,9 +28,14 @@ import { CRAMPED_QUERY, loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas
 import { rosterPanes } from "../lib/dagPane.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
+import { DETACHED, usePaneBranch } from "../lib/paneBranch.ts";
+import { SHEET_QUERY } from "../lib/sheets.ts";
 import { useTabReorder } from "../lib/useTabReorder.ts";
 import { indicatorGlyph, paneStatus, rollupStatus } from "../lib/status.ts";
 import { useSettings } from "../lib/settings.ts";
+import { friendKey } from "../../shared/friends.ts";
+import { useFriends } from "../lib/friends.ts";
+import { AgentFriend } from "./AgentFriend.tsx";
 import { AgentMark } from "./AgentMark.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { displayPaneTitle } from "./Sidebar.tsx";
@@ -68,6 +73,10 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const t = useT();
   const { settings } = useSettings();
   const machineId = useMachineId();
+  // where a tab's menu says it is: the header gave this up to the tabs (a phone's sheet says it under the tab's name)
+  const branch = usePaneBranch(machineId, workspace.workspace_id);
+  const place = branch === null ? workspace.label : `${workspace.label} · ${branch === DETACHED ? t("Detached HEAD") : branch}`;
+  const sheet = useMediaQuery(SHEET_QUERY);
   const { closeTab, renameTab, moveTab } = useMachineApi();
   const touchMenu = useMediaQuery("(pointer: coarse), (max-width: 768px)");
   // a mouse on a wide screen gets the same ellipsis, drawn while the strip is hovered or the tab
@@ -121,7 +130,14 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       move: paneDrag.move, back: paneDrag.back, drop: paneDrag.drop, cancel: paneDrag.cancel,
     } : undefined,
   });
-  const nameOf = (tab: HerdrTab): string => sent?.tabId === tab.tab_id ? sent.label : tabLabel(tab, t, tabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1);
+  const friends = useFriends();
+  // a tab herdr still names by its place says its one agent's title instead
+  const nameOf = (tab: HerdrTab): string => {
+    if (sent?.tabId === tab.tab_id) return sent.label;
+    const place = tabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1;
+    const agents = panesOf(tab).filter((pane) => pane.agent);
+    return customTabLabel(tab, place) ?? (agents.length === 1 ? displayPaneTitle(agents[0]!) : tabLabel(tab, t, place));
+  };
 
   useEffect(() => {
     // the pane each tab was last seen on, per PC: a tab clicked again opens where it was left
@@ -230,6 +246,15 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     };
     row.addEventListener("wheel", onWheel, { passive: false });
     return () => row.removeEventListener("wheel", onWheel);
+  }, [shown, tabsHidden, end === undefined]);
+  // in the header the strip's width follows the bar's other buttons, which can settle after the
+  // open tab was brought into view: a narrower strip brings it again, as a late face does
+  useEffect(() => {
+    const row = strip.current;
+    if (!row) return;
+    const observer = new ResizeObserver(() => { if (!scroll.current.moved) bringOpenTab(); });
+    observer.observe(row);
+    return () => observer.disconnect();
   }, [shown, tabsHidden, end === undefined]);
   const onScroll = (): void => {
     const row = strip.current;
@@ -374,13 +399,15 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     const paneItems = touch && tab.tab_id === selectedPane.tab_id
       ? (paneActions?.(selectedPane.pane_id) ?? []).filter((item) => !soloPanes
         || (item.id === "zoom" ? layout?.zoomed : item.id !== "split-right" && item.id !== "split-down")) : [];
+    // a one-pane tab is renamed and closed as a tab: its pane's Rename and Close would only repeat them
+    const lone = panesOf(tab).length === 1;
     const groups: RowMenuItem[][] = [
       own.length < 2 ? [] : own.map((pane): RowMenuItem => ({
         id: `pane:${pane.pane_id}`, label: displayPaneTitle(pane), icon: Terminal,
         glyph: pane.agent ? <AgentMark agent={pane.agent} size={16} /> : undefined,
         current: pane.pane_id === selectedPane.pane_id, run: () => onSelectPane(pane.pane_id),
       })),
-      paneItems,
+      paneItems.filter((item) => !lone || (item.id !== "rename" && item.id !== "close")),
       tabActions(tab),
     ].filter((group) => group.length > 0);
     return groups.flatMap((group, at) => at === 0 ? group : group.map((item, index) => index === 0 ? { ...item, divider: true } : item));
@@ -477,7 +504,16 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
                   // the middle button closes a tab, as it does a browser's
                   onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); requestClose(tab); } }}
                 >
-                  {(status === "working" || status === "blocked" || status === "waiting" || status === "done") && (settings.statusIndicators === "classic"
+                  {/* a tab's agents show as their friends, which move with their state; a split shows two */}
+                  {own.some((pane) => pane.agent) ? <span className={`tab-strip-faces${own.filter((pane) => pane.agent).length > 1 ? " is-split" : ""}`} aria-hidden="true">
+                    {own.filter((pane) => pane.agent).slice(0, 2).map((pane) => {
+                      const friend = friends[friendKey(machineId, pane.pane_id)];
+                      const paneState = paneStatus(pane as HerdrPane);
+                      return friend
+                        ? <AgentFriend key={pane.pane_id} friend={friend} agent={pane.agent!} status={paneState === "waiting" ? "working" : paneState === "unknown" ? undefined : paneState} />
+                        : <AgentMark key={pane.pane_id} agent={pane.agent!} size={16} />;
+                    })}
+                  </span> : (status === "working" || status === "blocked" || status === "waiting" || status === "done") && (settings.statusIndicators === "classic"
                     ? <span className="tab-strip-dot" data-status={status} aria-hidden="true" />
                     : <span className="tab-strip-dot tab-strip-glyph" data-status={status} aria-hidden="true">{indicatorGlyph(status, settings.statusIndicators)}</span>)}
                   <span className="tab-strip-label">{name}</span>
@@ -501,6 +537,8 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       {end === undefined ? row : <div className="tab-strip-row">{row}<div className="tab-strip-end">{end}</div></div>}
       {picker && <RowMenu key={picker.workspaces ? "workspaces" : "tab"} anchor={picker.anchor} point={picker.point} restoreFocusTo={picker.previousFocus}
         title={picker.workspaces ? t("Move {tab} to", { tab: nameOf(picker.tab) }) : nameOf(picker.tab)}
+        subtitle={picker.workspaces ? undefined : place}
+        header={picker.workspaces || sheet ? undefined : <span className="tab-menu-place" title={place}>{place}</span>}
         items={picker.workspaces ? workspaceItems(picker.tab) : pickerItems(picker.tab, picker.touch)} align="start" onClose={() => setPicker(null)} />}
       {confirm && <ConfirmDialog title={confirm.title} body={confirm.body} confirmLabel={t("Close tab")} onConfirm={async () => { await close(confirm.tab); setConfirm(null); }} onClose={() => setConfirm(null)} />}
     </>

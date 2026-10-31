@@ -4,7 +4,7 @@ import { fetchSession } from "./api.ts";
 import { fileFromLink, resolveLink, type AppLink, type LinkNote } from "./deepLink.ts";
 import { machineGone, notificationLanding, notificationTargetFromSearch, sameLink, onNotificationTarget, type NotificationTarget } from "./notificationTarget.ts";
 import type { TerminalPeek } from "./terminalPeek.ts";
-import { markSelection, type SelectionMark } from "./selectionMark.ts";
+import { markSelection, selectionStill, type SelectionMark } from "./selectionMark.ts";
 import { heirPane, type PanePlace } from "./snapshot.ts";
 import type { PaneView } from "./actions.ts";
 import type { Translate } from "./i18n.ts";
@@ -252,6 +252,33 @@ export function useSelectTarget({ selectedMachineId, setConnected, setConnectedB
     storeSelection(selectedMachineId, selectedPaneId);
   }, [selectedMachineId, selectedPaneId]);
   return { selectedMachineRef, selectTarget, selectTargetRef, picks };
+}
+
+/**
+ * Opens a pane herdr just made once the roster holds it: selected sooner, the header and the canvas
+ * would draw the empty PC until it came. Any event supersedes a fetch, so either may bring it.
+ */
+export function useOpenWhenListed({ machines, machinesRef, selectionRef, selectTargetRef }: {
+  machines: Machine[];
+  machinesRef: RefObject<Machine[]>;
+  selectionRef: RefObject<SelectionMark>;
+  selectTargetRef: RefObject<SelectTarget>;
+}) {
+  const pendingOpen = useRef<{ machineId: string; paneId: string; asked: SelectionMark } | null>(null);
+  const openListed = useCallback(() => {
+    const pending = pendingOpen.current;
+    if (!pending || !machinesRef.current.find((m) => m.id === pending.machineId)?.snapshot?.panes.some((pane) => pane.pane_id === pending.paneId)) return;
+    pendingOpen.current = null;
+    // what the user went to while herdr answered is theirs to keep
+    if (selectionStill(pending.asked, selectionRef.current)) selectTargetRef.current(pending.machineId, pending.paneId);
+  }, [machinesRef, selectionRef, selectTargetRef]);
+  useEffect(openListed, [machines, openListed]);
+  return useCallback((machineId: string, paneId: string, asked: SelectionMark) => {
+    // asked from a selection the user has left: it would only push out a newer tab still on its way
+    if (!selectionStill(asked, selectionRef.current)) return;
+    pendingOpen.current = { machineId, paneId, asked };
+    openListed();
+  }, [openListed, selectionRef]);
 }
 
 export function useSelectPane({ pendingLink, pendingFile, setLinkLanded, selectionHint, setSelectedPaneId, setNotificationViewTarget, setTerminalPeek, setAutoSelected, setDrawerOpen, onPick }: {

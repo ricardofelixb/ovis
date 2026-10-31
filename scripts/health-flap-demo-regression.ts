@@ -137,12 +137,12 @@ export const readHeader = (page: Page) => page.evaluate(() => {
     const node = document.querySelector(`.header-meta ${selector}`);
     return node ? { text: node.textContent?.trim() ?? "", title: node.getAttribute("title") } : null;
   };
-  const lens = [...document.querySelectorAll(".view-switch button")].findIndex((button) => button.getAttribute("aria-pressed") === "true");
+  const lens = document.querySelector(".app-header .view-menu-button")?.getAttribute("data-view") ?? null;
   const flap = window.healthFlap;
   return {
     stale: pill(".pill-stale"), offline: pill(".pill-offline"),
-    lens: lens === 0 ? "chat" : lens === 1 ? "terminal" : null,
-    soon: document.querySelector(".view-switch .pill-soon") !== null,
+    lens,
+    soon: document.querySelector(".app-header .view-menu-button[data-terminal-soon]") !== null,
     chip: document.querySelector(".header-meta .conn")?.getAttribute("title") ?? null,
     sockets: flap.sockets, sent: flap.sent.length, claims: flap.sent.filter((frame) => frame.type !== "role").length,
     roles: flap.sent.filter((frame) => frame.type === "role").map((frame) => frame.mode),
@@ -225,7 +225,7 @@ const firstRead = async (page: Page): Promise<number> => {
 };
 const established = async (page: Page, step: string): Promise<Header> => {
   // a known non-attach PC: its terminal lens says "soon", and a shell pane opens in the chat
-  try { await page.locator(".view-switch .pill-soon").waitFor(); }
+  try { await page.locator(".app-header .view-menu-button[data-terminal-soon]").waitFor(); }
   catch (error) { throw new Error(`${step}: the PC's capabilities never arrived: ${JSON.stringify(await readHeader(page))}`, { cause: error }); }
   await settled(page);
   return await readHeader(page);

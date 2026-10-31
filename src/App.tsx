@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, Ellipsis, FolderOpen, Link, Menu, MessageSquare, Monitor, PanelLeft, Search, SquareTerminal, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Bell, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, Search, SquareTerminal, X } from "lucide-react";
 
 import type { HerdrPane } from "../shared/protocol.ts";
 import { authenticate, createTab, moveTabToWorkspace, shareSeen, signOut, splitPane, swapPaneWith, zoomPane } from "./lib/api.ts";
@@ -10,15 +11,10 @@ import { PaneTerminal } from "./components/PaneTerminal.tsx";
 import { paneCovered, paneContentKey, paneContentPresented } from "./lib/panePresentation.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
-import { AgentMark } from "./components/AgentMark.tsx";
-import { HeaderBranch } from "./components/HeaderBranch.tsx";
-import { AgentFriend } from "./components/AgentFriend.tsx";
 import { useAgentFriends } from "./lib/friends.ts";
-import { friendKey } from "../shared/friends.ts";
 import { PiVoiceView } from "./components/PiVoiceView.tsx";
 import { ComputerView } from "./components/ComputerView.tsx";
-import { useComputerView } from "./lib/computerSettings.ts";
-import { DETACHED, usePaneBranch } from "./lib/paneBranch.ts";
+import { forgetComputerLogins, useComputerView } from "./lib/computerSettings.ts";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { SetupGuide, SetupGuideResume } from "./components/SetupGuide.tsx";
 import { useSetupGuide } from "./lib/useSetupGuide.ts";
@@ -44,6 +40,7 @@ import { FilePanelResizer } from "./components/FilePanelResizer.tsx";
 import { openPresentation } from "./lib/filePresentation.ts";
 import { MachineDialog } from "./components/MachineDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./components/RowMenu.tsx";
+import { ViewMenu } from "./components/ViewMenu.tsx";
 import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
 import { paneStorageId } from "../shared/machines.ts";
 import { usePairedNotices } from "./lib/usePairedNotices.ts";
@@ -105,12 +102,15 @@ import { CrashProbe, RegionCrash } from "./components/AppCrash.tsx";
 import { RenderBoundary } from "./components/RenderBoundary.tsx";
 import { lensOwner, storedView, usePaneLens, usePaneLensState, usePaneViewPicks } from "./lib/usePaneLens.ts";
 import { useSplitLayout, useSplitRecheck, useSplitState } from "./lib/useSplitView.ts";
-import { linkSelects, useLinkLanding, useMachineGone, useNotificationTargets, useSelectedLayout, useSelectedMachine, useSelectedPane, useSelectionMark, useSelectionState, useSelectPane, useSelectTarget } from "./lib/useSelection.ts";
+import { linkSelects, useLinkLanding, useMachineGone, useNotificationTargets, useOpenWhenListed, useSelectedLayout, useSelectedMachine, useSelectedPane, useSelectionMark, useSelectionState, useSelectPane, useSelectTarget } from "./lib/useSelection.ts";
 import { useAddressBar } from "./lib/useAddressBar.ts";
 
 const APP_TITLE = "Ovis";
 /** how soon after a key press a focus counts as the user's own (lastKeyAtRef) */
 const KEY_FOCUS_MS = 1000;
+
+/** `node` drawn into `target` when there is one, else where it stands */
+const portalInto = (target: HTMLElement | null, node: ReactNode): ReactNode => target === null ? node : createPortal(node, target);
 
 /** Every slot of the split but `a` draws on connections of its own: several columns may attach one
  *  tab, and each attaches and detaches it as the others are not there (lib/split.ts). */
@@ -182,8 +182,6 @@ export function App() {
   });
   useRecentFolderMemory({ machines });
   const { selectedMachineId, setSelectedMachineId, selectedMachine, snapshot } = useSelectedMachine({ initialLink, machines });
-  // the Computer view (ComputerView) over the active column, until Chat or Terminal is picked again
-  const [computerOpen, setComputerOpen, computerKept] = useComputerView(selectedMachineId);
   const { machinesRef } = useMachinesRef({ machines });
   const [updateRemote, setUpdateRemote] = useState(false);
   const { machineDialog, setMachineDialog, addPcFocusReturn, closeMachineDialog } = useMachineDialog();
@@ -195,6 +193,11 @@ export function App() {
   const { pairedNotices, setPairedNotices, dismissPairedNotice } = usePairedNotices();
   const updates = useUpdates(locked === false);
   const { selectedPaneId, setSelectedPaneId, notificationViewTarget, setNotificationViewTarget, terminalPeek, setTerminalPeek, endPeek, pendingLink, linkLanded, setLinkLanded, rosterSeq, linkSince, selectionSince, rosterTick, setRosterTick, linkTick, setLinkTick } = useSelectionState({ initialLink });
+  // a PC's desktop (ComputerView) over the pane area, opened from its sidebar header; any pick closes it
+  const [screenMachineId, setScreenMachineId, keptScreenId] = useComputerView();
+  const machineName = (id: string) => machines.find((item) => item.id === id)?.name ?? id;
+  // the header's place for the open column's tab strip (the pane slot portals it there)
+  const [headerTabs, setHeaderTabs] = useState<HTMLDivElement | null>(null);
   const { otherRecheck, otherRosterTick, setOtherRosterTick } = useSplitRecheck();
   const { rosterIn, pendingFile, selectionHint, setHeaderNote, note, autoSelected, setAutoSelected } = useLinkLanding({ initialLink, otherRecheck, setOtherRosterTick, pendingLink, rosterSeq, setRosterTick, linkLanded, t });
   const { drawerOpen, setDrawerOpen, drawerOpenRef, wideScreen, sidebarCollapsed, setSidebarCollapsed, sidebarWidth, setSidebarWidth, filePanelAvailable, filePanelWidth, setFilePanelWidth, sidebarFilterRequest, openSidebarFilter } = useSidebarLayout({ initialLink });
@@ -284,6 +287,7 @@ export function App() {
     await removePushSubscription().catch(() => undefined);
     setPushOn(false);
     resetPushHealth();
+    forgetComputerLogins();
     try {
       await signOut();
     } catch {
@@ -294,9 +298,9 @@ export function App() {
     }
   }, [loadHealth, t]);
 
-  const { selectedMachineRef, selectTarget, selectTargetRef, picks } = useSelectTarget({ selectedMachineId, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setDrawerOpen, setOutputStopped, setNotificationViewTarget, setTerminalPeek, pendingLink, pendingFile, setLinkLanded, selectionHint, selectionSince, rosterSeq, snapshot, selectedMachine, selectedPaneId, setHeaderNote, linkTick, movingPanes, onPick: setupGuide.stepAside });
+  const { selectedMachineRef, selectTarget, selectTargetRef, picks } = useSelectTarget({ selectedMachineId, setConnected, setConnectedBefore, setSelectedMachineId, setSelectedPaneId, setAutoSelected, setDrawerOpen, setOutputStopped, setNotificationViewTarget, setTerminalPeek, pendingLink, pendingFile, setLinkLanded, selectionHint, selectionSince, rosterSeq, snapshot, selectedMachine, selectedPaneId, setHeaderNote, linkTick, movingPanes, onPick: () => { setScreenMachineId(null); setupGuide.stepAside(); } });
 
-  const { selectPane } = useSelectPane({ pendingLink, pendingFile, setLinkLanded, selectionHint, setSelectedPaneId, setNotificationViewTarget, setTerminalPeek, setAutoSelected, setDrawerOpen, onPick: () => { picks.current += 1; setupGuide.stepAside(); } });
+  const { selectPane } = useSelectPane({ pendingLink, pendingFile, setLinkLanded, selectionHint, setSelectedPaneId, setNotificationViewTarget, setTerminalPeek, setAutoSelected, setDrawerOpen, onPick: () => { picks.current += 1; setScreenMachineId(null); setupGuide.stepAside(); } });
 
   const layoutRefused = useLayoutRefused(setLayoutNotice, t);
   const moveRefused = useMoveRefused(setLayoutNotice, t);
@@ -369,12 +373,8 @@ export function App() {
     ? headerCrumb({ machine: selectedMachine?.name ?? selectedMachineId, machineCount: machines.length, workspace: selectedWorkspace?.label ?? selectedPane.workspace_id, title: selectedTitle, cwd: selectedPane.cwd })
     : null;
 
-  // the header says the pane's branch under its title, on a phone and a desktop alike
-  const paneBranch = usePaneBranch(selectedMachineId, selectedPane?.workspace_id ?? null);
-  const headerBranch = paneBranch === null ? null : paneBranch === DETACHED ? t("Detached HEAD") : paneBranch;
-  // the friend the selected agent wears in the agents list, for the header (lib/friends.ts)
-  const friends = useAgentFriends(machines);
-  const selectedFriend = selectedPane ? friends[friendKey(selectedMachineId, selectedPane.pane_id)] : undefined;
+  // App asks the server for the agents' friends (lib/friends.ts); the sidebar and the tabs read them
+  useAgentFriends(machines);
   useEffect(() => {
     // the PC's host and the pane close the title, for the desktop's scripts (zed-here, screen-here, a Touch Bar)
     const host = selectedMachine?.kind === "local" ? selectedMachine.name : selectedMachine?.target?.destination;
@@ -400,6 +400,8 @@ export function App() {
       ?? panes[0];
     return { machineId, workspace, cwd: workspace.worktree?.checkout_path ?? inFront?.cwd ?? null, agent: inFront?.agent ?? null, panes };
   };
+
+  const openWhenListed = useOpenWhenListed({ machines, machinesRef, selectionRef, selectTargetRef });
 
   const actions = useMemo<AppActions>(
     () => ({
@@ -437,7 +439,7 @@ export function App() {
       },
       setView,
       // a peek shows the terminal over the chat: the shortcut takes the chat back, the lens stays Chat
-      toggleView: () => { setComputerOpen(false); if (terminalPeek !== null) endPeek(); else setView(view === "chat" ? "terminal" : "chat"); setDrawerOpen(false); },
+      toggleView: () => { setScreenMachineId(null); if (terminalPeek !== null) endPeek(); else setView(view === "chat" ? "terminal" : "chat"); setDrawerOpen(false); },
       focusInput: () => paneControls.current?.focusInput(),
       scrollPage: (direction) => paneControls.current?.scrollPage(direction),
       openNewSession: () => {
@@ -465,9 +467,8 @@ export function App() {
         if (!found) return;
         const asked = selectionRef.current;
         const created = await createTab({ workspace_id: found.workspace.workspace_id, cwd: found.cwd, label: null, agent: null }, found.machineId);
+        openWhenListed(found.machineId, created.pane_id, asked);
         void load();
-        // what the user went to while herdr answered is theirs to keep
-        if (selectionStill(asked, selectionRef.current)) selectTargetRef.current(found.machineId, created.pane_id);
       },
       moveTabToWorkspace: async ({ machineId, tabId, workspaceId, notice }) => {
         const roster = machinesRef.current.find((m) => m.id === machineId)?.snapshot;
@@ -677,45 +678,13 @@ export function App() {
           </button>
         </div>
         <HeaderNote note={note} />
-        {note !== null ? null : selectedPane && crumb ? (
-          <div className={`context${headerBranch !== null ? " has-branch" : ""}`} title={crumb.tooltip}>
-            <div className="context-title">
-              {selectedAgent && (selectedFriend ? <AgentFriend friend={selectedFriend} agent={selectedAgent} status={activity.status(selectedMachineId, selectedPane)} /> : <AgentMark agent={selectedAgent} size={18} />)}
-              {/* the branch stands under the name, lined up with it, not under the mark */}
-              {headerBranch !== null ? <span className="context-title-stack">
-                <span className="context-title-text">{selectedTitle}</span>
-                <HeaderBranch branch={headerBranch} />
-              </span> : <span className="context-title-text">{selectedTitle}</span>}
-            </div>
-            {headerBranch === null && <div className="context-sub">
-              {/* one PC needs no name: the sidebar leaves it out too, and More still says it */}
-              {crumb.showMachine && <><span className="machine-context-name">{crumb.machine}</span><span className="context-sep" aria-hidden="true">›</span></>}
-              <span>{crumb.workspace}</span>
-              {crumb.folder !== null && (
-                <>
-                  <span className="context-sep" aria-hidden="true">›</span>
-                  <span>{crumb.folder}</span>
-                </>
-              )}
-            </div>}
-          </div>
-        ) : (
-          <><Brand /><span className="machine-context-name">{selectedMachine?.name ?? selectedMachineId}</span></>
-        )}
-        {selectedPane && (
-          <div className="segmented view-switch" role="group" aria-label="Pane view">
-            <button type="button" aria-pressed={!computerOpen && view === "chat"} onClick={() => { setComputerOpen(false); setView("chat"); setDrawerOpen(false); }} aria-label={t("Chat")} title={t("Chat transcript (⌘⇧J)")}>
-              <MessageSquare aria-hidden="true" />
-            </button>
-            <button type="button" aria-pressed={!computerOpen && view === "terminal"} onClick={() => { setComputerOpen(false); setView("terminal"); setDrawerOpen(false); }} aria-label={t("Terminal")} title={terminalAttach ? t("Live terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there")}>
-              <SquareTerminal aria-hidden="true" />
-              {!terminalAttach && <span className="pill pill-soon">{t("soon")}</span>}
-            </button>
-            <button type="button" aria-pressed={computerOpen} onClick={() => { setComputerOpen(true); setDrawerOpen(false); }} aria-label={t("Computer")} title={t("The PC's desktop")}>
-              <Monitor aria-hidden="true" />
-            </button>
-          </div>
-        )}
+        {note === null && !(selectedPane && crumb) && <><Brand /><span className="machine-context-name">{selectedMachine?.name ?? selectedMachineId}</span></>}
+        {/* the open column's tab strip is drawn here (the pane slot portals it), in the title's old place;
+            a split view keeps each column's strip over its column */}
+        {selectedPane && !splitOn && <div ref={setHeaderTabs} className="header-tabs" hidden={screenMachineId !== null} />}
+        {screenMachineId !== null && <span className="machine-context-name header-screen-name">{machineName(screenMachineId)}</span>}
+        {selectedPane && <ViewMenu view={view} covered={screenMachineId !== null} terminalAttach={terminalAttach}
+          onPick={(next) => { setScreenMachineId(null); setView(next); setDrawerOpen(false); }} />}
         {selectedPane && wideScreen && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
@@ -780,7 +749,7 @@ export function App() {
           {/* a sidebar that cannot be drawn leaves the panes working */}
           <RenderBoundary resetKey={null} fallback={(retry) => <RegionCrash message={t("The sidebar can't be shown.")} retry={retry} />}>
             <CrashProbe region="sidebar" />
-            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} hiddenCount={machines.length - sidebarMachines.length} watching={auth?.role === "watch"} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={selectedMachineId} selectedPaneId={selectedPaneId} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={(id) => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); }} /></ReorderContext.Provider>
+            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} hiddenCount={machines.length - sidebarMachines.length} watching={auth?.role === "watch"} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={selectedMachineId} selectedPaneId={selectedPaneId} screenMachineId={screenMachineId} onScreen={(id) => { setScreenMachineId((open) => open === id ? null : id); setDrawerOpen(false); }} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={(id) => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); }} /></ReorderContext.Provider>
           </RenderBoundary>
           <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
         </aside>
@@ -815,6 +784,7 @@ export function App() {
         {guideShown ? null :
         <div ref={paneAreaRef} className={`pane-split${splitOn ? " is-split" : ""}`} onDragEnterCapture={paneDragOver} onDragOverCapture={paneDragOver} onDragLeave={paneDragLeave} onDropCapture={paneDrop}>
           {/* drawn in slot order, placed by `order`: a column that moves keeps its node and its terminals */}
+          {(screenMachineId ?? keptScreenId) !== null && <ComputerView key={screenMachineId ?? keptScreenId} machineId={(screenMachineId ?? keptScreenId)!} machineName={machineName((screenMachineId ?? keptScreenId)!)} hidden={screenMachineId === null} />}
           {SPLIT_SLOTS.map((slot) => {
             // one pane: the solo slot, or a split's active column where the window is too narrow for more
             const at = shown.indexOf(slot);
@@ -890,7 +860,7 @@ export function App() {
                 <RenderBoundary resetKey={`${machineId}:${paneId ?? ""}`} fallback={(retry) => <>{slotBar}<RegionCrash message={t("This pane can't be shown.")} retry={retry} onShown={active ? paneLost : undefined} /></>}>
                 <CrashProbe region="pane" />
                 {!(slotSnapshot && pane && workspace) && slotBar}
-                {slotSnapshot && pane && workspace && (
+                {slotSnapshot && pane && workspace && portalInto(splitOn ? null : headerTabs, (
                   <TabStrip snapshot={slotSnapshot} workspace={workspace} selectedPane={pane} panelId={slotPanelId} splitDrag={wideScreen} onSelectPane={onSelect} end={slotEnd}
                     renameRequest={active && renameRequest?.machineId === machineId && renameRequest.paneId === pane.pane_id ? renameRequest : null}
                     onRenameHandled={clearRenameRequest}
@@ -904,11 +874,10 @@ export function App() {
                       // an action runs against the canvas's latest one, where a snapshot change has landed
                       return paneActionsRef.current(target).map((item) => ({ ...item, run: () => (paneActionsRef.current?.(target).find((fresh) => fresh.id === item.id) ?? item).run() }));
                     } : undefined} />
-                )}
+                ))}
                 {/* the tab strip's panel: its id is what each tab's aria-controls points at, one per column.
                     No tabIndex - the terminal (PaneTerminal) and the composer are the focusable things inside it. */}
                 <main className="terminal-host">
-                  {active && (computerOpen || computerKept) && <ComputerView machineId={machineId} machineName={machines.find((item) => item.id === machineId)?.name ?? machineId} hidden={!computerOpen} />}
                   <div id={slotPanelId} className="terminal-tabpanel" role={slotPanelLabel === null ? undefined : "tabpanel"} aria-label={slotPanelLabel ?? undefined}>
                   <PaneCanvas key={machineId} snapshot={slotSnapshot} pane={pane} selectedPaneId={paneId} onSelect={onSelect} onChanged={actions.refresh} actionsRef={active ? paneActionsRef : undefined}
                     mirrored={herdr?.terminal_attach === false || herdr?.terminal_mirror === true}

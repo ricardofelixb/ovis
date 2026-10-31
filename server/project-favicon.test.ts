@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 
@@ -45,6 +45,50 @@ describe("a project's favicon", () => {
     // is never read against the server's own folder
     const near = project("relative", ["favicon.svg"]);
     expect(await findProjectFavicon(relative(process.cwd(), near))).toBeNull();
+  });
+
+  describe("in a monorepo", () => {
+    /** A project folder with these files, each holding `text` or, without one, an icon. */
+    function repo(name: string, files: Record<string, string | null>): string {
+      const folder = project(name, []);
+      for (const [file, text] of Object.entries(files)) {
+        mkdirSync(join(folder, file, ".."), { recursive: true });
+        writeFileSync(join(folder, file), text ?? "<svg/>");
+      }
+      return folder;
+    }
+    const icon = async (folder: string) => (await findProjectFavicon(folder))?.path;
+
+    it("keeps the root's own icon over a workspace's", async () => {
+      const folder = repo("mono-root", { "package.json": '{"workspaces":["apps/*"]}', "public/favicon.ico": null, "apps/admin/app/icon.svg": null });
+      expect(await icon(folder)).toBe(join(folder, "public/favicon.ico"));
+    });
+
+    it("finds an icon in npm workspaces, listed or under packages", async () => {
+      const listed = repo("mono-npm", { "package.json": '{"workspaces":["apps/*"]}', "apps/admin/app/icon.svg": null });
+      expect(await icon(listed)).toBe(join(listed, "apps/admin/app/icon.svg"));
+      const nested = repo("mono-object", { "package.json": '{"workspaces":{"packages":["packages/*"],"nohoist":["**/x"]}}', "packages/ui/logo.svg": null });
+      expect(await icon(nested)).toBe(join(nested, "packages/ui/logo.svg"));
+    });
+
+    it("finds an icon in pnpm workspaces", async () => {
+      const folder = repo("mono-pnpm", { "pnpm-workspace.yaml": "packages:\n  - 'web/*'\n  - '!web/old'\n", "web/old/favicon.svg": null, "web/site/public/favicon.png": null });
+      expect(await icon(folder)).toBe(join(folder, "web/site/public/favicon.png"));
+    });
+
+    it("asks the workspaces in the order they are declared", async () => {
+      const folder = repo("mono-order", { "package.json": '{"workspaces":["sites/*","apps/*"]}', "apps/admin/favicon.svg": null, "sites/b/icon.png": null, "sites/c/favicon.svg": null });
+      expect(await icon(folder)).toBe(join(folder, "sites/b/icon.png"));
+    });
+
+    it("finds none, without throwing, in a broken manifest or a workspace outside the project", async () => {
+      expect(await findProjectFavicon(repo("mono-broken", { "package.json": '{"workspaces": [', "pnpm-workspace.yaml": "packages: [", "apps/admin/app/icon.svg": null }))).toBeNull();
+      repo("mono-outside/elsewhere", { "favicon.svg": null });
+      const inner = repo("mono-outside/project", { "package.json": '{"workspaces":["../elsewhere","/tmp"]}' });
+      symlinkSync(join(inner, "../elsewhere"), join(inner, "linked"));
+      writeFileSync(join(inner, "pnpm-workspace.yaml"), "packages: [linked]\n");
+      expect(await findProjectFavicon(inner)).toBeNull();
+    });
   });
 
   it("lists the places best first: a favicon before an app icon before a logo", () => {

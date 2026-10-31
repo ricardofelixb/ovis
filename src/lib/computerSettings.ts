@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
 
 /**
  * The Computer view's settings for one PC, kept in this browser only: a phone and a desktop want their own
@@ -78,25 +78,60 @@ export function useComputerSettings(machineId: string): [ComputerSettings, (patc
   return [settings, update];
 }
 
+/** A PC's login (a Mac's account) the viewer asked for, kept on this device: the next view signs in with it. */
+export interface ComputerLogin {
+  username: string;
+  password: string;
+}
+
+const LOGIN_PREFIX = "ovis:computer-login:";
+
+export function readComputerLogin(machineId: string): ComputerLogin | null {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(LOGIN_PREFIX + encodeURIComponent(machineId)) ?? "null");
+    const { username, password } = (value ?? {}) as Partial<ComputerLogin>;
+    return typeof username === "string" && typeof password === "string" ? { username, password } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keeps the login the PC accepted, or forgets the one it refused (null). */
+export function keepComputerLogin(machineId: string, login: ComputerLogin | null): void {
+  try {
+    if (login) localStorage.setItem(LOGIN_PREFIX + encodeURIComponent(machineId), JSON.stringify({ username: login.username, password: login.password }));
+    else localStorage.removeItem(LOGIN_PREFIX + encodeURIComponent(machineId));
+  } catch { /* full or blocked: it's asked for again next time */ }
+}
+
+/** On sign-out: no PC's login stays on a device that is no longer signed in. */
+export function forgetComputerLogins(): void {
+  try {
+    for (const name of Object.keys(localStorage)) if (name.startsWith(LOGIN_PREFIX)) localStorage.removeItem(name);
+  } catch { /* no storage: nothing was kept */ }
+}
+
 /** The settings as the viewer takes them, in its address's #fragment and in each change posted to it. */
 export function viewerOptions(settings: ComputerSettings): Record<string, unknown> {
   return { fit: settings.fit, sharpness: Number(settings.sharpness), zoom: Number(settings.zoom) / 100, quality: settings.quality, cursor: settings.cursor, speed: settings.speed, sound: settings.sound };
 }
 
 /**
- * Whether the Computer view is open, and whether it is kept connected out of sight: for the minutes its
- * settings give after it closes (2 by default), so coming back within them needs no new connection.
+ * Which PC's desktop is shown over the pane area, opened from that PC's sidebar header (null: none), and
+ * which one is kept connected out of sight: for the minutes its settings give after it closes (2 by
+ * default), so coming back within them needs no new connection.
  */
-export function useComputerView(machineId: string): [open: boolean, setOpen: (open: boolean) => void, kept: boolean] {
-  const [open, setOpen] = useState(false);
-  const [kept, setKept] = useState(false);
+export function useComputerView(): [shown: string | null, show: Dispatch<SetStateAction<string | null>>, kept: string | null] {
+  const [shown, setShown] = useState<string | null>(null);
+  const [kept, setKept] = useState<string | null>(null);
   useEffect(() => {
-    if (open) {
-      setKept(true);
+    if (shown !== null) {
+      setKept(shown);
       return;
     }
-    const timer = setTimeout(() => setKept(false), Number(readComputerSettings(machineId).keep) * 60_000);
+    if (kept === null) return;
+    const timer = setTimeout(() => setKept(null), Number(readComputerSettings(kept).keep) * 60_000);
     return () => clearTimeout(timer);
-  }, [open, machineId]);
-  return [open, setOpen, kept];
+  }, [shown, kept]);
+  return [shown, setShown, kept];
 }

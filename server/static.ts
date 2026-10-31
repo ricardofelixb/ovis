@@ -86,7 +86,9 @@ function cacheControlFor(pathname: string): string {
  * - `frame-src 'self'`: the PDF viewer frames /api/fs/file, same-origin. With the request's
  *   origin known, also any port of the host the browser used for the app: the web panel
  *   (src/lib/webPanel.ts) frames a page served by this PC, a dev server's localhost:5173 named
- *   under that host. No other host is framed.
+ *   under that host. Served at a tailnet name (`pc.<tailnet>.ts.net`), also any port of that
+ *   tailnet's other names over https: a PC's Computer view, served by that PC itself
+ *   (server/screen.ts). No other host is framed.
  * - `worker-src 'self'`: the service worker is /sw.js, same-origin.
  * - `object-src 'none'`: no <object>/<embed> in the app, and none may appear.
  * - `base-uri 'self'`: no <base>, and a tag that adds one changes what every relative URL
@@ -120,7 +122,12 @@ export const CONTENT_SECURITY_POLICY = CSP_DIRECTIVES.join("; ");
 /** A host name or bracketed IPv6 address, nothing that could end or add a directive. */
 const FRAMEABLE_HOST = /^(?:[a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])$/i;
 
-/** The policy for a request from `origin` (requestOrigin): its host's other ports may be framed. */
+/** A tailnet's own domain from one of its names: `tailb4e5ae.ts.net` from `pc.tailb4e5ae.ts.net`. */
+export function tailnetDomain(host: string): string | null {
+  return /^[a-z0-9-]+\.([a-z0-9-]+\.ts\.net)$/i.exec(host)?.[1]?.toLowerCase() ?? null;
+}
+
+/** The policy for a request from `origin` (requestOrigin): its host's other ports may be framed, and its tailnet's https names. */
 export function contentSecurityPolicy(origin?: string): string {
   let host: string | null = null;
   try {
@@ -129,7 +136,9 @@ export function contentSecurityPolicy(origin?: string): string {
     host = null;
   }
   if (host === null || !FRAMEABLE_HOST.test(host)) return CONTENT_SECURITY_POLICY;
-  return CSP_DIRECTIVES.map((directive) => directive === "frame-src 'self'" ? `frame-src 'self' http://${host}:* https://${host}:*` : directive).join("; ");
+  const tailnet = tailnetDomain(host);
+  const frames = `frame-src 'self' http://${host}:* https://${host}:*${tailnet ? ` https://*.${tailnet}:*` : ""}`;
+  return CSP_DIRECTIVES.map((directive) => directive === "frame-src 'self'" ? frames : directive).join("; ");
 }
 
 /**
