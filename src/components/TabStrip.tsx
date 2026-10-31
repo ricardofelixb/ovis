@@ -247,6 +247,15 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     row.addEventListener("wheel", onWheel, { passive: false });
     return () => row.removeEventListener("wheel", onWheel);
   }, [shown, tabsHidden, end === undefined]);
+  // in the header the strip's width follows the bar's other buttons, which can settle after the
+  // open tab was brought into view: a narrower strip brings it again, as a late face does
+  useEffect(() => {
+    const row = strip.current;
+    if (!row) return;
+    const observer = new ResizeObserver(() => { if (!scroll.current.moved) bringOpenTab(); });
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [shown, tabsHidden, end === undefined]);
   const onScroll = (): void => {
     const row = strip.current;
     if (row) scroll.current = stripScrolled(scroll.current, row.scrollLeft, row.scrollWidth - row.clientWidth);

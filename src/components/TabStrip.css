@@ -267,6 +267,16 @@
 .tab-strip-item.is-drop-before::before { left: 0; }
 .tab-strip-item.is-drop-after::after { right: 0; }
 
+/* in the header the strip shares a phone's width with the bar's buttons: a long name (an unnamed tab's
+   agent title) is cut, so the open tab and the + after it both fit */
+.header-tabs .tab-strip-item { max-width: calc(100% - var(--touch-target)); }
+.header-tabs .tab-strip-tab { overflow: hidden; }
+.header-tabs .tab-strip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* a tab's agents as their friends, in place of its status dot: a split's two sit overlapped */
 .tab-strip-faces {
   display: inline-flex;
