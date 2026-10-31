@@ -13,6 +13,7 @@ import { claudeProjectDir } from "../server/claude-store.ts";
 import { createServer } from "../server/index.ts";
 import { herdrRpc, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
+import { openWorkRuns } from "./work-runs.ts";
 
 if (process.platform !== "linux" && process.platform !== "darwin") { console.log("SKIP the Claude stand-in needs a Unix process table"); process.exit(0); }
 
@@ -145,6 +146,7 @@ try {
 
   // opened, the row carries it on its own line, and larger in its detail once the row opens
   await work.click();
+  await openWorkRuns(log);
   assert.equal(await log.locator(".work-block-line .work-images").count(), 0);
   assert.equal(await log.locator(".work-row-line .work-image").count(), 1);
   await log.locator(".work-row-head").first().click();
