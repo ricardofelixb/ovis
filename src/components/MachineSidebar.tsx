@@ -304,6 +304,8 @@ function MachineGroup({ machine, headerless = false, ...props }: Props & { machi
     {/* the header's +, as the list's last row, also while the roster loads: an empty roster has its own New
         workspace, and a filtered list shows only what was looked for */}
     {headerless && online && machine.snapshot?.workspaces.length !== 0 && !filter.active && <button type="button" className="machine-new-row" onClick={() => props.onNew(machine.id)}><span className="sidebar-mark" aria-hidden="true"><Plus /></span><span className="machine-new-row-label">{t("New workspace")}</span></button>}
+    {/* and the header's screen button, the only way to this PC's desktop */}
+    {headerless && online && !filter.active && <button type="button" className="machine-screen-row machine-screen" aria-pressed={screen} aria-label={t(screen ? "Close {name}'s screen" : "Open {name}'s screen", { name: machine.name })} onClick={() => props.onScreen(machine.id)}><span className="sidebar-mark" aria-hidden="true"><Monitor /></span><span className="machine-new-row-label">{t(screen ? "Close screen" : "Open screen")}</span></button>}
   </section>;
 }
 
