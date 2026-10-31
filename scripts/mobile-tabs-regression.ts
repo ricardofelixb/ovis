@@ -96,7 +96,10 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
     await composer.waitFor();
     await assertShell(page, "chat");
     const chat = await box(page, ".chat-view");
-    assert.ok(chat.top >= (await box(page, ".tab-strip")).bottom - 1, "the chat starts under the strip, not over it");
+    // the strip is in the header, which is glass over the chat: the chat reaches up under it by the
+    // header's height (--header-over, styles.css), which it keeps clear as its scroll padding
+    const over = await page.locator(".chat-view").evaluate((node) => parseFloat(getComputedStyle(node).scrollPaddingTop) || 0);
+    assert.ok(chat.top + over >= (await box(page, ".tab-strip")).bottom - 1, "the chat's content starts under the strip, not over it");
     await screenshot("chat");
 
     await composer.tap();
