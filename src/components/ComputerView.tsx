@@ -37,6 +37,8 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
   computerRef.current = computer;
   const tuningRef = useRef<HTMLDivElement | null>(null);
   const [typing, setTyping] = useState(false);
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
   const [modifiers, setModifiers] = useState<StickyModifiers>(NO_STICKY_MODIFIERS);
   const modifiersRef = useRef(modifiers);
   modifiersRef.current = modifiers;
@@ -81,11 +83,14 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
   useEffect(() => post({ screen: "options", options: viewerOptions(computer) }), [computer, post]);
   useEffect(() => {
     const ready = ({ source, data }: MessageEvent): void => {
-      if (source === frameRef.current?.contentWindow && data?.screen === "ready") setResizes(data.resizes === true);
+      if (source !== frameRef.current?.contentWindow || data?.screen !== "ready") return;
+      setResizes(data.resizes === true);
+      // the frame's load comes before the viewer listens: it hears whether it is hidden, and stays quiet, only now
+      post({ screen: "shown", shown: !hiddenRef.current });
     };
     addEventListener("message", ready);
     return () => removeEventListener("message", ready);
-  }, []);
+  }, [post]);
   // The settings close on a press outside them; one on the desktop lands in its page, which this one hears as a blur
   useEffect(() => {
     if (!tuning) return;

@@ -108,14 +108,15 @@ export function useComputerView(machineId: string, paneId: string | null): [open
       /* private mode */
     }
   }, [key]);
-  const [kept, setKept] = useState(false);
+  // the PC whose view is kept: a pane of another PC opens no hidden view of its own desktop
+  const [kept, setKept] = useState<string | null>(null);
   useEffect(() => {
     if (open) {
-      setKept(true);
+      setKept(machineId);
       return;
     }
-    const timer = setTimeout(() => setKept(false), Number(readComputerSettings(machineId).keep) * 60_000);
+    const timer = setTimeout(() => setKept(null), Number(readComputerSettings(machineId).keep) * 60_000);
     return () => clearTimeout(timer);
   }, [open, machineId]);
-  return [open, setOpen, kept];
+  return [open, setOpen, kept === machineId];
 }
