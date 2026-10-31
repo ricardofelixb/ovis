@@ -10,6 +10,7 @@ import { openSettingsPage } from "./settings-page.ts";
 import { chromePath } from "./chrome-path.ts";
 import { MAX_ATTACHMENT_BYTES } from "../shared/attachments.ts";
 import { SUPPORTED_ENTRIES } from "../src/lib/themes.ts";
+import { pickLens, VIEW_BUTTON } from "./view-menu.ts";
 
 // The model label in the input card's last row, fitted to what is measured there, on the
 // unmodified app over the demo's fixture transport. The demo's panes name no context window and
@@ -1011,8 +1012,8 @@ try {
           return { text: paragraph.textContent!, offset: paragraph.getBoundingClientRect().top - view.top, gap: node.scrollHeight - node.clientHeight - node.scrollTop };
         });
         assert.ok(reading.gap > 48, "the reader is away from the end before changing lenses");
-        await page.getByTitle("Live terminal (⌘⇧J)", { exact: true }).click();
-        await page.getByTitle("Chat transcript (⌘⇧J)", { exact: true }).click();
+        await pickLens(page, "terminal");
+        await pickLens(page, "chat");
         await page.waitForFunction((saved) => {
           const node = document.querySelector(".chat-view");
           if (!node) return false;
@@ -1022,18 +1023,20 @@ try {
         }, reading);
         assert.equal(await box.inputValue(), draft, "the unsent draft survives the terminal/chat round trip");
         await page.getByRole("button", { name: "Jump to latest", exact: true }).waitFor();
-        // Leave in the same task: the list's deferred scroll cannot update memory first.
+        // Leave in the same task: the list's deferred scroll cannot update memory first. The lens
+        // menu is opened before, and its Terminal picked in that task.
+        await page.locator(VIEW_BUTTON).click();
         await page.evaluate(() => {
           document.querySelector<HTMLButtonElement>('button[title="Jump to latest"]')!.click();
-          document.querySelector<HTMLButtonElement>('button[title="Live terminal (⌘⇧J)"]')!.click();
+          document.querySelectorAll<HTMLButtonElement>('.row-menu [role="menuitem"], .row-sheet .row-sheet-item')[1]!.click();
         });
-        await page.getByTitle("Chat transcript (⌘⇧J)", { exact: true }).click();
+        await pickLens(page, "chat");
         await page.waitForFunction(() => {
           const node = document.querySelector(".chat-view")!;
           return node.scrollHeight - node.clientHeight - node.scrollTop <= 1;
         }, undefined, { timeout: 5_000 });
-        await page.getByTitle("Live terminal (⌘⇧J)", { exact: true }).click();
-        await page.getByTitle("Chat transcript (⌘⇧J)", { exact: true }).click();
+        await pickLens(page, "terminal");
+        await pickLens(page, "chat");
         await page.waitForFunction(() => {
           const node = document.querySelector(".chat-view")!;
           return node.scrollHeight - node.clientHeight - node.scrollTop <= 1;

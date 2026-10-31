@@ -6,6 +6,7 @@ import { chromium, type Page } from "playwright-core";
 import panes from "../site/demo/fixtures/panes.json";
 import { buildDemoApp } from "./demo-build.ts";
 import { chromePath } from "./chrome-path.ts";
+import { pickLens } from "./view-menu.ts";
 
 // #1457: with the keyboard up a phone is short enough to drop a lone tab's row, and the chat then
 // puts the glass header over the pane. The pane's own menu button must start below that header,
@@ -84,7 +85,7 @@ try {
         assert.ok(closed > 0, "the demo pane's workspace had another tab to close");
         await page.waitForFunction(() => document.querySelectorAll(".tab-strip-item").length === 1);
 
-        await page.getByTitle("Chat transcript (⌘⇧J)", { exact: true }).click();
+        await pickLens(page, "chat");
         const message = page.getByRole("textbox", { name: "Message", exact: true });
         await message.waitFor();
         assert.equal(await page.locator(".pane-frame.is-single .pane-frame-menu").isVisible(), false,

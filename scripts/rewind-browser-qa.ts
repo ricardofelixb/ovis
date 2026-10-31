@@ -8,6 +8,7 @@ import { buildDemoApp } from "./demo-build.ts";
 import { chromePath } from "./chrome-path.ts";
 import { appFaces } from "./app-faces.ts";
 import panes from "../site/demo/fixtures/panes.json";
+import { pickLens } from "./view-menu.ts";
 
 interface RewindFixture { agent: string; inputs: string[]; mutations: string[] }
 declare global { interface Window { rewindFixture: RewindFixture } }
@@ -97,7 +98,7 @@ try {
           await frame.getByRole("log").waitFor({ state: "detached" });
           assert.deepEqual(await page.evaluate(() => ({ inputs: window.rewindFixture.inputs, mutations: window.rewindFixture.mutations })), before, "handoff sends no terminal input or HTTP mutation");
           if (evidence) await page.screenshot({ path: join(evidence, `${agent}-${width}-${theme}-terminal.png`) });
-          await page.getByTitle("Chat transcript (⌘⇧J)", { exact: true }).click();
+          await pickLens(page, "chat");
           await box.waitFor();
           assert.equal(await box.inputValue(), "kept draft");
           assert.equal(await frame.locator(".terminal-banner-rewind").count(), 0);

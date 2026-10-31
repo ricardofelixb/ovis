@@ -21,7 +21,7 @@ export function ViewMenu({ view, covered, terminalAttach, onPick }: { view: Pane
   ];
   const Icon = view === "chat" ? MessageSquare : SquareTerminal;
   return <>
-    <button type="button" className="view-menu-button" data-covered={covered || undefined} aria-label={label[view]} title={label[view]} aria-haspopup="menu" aria-expanded={anchor !== null}
+    <button type="button" className="view-menu-button" data-view={view} data-terminal-soon={!terminalAttach || undefined} data-covered={covered || undefined} aria-label={label[view]} title={label[view]} aria-haspopup="menu" aria-expanded={anchor !== null}
       onClick={(event) => { const target = event.currentTarget; setAnchor((open) => open ? null : target); }}>
       <Icon aria-hidden="true" />
       <ChevronDown className="view-menu-chevron" aria-hidden="true" />

@@ -189,7 +189,7 @@ process.on("SIGTERM", () => { app.stop(); process.exit(0); });
   const initialBorder = initialScreen.split("\n").filter((line) => line.includes("╭─ Ask")).at(-1);
   assert.ok(initialBorder, "the native OMP Ask dialog must be visible after browser sizing");
   evidence.native_initial_pty = { columns: [...initialBorder].length, rows: initialRows };
-  await browser(cli, browserEnv, ["click", ".view-switch button:nth-child(1)"]);
+  await pickLensIn(cli, browserEnv, 1);
   for (let index = 0; index < questions.length; index += 1) {
     const fixture = questions[index]!;
     assert.equal(question.question, fixture.question, `OMP question ${index + 1} is parsed in order`);
@@ -198,12 +198,12 @@ process.on("SIGTERM", () => { app.stop(); process.exit(0); });
     if (index === 0) await browser(cli, browserEnv, ["screenshot", join(out, "desktop.png")]);
     if (index === 3) {
       await browser(cli, browserEnv, ["set", "viewport", String(cases[1]!.viewport[0]), "1400"]);
-      await browser(cli, browserEnv, ["click", ".view-switch button:nth-child(2)"]);
+      await pickLensIn(cli, browserEnv, 2);
       const nativeRows = await waitForTerminalRows(cli, browserEnv, 30_000);
       assert.ok(nativeRows > 24, `tall native terminal should expose more than 24 rows (got ${nativeRows})`);
       const nativeLayout = await waitForNativeLayout(herdr!, TEST_SESSION, paneId, 76, fixture.question, [...fixture.options.map((option) => option.label), "Other (type your own)"], 30_000);
       evidence.native_wrap_pty = { attached_columns: nativeLayout.columns, attached_rows: nativeRows, browser_viewport: [390, 1400] };
-      await browser(cli, browserEnv, ["click", ".view-switch button:nth-child(1)"]);
+      await pickLensIn(cli, browserEnv, 1);
       await browser(cli, browserEnv, ["set", "viewport", String(cases[1]!.viewport[0]), String(cases[1]!.viewport[1])]);
       const drawerOpen = JSON.parse(await browser(cli, browserEnv, ["eval", "document.querySelector('.drawer-toggle')?.getAttribute('aria-expanded') === 'true'"])) as boolean;
       if (drawerOpen) await browser(cli, browserEnv, ["click", "button[aria-label='Close workspace list']"]);
@@ -384,6 +384,12 @@ async function waitForFile(path: string, timeoutMs: number): Promise<void> {
     try { readFileSync(path); return; } catch { await Bun.sleep(250); }
   }
   throw new Error(`The fake provider did not verify OMP's ask result: ${path}`);
+}
+
+/** Picks the header's lens from its menu (a popover, or a sheet on a phone): Chat is item 1, Terminal item 2. */
+async function pickLensIn(binary: string, env: NodeJS.ProcessEnv, item: 1 | 2): Promise<void> {
+  await browser(binary, env, ["click", ".app-header .view-menu-button"]);
+  await browser(binary, env, ["click", `.row-menu button.menu-item:nth-of-type(${item}), .row-sheet-item:nth-of-type(${item})`]);
 }
 
 async function browser(binary: string, env: NodeJS.ProcessEnv, args: string[]): Promise<string> {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { SlashCommand } from "../../shared/protocol.ts";
 import type { CaseRun } from "../skill-menu-case.ts";
+import { pickLens } from "../view-menu.ts";
 
 export const agent = "claude";
 const builtin = (name: string, description: string, rest: Partial<SlashCommand> = {}): SlashCommand => ({ name, description, source: "builtin", ...rest });
@@ -31,7 +32,7 @@ export const expect = async ({ page, width, scheme, box, menu, scenario, clear, 
   const peek = page.locator(".terminal-stack.is-chat.is-peek");
   const hint = page.locator(".terminal-banner-command");
   const back = async (): Promise<void> => {
-    await page.getByTitle("Chat transcript (⌘⇧J)", { exact: true }).click();
+    await pickLens(page, "chat");
     await chat.waitFor();
   };
 

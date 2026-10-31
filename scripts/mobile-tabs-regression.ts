@@ -6,6 +6,7 @@ import type { Browser, Page } from "playwright-core";
 import { appFaces } from "./app-faces.ts";
 import { herdrRpc, paneSplit, tabCreate, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
+import { pickLens } from "./view-menu.ts";
 
 type Box = { left: number; top: number; right: number; bottom: number; width: number; height: number };
 type KeyboardQA = Window & { keyboardQA: (height: number | null) => void };
@@ -23,15 +24,15 @@ async function box(page: Page, selector: string): Promise<Box> {
   return found;
 }
 
-/** The header keeps the pane's title and the strip sits right under it, whatever the lens. */
-async function assertShell(page: Page, label: string, titleRoom = 60): Promise<void> {
+/** The header holds the tabs where the pane's title was, whatever the lens. */
+async function assertShell(page: Page, label: string, stripRoom = 60): Promise<void> {
   assert.equal(await page.locator(".app-header").getByRole("button", { name: "New tab" }).count(), 0, `${label}: the header has no New tab button of its own`);
   assert.equal(await page.locator(".app-header .header-more-button").isVisible(), true, `${label}: the header keeps its More menu`);
-  const title = await box(page, ".context-title-text");
-  assert.ok(title.width >= titleRoom, `${label}: the pane's title keeps its room in the header (${title.width}px)`);
+  assert.equal(await page.locator(".app-header .context-title-text").count(), 0, `${label}: the header shows the tabs, not the pane's title`);
   const header = await box(page, ".app-header");
-  const strip = await box(page, ".tab-strip");
-  assert.ok(Math.abs(strip.top - header.bottom) <= 1, `${label}: the strip sits under the header (${strip.top} vs ${header.bottom})`);
+  const strip = await box(page, ".app-header .tab-strip");
+  assert.ok(strip.top >= header.top - 1 && strip.bottom <= header.bottom + 1, `${label}: the strip sits in the header (${JSON.stringify({ header, strip })})`);
+  assert.ok(strip.width >= stripRoom, `${label}: the strip keeps its room in the header (${strip.width}px)`);
   assert.ok(strip.height >= 40, `${label}: the strip is a touch target tall (${strip.height}px)`);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, `${label}: nothing overflows sideways`);
 }
@@ -89,7 +90,7 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
     await page.goto(`${origin}/?pane=${encodeURIComponent(first)}`);
     await page.locator(".conn-live").waitFor();
     await page.locator(".tab-strip").waitFor();
-    await page.getByTitle("Chat transcript (⌘⇧J)", { exact: true }).click();
+    await pickLens(page, "chat");
     const firstFrame = page.locator(`[data-layout-pane=${JSON.stringify(first)}]`);
     const composer = firstFrame.getByRole("textbox", { name: "Message", exact: true });
     await composer.waitFor();
@@ -107,7 +108,7 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
     await page.evaluate(() => { (document.activeElement as HTMLElement | null)?.blur(); (window as unknown as KeyboardQA).keyboardQA(null); });
     await page.waitForFunction(() => !document.documentElement.hasAttribute("data-keyboard"));
 
-    await page.getByTitle("Live terminal (⌘⇧J)", { exact: true }).click();
+    await pickLens(page, "terminal");
     await firstFrame.locator(".key-bar").waitFor();
     assert.equal(await page.locator(".pane-frame:visible").count(), 1, "a phone shows the split tab's open pane alone");
     assert.equal(await page.locator(".pane-frame").count(), 2, "and keeps its sibling mounted");
@@ -130,12 +131,14 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
     await screenshot("last-tab");
 
     await page.locator(".tab-strip").evaluate((node) => { node.scrollLeft = 0; });
-    await page.getByRole("tab", { name: "Tab 1", exact: true }).tap();
-    await page.locator('.tab-strip [role="tab"][aria-selected="true"]', { hasText: "Tab 1" }).waitFor();
+    // an unnamed tab is named by its agent's title
+    const firstTab = (await page.locator('.tab-strip [role="tab"]').first().innerText()).trim();
+    await page.getByRole("tab", { name: firstTab, exact: true }).tap();
+    await page.locator('.tab-strip [role="tab"][aria-selected="true"]', { hasText: firstTab }).waitFor();
     await activeTabInView(page, "the first tab, tapped");
     assert.equal(await page.locator(".tab-strip-menu:visible").count(), 1, "the menu button follows a tab selected by touch");
-    await page.getByRole("button", { name: "Actions for Tab 1", exact: true }).tap();
-    const tabSheet = page.getByRole("dialog", { name: "Tab 1", exact: true });
+    await page.getByRole("button", { name: `Actions for ${firstTab}`, exact: true }).tap();
+    const tabSheet = page.getByRole("dialog", { name: firstTab, exact: true });
     await tabSheet.waitFor();
     const tabItems = await tabSheet.locator(".row-sheet-item").allTextContents();
     assert.equal(tabItems.indexOf("Rename pane"), 2, "a split tab's menu lists its two panes first on a phone");
@@ -156,7 +159,7 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
     await page.locator(".conn-live").waitFor();
     await shown(last);
     await page.locator(".tab-strip").evaluate((node) => { node.scrollLeft = 0; });
-    await page.getByRole("tab", { name: "Tab 1", exact: true }).tap();
+    await page.getByRole("tab", { name: firstTab, exact: true }).tap();
     await shown(second);
     assert.equal(await page.locator(`[data-layout-pane=${JSON.stringify(first)}]`).isVisible(), false, "a tab opened again after a reload shows the pane it was left on");
     await page.goto(`${origin}/?pane=${encodeURIComponent(other.root_pane.pane_id)}`);
@@ -212,8 +215,8 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
         if (scrolled) {
           assert.equal(await strip.evaluate((node) => node.scrollLeft), 0, "a strip the user scrolled is left there when the faces come");
           assert.equal(await openInView(), false);
-          await late.getByRole("tab", { name: "Tab 1", exact: true }).tap();
-          await late.locator('.tab-strip [role="tab"][aria-selected="true"]', { hasText: "Tab 1" }).waitFor();
+          await late.getByRole("tab", { name: firstTab, exact: true }).tap();
+          await late.locator('.tab-strip [role="tab"][aria-selected="true"]', { hasText: firstTab }).waitFor();
           await activeTabInView(late, "a tab opened after the user's scroll");
         } else {
           await activeTabInView(late, "the last tab, after the faces came");
@@ -221,7 +224,7 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
         assert.deepEqual(lateErrors, []);
       } finally { await slow.close(); }
     }
-    console.log("PASS a phone keeps the pane's title in the header and the open tab and the + in the strip, in both lenses and with the keyboard up, and reopens a tab and a workspace on the pane last seen after a reload");
+    console.log("PASS a phone holds the tabs in the header, with the open tab and the + in view, in both lenses and with the keyboard up, and reopens a tab and a workspace on the pane last seen after a reload");
   } finally {
     await context.close();
     if (workspaceId) await workspaceClose(workspaceId).catch(() => undefined);

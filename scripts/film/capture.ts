@@ -826,10 +826,12 @@ const TAKES: Record<string, Take> = {
     open: { pane: "api", viewport: VIDEO_DESKTOP },
     notes: "the demo has no agent TUI: Terminal shows the demo's boxed notice (\"This is the demo… Switch back to Chat above\"); not film material",
     run: async (page, hand, marks) => {
-      await hand.click(".view-switch button:nth-child(2)");
+      await hand.click(".app-header .view-menu-button");
+      await hand.click(".row-menu button.menu-item:nth-of-type(2)");
       marks.add("Terminal");
       await Bun.sleep(1600);
-      await hand.click(".view-switch button:nth-child(1)");
+      await hand.click(".app-header .view-menu-button");
+      await hand.click(".row-menu button.menu-item:nth-of-type(1)");
       marks.add("Chat");
       await Bun.sleep(1400);
     },

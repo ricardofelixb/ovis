@@ -8,6 +8,7 @@ import type { PaneFindResponse } from "../shared/protocol.ts";
 import { createServer } from "../server/index.ts";
 import { herdrRpc, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
+import { pickLens } from "./view-menu.ts";
 
 /** GUI searches stay in herdr's history, never in browser scrollback or terminal input. */
 export async function checkPaneFind(browser: Browser, origin: string): Promise<void> {
@@ -132,7 +133,7 @@ export async function checkPaneFind(browser: Browser, origin: string): Promise<v
       await capture(`${name}-find`);
     };
     await staleNavigation("desktop");
-    await page.getByRole("button", { name: "Chat", exact: true }).click();
+    await pickLens(page, "chat");
     await page.keyboard.press("ControlOrMeta+Shift+F");
     await page.waitForFunction(() => document.querySelector(".find-bar input") === document.activeElement);
     await page.keyboard.type("find_browser_marker");
