@@ -760,7 +760,8 @@ export function App() {
         {/* a file path in the chat opens in the viewer, relative to the selected pane's folder */}
         <OpenFileContext.Provider value={selectedPaneId !== null ? viewFile : null}>
         <WebPanelContext.Provider value={filePanelAvailable ? openWebPage : null}>
-        <div className={`pane-column${chatShown ? " is-chat" : ""}`}>
+        {/* the Computer view covers the chat: the column is no chat's then, so the phone's glass header stays a bar over the desktop */}
+        <div className={`pane-column${chatShown && screenMachineId === null ? " is-chat" : ""}`}>
         {/* over the pane only: a bar across the window would cut the sidebar off from its top row in the header */}
         <UpdateNotice updates={updates} onOpen={() => { setSettingsSection("updates"); setSettingsOpen(true); }} />
         <TelemetryNotice enabled={locked === false} onOpen={() => { setSettingsSection("updates"); setSettingsOpen(true); }} />
