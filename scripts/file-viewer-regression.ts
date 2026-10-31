@@ -25,6 +25,7 @@ import { runMoreItem } from "./header-more.ts";
 import type { Machine } from "../shared/protocol.ts";
 import { chromePath } from "./chrome-path.ts";
 import { routeDrained } from "./drained-route.ts";
+import { openWorkRuns } from "./work-runs.ts";
 
 const openFiles = async (page: import("playwright-core").Page) => {
   const headerButton = page.locator(".header-files-button");
@@ -1400,6 +1401,7 @@ try {
   // a path in a tool's output opens the file it names; the rest of the output stays its text
   const shotPath = join(root, "shots", "t00000.png");
   await page.locator(".work-block-head").last().click();
+  await openWorkRuns(page);
   await page.locator(".work-row-head", { hasText: "shoot.py" }).click();
   const output = page.locator(".chat-tool-output pre").last();
   assert.equal(await output.innerText(), `${shotPath} (1600, 1000) -> (1255, 960)\nsaved shots/report.html\ndisplay image 1: [image/png]`, "the output reads as it was written");

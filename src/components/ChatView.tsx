@@ -721,7 +721,7 @@ function WorkRunRow({ paneId, run, work, stateKeyOf, live }: { paneId: string; r
   const counts = (list: RunCount[]) => list.map(({ name, count }) => `${name} ×${count}`).join(", ");
   const groupsShown = [["done", "✓", done], ["failed", "✗", failed], ["running", "•", running]] as const;
   return <div className="work-row work-run">
-    <button type="button" className="work-row-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <button type="button" className="work-run-head" aria-expanded={open} onClick={() => setOpen(!open)}>
       <span className="work-row-caret" aria-hidden="true">{open ? <ChevronDown /> : <ChevronRight />}</span>
       <span className="work-run-counts">{groupsShown.filter(([, , list]) => list.length > 0).map(([outcome, mark, list], index) =>
         <span key={outcome} className={`work-run-${outcome}`}>{index > 0 && " · "}<span className="work-run-mark">{mark}</span> {counts(list)}</span>)}</span>

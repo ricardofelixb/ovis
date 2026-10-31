@@ -9,6 +9,7 @@ import { createServer } from "../server/index.ts";
 import { herdrRpc, paneProcessInfo, paneRead, sessionSnapshot, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { UsageService } from "../server/usage.ts";
 import { chromePath } from "./chrome-path.ts";
+import { openWorkRuns } from "./work-runs.ts";
 
 if (process.platform !== "linux") {
   console.log("SKIP native Copilot store requires Linux process descriptors");
@@ -97,6 +98,7 @@ console.log("fixture ready");`);
   assert.equal((await log.innerText()).includes("not visible"), false);
   const head = log.locator(".work-block-head").first();
   if (await head.getAttribute("aria-expanded") !== "true") await head.click();
+  await openWorkRuns(log);
   await log.locator(".work-row-head").first().click();
   await log.locator(".chat-tool-more").click();
   await log.getByText(/COPILOT_OUTPUT_END/).waitFor();
