@@ -78,6 +78,39 @@ export function useComputerSettings(machineId: string): [ComputerSettings, (patc
   return [settings, update];
 }
 
+/** A PC's login (a Mac's account) the viewer asked for, kept on this device: the next view signs in with it. */
+export interface ComputerLogin {
+  username: string;
+  password: string;
+}
+
+const LOGIN_PREFIX = "ovis:computer-login:";
+
+export function readComputerLogin(machineId: string): ComputerLogin | null {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(LOGIN_PREFIX + encodeURIComponent(machineId)) ?? "null");
+    const { username, password } = (value ?? {}) as Partial<ComputerLogin>;
+    return typeof username === "string" && typeof password === "string" ? { username, password } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keeps the login the PC accepted, or forgets the one it refused (null). */
+export function keepComputerLogin(machineId: string, login: ComputerLogin | null): void {
+  try {
+    if (login) localStorage.setItem(LOGIN_PREFIX + encodeURIComponent(machineId), JSON.stringify({ username: login.username, password: login.password }));
+    else localStorage.removeItem(LOGIN_PREFIX + encodeURIComponent(machineId));
+  } catch { /* full or blocked: it's asked for again next time */ }
+}
+
+/** On sign-out: no PC's login stays on a device that is no longer signed in. */
+export function forgetComputerLogins(): void {
+  try {
+    for (const name of Object.keys(localStorage)) if (name.startsWith(LOGIN_PREFIX)) localStorage.removeItem(name);
+  } catch { /* no storage: nothing was kept */ }
+}
+
 /** The settings as the viewer takes them, in its address's #fragment and in each change posted to it. */
 export function viewerOptions(settings: ComputerSettings): Record<string, unknown> {
   return { fit: settings.fit, sharpness: Number(settings.sharpness), zoom: Number(settings.zoom) / 100, quality: settings.quality, cursor: settings.cursor, speed: settings.speed, sound: settings.sound };

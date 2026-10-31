@@ -14,7 +14,7 @@ import { AccessGate } from "./components/AccessGate.tsx";
 import { useAgentFriends } from "./lib/friends.ts";
 import { PiVoiceView } from "./components/PiVoiceView.tsx";
 import { ComputerView } from "./components/ComputerView.tsx";
-import { useComputerView } from "./lib/computerSettings.ts";
+import { forgetComputerLogins, useComputerView } from "./lib/computerSettings.ts";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { SetupGuide, SetupGuideResume } from "./components/SetupGuide.tsx";
 import { useSetupGuide } from "./lib/useSetupGuide.ts";
@@ -287,6 +287,7 @@ export function App() {
     await removePushSubscription().catch(() => undefined);
     setPushOn(false);
     resetPushHealth();
+    forgetComputerLogins();
     try {
       await signOut();
     } catch {

@@ -5,7 +5,7 @@ import { NO_STICKY_MODIFIERS, hasModifiers, type StickyModifiers } from "../lib/
 import type { KeyBarKeyItem } from "../lib/keyBar.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { useSettings } from "../lib/settings.ts";
-import { useComputerSettings, viewerOptions, type ComputerSettings } from "../lib/computerSettings.ts";
+import { keepComputerLogin, readComputerLogin, useComputerSettings, viewerOptions, type ComputerSettings } from "../lib/computerSettings.ts";
 import { KeyBar } from "./KeyBar.tsx";
 import { SettingsRow, Segmented, Toggle } from "./SettingsControls.tsx";
 import "./ComputerView.css";
@@ -98,14 +98,18 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
     const ready = ({ source, origin, data }: MessageEvent): void => {
       if (source !== frameRef.current?.contentWindow || origin !== originRef.current) return;
       if (data?.screen === "rtt" && typeof data.ms === "number") setRtt(data.ms);
+      // a login the PC accepted, kept here, or one it refused (null), forgotten
+      if (data?.screen === "login") keepComputerLogin(machineId, data.login ?? null);
       if (data?.screen !== "ready") return;
       setResizes(data.resizes === true);
+      const login = readComputerLogin(machineId);
+      if (login) post({ screen: "login", login });
       // the frame's load comes before the viewer listens: it hears whether it is hidden, and stays quiet, only now
       post({ screen: "shown", shown: !hiddenRef.current });
     };
     addEventListener("message", ready);
     return () => removeEventListener("message", ready);
-  }, [post]);
+  }, [machineId, post]);
   // The settings close on a press outside them; one on the desktop lands in its page, which this one hears as a blur
   useEffect(() => {
     if (!tuning) return;
