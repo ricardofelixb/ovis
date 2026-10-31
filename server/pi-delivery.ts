@@ -248,9 +248,10 @@ export function matchPiDeliveries(path: string, candidates: readonly PiDeliveryC
       }
       if (parent !== anchor.leaf) { changed.push(candidate.id); continue; }
       const key = (entry: BranchEntry): string => JSON.stringify([path, file, session, entry.id]);
-      // Pi trims what it submits, and a phone keyboard leaves a space after the last word
+      // the text as typed, or trimmed: a Pi that trims what it submits drops the space a phone
+      // keyboard leaves after the last word
       const same = chain.reverse().filter((entry) => entry.start > afterMatched && entry.role === "user"
-        && entry.text === candidate.text.trim() && !consumedEntries.has(key(entry)));
+        && (entry.text === candidate.text || entry.text === candidate.text.trim()) && !consumedEntries.has(key(entry)));
       const match = same.find((entry) => entry.at === null || entry.at >= anchor.at);
       const earlier = match ? undefined : same[0];
       if (match) consumed.push(candidate.id);
