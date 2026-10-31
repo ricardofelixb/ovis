@@ -84,7 +84,7 @@ import { useFilePanels } from "./lib/useFilePanels.ts";
 import { usePaneCoverage } from "./lib/usePaneCoverage.ts";
 import { useT } from "./lib/i18n.ts";
 import { useConnectionChip, useServerMessageHandler } from "./lib/useConnectionChip.ts";
-import { selectionStill, type SelectionMark } from "./lib/selectionMark.ts";
+import { selectionStill } from "./lib/selectionMark.ts";
 import { carryPaneState } from "./lib/paneMove.ts";
 import { useScreenWakeLock } from "./lib/wakeLock.ts";
 import { useSidebarLayout } from "./lib/useSidebarLayout.ts";
@@ -102,7 +102,7 @@ import { CrashProbe, RegionCrash } from "./components/AppCrash.tsx";
 import { RenderBoundary } from "./components/RenderBoundary.tsx";
 import { lensOwner, storedView, usePaneLens, usePaneLensState, usePaneViewPicks } from "./lib/usePaneLens.ts";
 import { useSplitLayout, useSplitRecheck, useSplitState } from "./lib/useSplitView.ts";
-import { linkSelects, useLinkLanding, useMachineGone, useNotificationTargets, useSelectedLayout, useSelectedMachine, useSelectedPane, useSelectionMark, useSelectionState, useSelectPane, useSelectTarget } from "./lib/useSelection.ts";
+import { linkSelects, useLinkLanding, useMachineGone, useNotificationTargets, useOpenWhenListed, useSelectedLayout, useSelectedMachine, useSelectedPane, useSelectionMark, useSelectionState, useSelectPane, useSelectTarget } from "./lib/useSelection.ts";
 import { useAddressBar } from "./lib/useAddressBar.ts";
 
 const APP_TITLE = "Ovis";
@@ -401,17 +401,7 @@ export function App() {
     return { machineId, workspace, cwd: workspace.worktree?.checkout_path ?? inFront?.cwd ?? null, agent: inFront?.agent ?? null, panes };
   };
 
-  // A pane herdr just made is opened once the roster holds it: selected sooner, the header and the
-  // canvas would draw the empty PC until it came. Any event supersedes a fetch, so either may bring it.
-  const pendingOpen = useRef<{ machineId: string; paneId: string; asked: SelectionMark } | null>(null);
-  const openWhenListed = useCallback(() => {
-    const pending = pendingOpen.current;
-    if (!pending || !machinesRef.current.find((m) => m.id === pending.machineId)?.snapshot?.panes.some((pane) => pane.pane_id === pending.paneId)) return;
-    pendingOpen.current = null;
-    // what the user went to while herdr answered is theirs to keep
-    if (selectionStill(pending.asked, selectionRef.current)) selectTargetRef.current(pending.machineId, pending.paneId);
-  }, []);
-  useEffect(openWhenListed, [machines, openWhenListed]);
+  const openWhenListed = useOpenWhenListed({ machines, machinesRef, selectionRef, selectTargetRef });
 
   const actions = useMemo<AppActions>(
     () => ({
@@ -477,8 +467,7 @@ export function App() {
         if (!found) return;
         const asked = selectionRef.current;
         const created = await createTab({ workspace_id: found.workspace.workspace_id, cwd: found.cwd, label: null, agent: null }, found.machineId);
-        pendingOpen.current = { machineId: found.machineId, paneId: created.pane_id, asked };
-        openWhenListed();
+        openWhenListed(found.machineId, created.pane_id, asked);
         void load();
       },
       moveTabToWorkspace: async ({ machineId, tabId, workspaceId, notice }) => {
