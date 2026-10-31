@@ -2059,12 +2059,6 @@ button {
   color: var(--text-dim);
 }
 
-/* a PC's desktop covers the pane: the lens is not what shows */
-.view-menu-button[data-covered] {
-  background: transparent;
-  color: var(--text-dim);
-}
-
 .view-menu-button:hover,
 .view-menu-button:focus-visible {
   border-color: var(--border-strong);

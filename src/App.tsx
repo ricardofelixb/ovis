@@ -683,9 +683,10 @@ export function App() {
             a split view keeps each column's strip over its column */}
         {selectedPane && !splitOn && <div ref={setHeaderTabs} className="header-tabs" hidden={screenMachineId !== null} />}
         {screenMachineId !== null && <span className="machine-context-name header-screen-name">{machineName(screenMachineId)}</span>}
-        {selectedPane && <ViewMenu view={view} covered={screenMachineId !== null} terminalAttach={terminalAttach}
-          onPick={(next) => { setScreenMachineId(null); setView(next); setDrawerOpen(false); }} />}
-        {selectedPane && wideScreen && (
+        {/* a PC's desktop is the host's alone: the pane's own controls step aside with its tabs */}
+        {selectedPane && screenMachineId === null && <ViewMenu view={view} terminalAttach={terminalAttach}
+          onPick={(next) => { setView(next); setDrawerOpen(false); }} />}
+        {selectedPane && screenMachineId === null && wideScreen && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
             <span className="header-divider" aria-hidden="true" />
@@ -696,7 +697,7 @@ export function App() {
         )}
         <div className="header-meta">
           {/* the chip speaks for the pane's terminal: the setup guide stands in the pane's place and has none */}
-          {!guideShown && <ConnectionChip
+          {!guideShown && screenMachineId === null && <ConnectionChip
             connected={connected}
             word={connWord}
             title={[connected ? null : connWord, shownHerdr ? t("herdr {version} · protocol {protocol}", { version: shownHerdr.version, protocol: shownHerdr.protocol }) : null].filter((part) => part !== null).join(" · ") || undefined}
@@ -731,7 +732,7 @@ export function App() {
           <RowMenu
             anchor={more.anchor}
             title={t("More")}
-            header={crumb ? (
+            header={crumb && screenMachineId === null ? (
               <div className="header-more-crumb">
                 <span>{crumb.place}</span>
                 {crumb.path !== null && <span className="header-more-path">{crumb.path}</span>}
@@ -749,7 +750,7 @@ export function App() {
           {/* a sidebar that cannot be drawn leaves the panes working */}
           <RenderBoundary resetKey={null} fallback={(retry) => <RegionCrash message={t("The sidebar can't be shown.")} retry={retry} />}>
             <CrashProbe region="sidebar" />
-            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} hiddenCount={machines.length - sidebarMachines.length} watching={auth?.role === "watch"} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={selectedMachineId} selectedPaneId={selectedPaneId} screenMachineId={screenMachineId} onScreen={(id) => { setScreenMachineId((open) => open === id ? null : id); setDrawerOpen(false); }} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={(id) => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); }} /></ReorderContext.Provider>
+            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} hiddenCount={machines.length - sidebarMachines.length} watching={auth?.role === "watch"} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={screenMachineId ?? selectedMachineId} selectedPaneId={screenMachineId === null ? selectedPaneId : null} screenMachineId={screenMachineId} onScreen={(id) => { setScreenMachineId((open) => open === id ? null : id); setDrawerOpen(false); }} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={(id) => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); }} /></ReorderContext.Provider>
           </RenderBoundary>
           <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
         </aside>
