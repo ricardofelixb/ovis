@@ -26,7 +26,7 @@ import { STRIP_AT_REST, stripPlaced, stripScrolled, stripSelected, type StripScr
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "../lib/paneRegion.ts";
 import { CRAMPED_QUERY, loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
 import { rosterPanes } from "../lib/dagPane.ts";
-import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
+import { useAppLayout, useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { DETACHED, usePaneBranch } from "../lib/paneBranch.ts";
 import { SHEET_QUERY } from "../lib/sheets.ts";
@@ -78,6 +78,8 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const place = branch === null ? workspace.label : `${workspace.label} · ${branch === DETACHED ? t("Detached HEAD") : branch}`;
   const sheet = useMediaQuery(SHEET_QUERY);
   const { closeTab, renameTab, moveTab } = useMachineApi();
+  // the Herdr app's window owns this PC's tabs (lib/machineContext.tsx): no rename, no move, no other workspace
+  const appLayout = useAppLayout();
   const touchMenu = useMediaQuery("(pointer: coarse), (max-width: 768px)");
   // a mouse on a wide screen gets the same ellipsis, drawn while the strip is hovered or the tab
   // has keyboard focus (TabStrip.css): the tab's menu is never only behind a right-click
@@ -117,7 +119,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const panes = rosterPanes(snapshot.panes.filter((pane) => pane.workspace_id === workspace.workspace_id), selectedPane.pane_id);
   // The snapshot order is authoritative; number identifies a tab and does not change on a move.
   const tabs = snapshot.tabs.filter((tab) => tab.workspace_id === workspace.workspace_id);
-  const reorder = useTabReorder({ owner: `${machineId}:${workspace.workspace_id}`, tabs, strip, moveTab,
+  const reorder = useTabReorder({ owner: `${machineId}:${workspace.workspace_id}`, tabs, strip, moveTab, fixed: appLayout,
     failed: (reason) => setError(t("Move failed: {reason}", { reason: said(reason) })),
     stale: () => setError(t("Tab order did not refresh. Try again.")),
     // dragged down out of the strip, a tab opens its pane in half of the pane area (lib/split.ts)
@@ -251,7 +253,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   // open tab was brought into view: a narrower strip brings it again, as a late face does
   useEffect(() => {
     const row = strip.current;
-    if (!row) return;
+    if (!row || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => { if (!scroll.current.moved) bringOpenTab(); });
     observer.observe(row);
     return () => observer.disconnect();
@@ -271,7 +273,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     if (renameRequest === null) return;
     const tab = tabs.find((candidate) => candidate.tab_id === selectedPane.tab_id);
     // a second press while the field is open keeps what was typed in it
-    if (tab && shown && !loneTabHidden(cramped, tabs.length) && editing?.tabId !== tab.tab_id) beginRename(tab);
+    if (tab && shown && !loneTabHidden(cramped, tabs.length) && editing?.tabId !== tab.tab_id && !appLayout) beginRename(tab);
     onRenameHandled?.();
   }, [renameRequest]);
 
@@ -365,6 +367,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       if (tab && !event.repeat) setPicker({ anchor, tab, previousFocus: anchor, touch: false });
       return;
     }
+    if (event.key === "F2" && appLayout) return;
     if (event.key === "F2" || event.key === "Delete") {
       // a held key is one press: the focus moves to the tab beside a closed one
       if (event.repeat) { event.preventDefault(); return; }
@@ -414,7 +417,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   };
   // herdr moves a tab to another workspace only as its one pane: a split tab is not offered it
   const otherWorkspaces = snapshot.workspaces.filter((entry) => entry.workspace_id !== workspace.workspace_id);
-  const canMoveOut = (tab: HerdrTab): boolean => onMoveToWorkspace !== undefined && otherWorkspaces.length > 0 && panesOf(tab).length === 1;
+  const canMoveOut = (tab: HerdrTab): boolean => onMoveToWorkspace !== undefined && !appLayout && otherWorkspaces.length > 0 && panesOf(tab).length === 1;
   const moveToWorkspace = (tab: HerdrTab, workspaceId: string): void => {
     setError(null);
     void onMoveToWorkspace?.(tab.tab_id, workspaceId).catch((reason: unknown) => setError(routeMissing(reason) ? t("This PC's bridge does not offer this yet") : t("Move failed: {reason}", { reason: said(reason) })));
@@ -425,15 +428,15 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   }));
   // the strip's + opens a shell tab; the menu keeps the dialog, where an agent is picked
   const tabActions = (tab: HerdrTab): RowMenuItem[] => [
-    ...(!reorder.moving && tabs.findIndex((entry) => entry.tab_id === tab.tab_id) > 0
+    ...(!appLayout && !reorder.moving && tabs.findIndex((entry) => entry.tab_id === tab.tab_id) > 0
       ? [{ id: "move-left", label: t("Move tab left"), icon: ArrowLeft, run: () => reorder.moveAdjacent(tab.tab_id, -1) }] : []),
-    ...(!reorder.moving && tabs.findIndex((entry) => entry.tab_id === tab.tab_id) < tabs.length - 1
+    ...(!appLayout && !reorder.moving && tabs.findIndex((entry) => entry.tab_id === tab.tab_id) < tabs.length - 1
       ? [{ id: "move-right", label: t("Move tab right"), icon: ArrowRight, run: () => reorder.moveAdjacent(tab.tab_id, 1) }] : []),
     ...(canMoveOut(tab) ? [{ id: "move-workspace", label: t("Move to workspace…"), icon: FolderInput,
       // RowMenu closes before it runs an item: the picker is set again, not updated
       run: () => { if (picker) setPicker({ ...picker, workspaces: true }); } }] : []),
     { id: "new-agent-tab", label: t("New tab with agent…"), icon: Bot, run: onNewTab },
-    { id: "rename-tab", label: t("Rename tab"), icon: Pencil, run: () => beginRename(tab) },
+    ...(appLayout ? [] : [{ id: "rename-tab", label: t("Rename tab"), icon: Pencil, run: () => beginRename(tab) }]),
     { id: "close-tab", label: t("Close tab"), icon: X, danger: true, run: () => requestClose(tab) },
   ];
 
@@ -482,7 +485,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
                   data-tab-id={tab.tab_id}
                   aria-selected={active}
                   aria-haspopup="menu"
-                  aria-keyshortcuts="Shift+F10 Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"
+                  aria-keyshortcuts={appLayout ? "Shift+F10" : "Shift+F10 Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"}
                   aria-controls={panePanel}
                   tabIndex={active ? 0 : -1}
                   title={own.length === 1 && own[0] ? displayPaneTitle(own[0]) : t("{n} panes", { n: own.length })}
@@ -499,7 +502,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
                     const pane = paneFor(tab);
                     if (pane && pane.pane_id !== selectedPane.pane_id) onSelectPane(pane.pane_id);
                   }}
-                  onDoubleClick={() => beginRename(tab)}
+                  onDoubleClick={appLayout ? undefined : () => beginRename(tab)}
                   onContextMenu={(event) => { event.preventDefault(); openPicker(event, tab); }}
                   // the middle button closes a tab, as it does a browser's
                   onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); requestClose(tab); } }}

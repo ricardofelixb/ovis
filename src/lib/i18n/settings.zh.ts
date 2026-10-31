@@ -1,6 +1,6 @@
 /**
  * Simplified Chinese for the keys only the settings files use:
- * components/SettingsDialog.tsx (with THEME_NAMES), components/KeyBarSettings.tsx,
+ * components/SettingsDialog.tsx (with THEME_NAMES), components/SignOutRow.tsx, components/KeyBarSettings.tsx,
  * components/SettingsControls.tsx, components/TelemetryControls.tsx, lib/paletteSettings.ts.
  * Register and fixed terms follow ../i18n.zh.ts; a key another feature also uses goes there.
  */
@@ -73,6 +73,10 @@ export const SETTINGS_ZH: Record<string, string> = {
   "Open work while the agent runs": "代理运行时展开工作",
   "Off, a running turn shows only its Working… row until tapped": "关闭后，运行中的轮次在点按前只显示“工作中…”一行",
   "Include the agent's reasoning blocks": "一并显示 Agent 的推理块",
+  "Expand thinking": "展开思考过程",
+  "Reasoning starts open instead of folded. One you open or fold stays that way for its message": "推理默认展开，而不是折叠。你手动展开或折叠的推理在该条消息中保持不变",
+  "Collapse work": "折叠工作过程",
+  "A turn's work starts folded to one line, also while the agent works, unless it needs you. One you open or fold stays that way for its message": "每轮的工作过程默认折叠为一行，Agent 工作时也是如此，需要你回应时除外。你手动展开或折叠的工作过程在该条消息中保持不变",
   "Chat width": "聊天宽度",
   "How wide the conversation and the message box run on a large screen": "大屏幕上对话和输入框的宽度",
   "Narrow": "窄",
@@ -111,6 +115,9 @@ export const SETTINGS_ZH: Record<string, string> = {
   "Sign out of this browser?": "要从此浏览器退出登录吗？",
   "Getting back in takes the access token, or a pairing code from the PC: Settings → Phone & devices there, or the pair command in its terminal.": "再次进入需要访问令牌，或 PC 上的配对码：在 PC 的设置 → Phone & devices 中，或在其终端运行 pair 命令获取。",
   "Forget this browser's sign-in. Getting back in takes the access token or a pairing code.": "清除此浏览器的登录。再次进入需要访问令牌或配对码。",
+  "Forget this browser's sign-in. Getting back in means signing in through Portal again.": "清除此浏览器的登录。再次进入需要重新通过 Portal 登录。",
+  "Getting back in means signing in through Portal again.": "再次进入需要重新通过 Portal 登录。",
+  "Getting back in means signing in through Portal again. While this browser is still signed in to Google or your company's login, that sign-in lets it straight back in: sign out there too.": "再次进入需要重新通过 Portal 登录。如果此浏览器仍登录着 Google 或公司的登录账号，就会凭该登录直接再次进入：请在那里也退出登录。",
   "Sidebar rows": "侧边栏行",
   "One line": "单行",
   "Two lines": "双行",
@@ -140,6 +147,7 @@ export const SETTINGS_ZH: Record<string, string> = {
   "Keys, order and custom combinations for the terminal.": "设置终端按键、顺序和自定义组合。",
   "Choose the keys and their order under the terminal. The keyboard mode button stays first.": "选择终端下方显示的按键及其顺序。键盘模式按钮固定在最前面。",
   "Key bar keys": "按键栏中的按键",
+  "Drag to reorder": "拖动以调整顺序",
   "Held modifier": "保持按下的修饰键",
   "Saved combination": "已保存的组合键",
   "Remove {name}": "移除 {name}",
@@ -230,6 +238,7 @@ export const SETTINGS_ZH: Record<string, string> = {
   "In a popup": "以弹窗",
   "Web links": "网页链接",
   "Only a page this PC serves, such as a dev server on localhost, opens beside the pane. Shift-click opens it the other way.": "只有这台 PC 提供的页面（例如 localhost 上的开发服务器）会在窗格旁打开。按住 Shift 点击则以另一种方式打开。",
+  "Pages this PC serves, such as Tailscale reports, can open in the app. Shift-click opens the other way.": "这台 PC 提供的页面（例如 Tailscale 报告）可以在应用内打开。按住 Shift 点击则以另一种方式打开。",
   "Beside the pane": "在窗格旁",
   "In a new tab": "在新标签页中",
   "A phone shows one column either way.": "手机上无论如何都显示为单栏。",

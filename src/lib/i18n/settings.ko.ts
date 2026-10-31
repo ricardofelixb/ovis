@@ -1,6 +1,6 @@
 /**
  * Korean for the keys only the settings files use:
- * components/SettingsDialog.tsx (with THEME_NAMES), components/KeyBarSettings.tsx,
+ * components/SettingsDialog.tsx (with THEME_NAMES), components/SignOutRow.tsx, components/KeyBarSettings.tsx,
  * components/SettingsControls.tsx, components/TelemetryControls.tsx, lib/paletteSettings.ts.
  * Register and fixed terms follow ../i18n.ko.ts; a key another feature also uses goes there.
  */
@@ -73,6 +73,10 @@ export const SETTINGS_KO: Record<string, string> = {
   "Open work while the agent runs": "에이전트 작업 중 작업 펼치기",
   "Off, a running turn shows only its Working… row until tapped": "끄면 실행 중인 턴은 탭할 때까지 \"작업 중…\" 줄만 표시합니다",
   "Include the agent's reasoning blocks": "에이전트의 추론 블록을 함께 보여줍니다",
+  "Expand thinking": "생각 펼치기",
+  "Reasoning starts open instead of folded. One you open or fold stays that way for its message": "추론을 접지 않고 펼친 채로 보여줍니다. 직접 펼치거나 접은 추론은 그 메시지에서 그대로 유지됩니다",
+  "Collapse work": "작업 접기",
+  "A turn's work starts folded to one line, also while the agent works, unless it needs you. One you open or fold stays that way for its message": "턴의 작업을 한 줄로 접은 채 보여줍니다. 에이전트가 작업 중일 때도 접고, 내 응답이 필요할 때만 펼칩니다. 직접 펼치거나 접은 작업은 그 메시지에서 그대로 유지됩니다",
   "Chat width": "채팅 너비",
   "How wide the conversation and the message box run on a large screen": "큰 화면에서 대화와 입력창이 차지하는 너비",
   "Narrow": "좁게",
@@ -111,6 +115,9 @@ export const SETTINGS_KO: Record<string, string> = {
   "Sign out of this browser?": "이 브라우저에서 로그아웃할까요?",
   "Getting back in takes the access token, or a pairing code from the PC: Settings → Phone & devices there, or the pair command in its terminal.": "다시 들어오려면 액세스 토큰이나 PC의 페어링 코드가 필요합니다. 코드는 PC의 설정 → Phone & devices나 PC 터미널의 pair 명령에서 받습니다.",
   "Forget this browser's sign-in. Getting back in takes the access token or a pairing code.": "이 브라우저의 로그인을 지웁니다. 다시 들어오려면 액세스 토큰이나 페어링 코드가 필요합니다.",
+  "Forget this browser's sign-in. Getting back in means signing in through Portal again.": "이 브라우저의 로그인을 지웁니다. 다시 들어오려면 Portal로 다시 로그인해야 합니다.",
+  "Getting back in means signing in through Portal again.": "다시 들어오려면 Portal로 다시 로그인해야 합니다.",
+  "Getting back in means signing in through Portal again. While this browser is still signed in to Google or your company's login, that sign-in lets it straight back in: sign out there too.": "다시 들어오려면 Portal로 다시 로그인해야 합니다. 이 브라우저가 아직 Google이나 회사 로그인에 로그인되어 있으면 그 로그인으로 바로 다시 들어옵니다. 그쪽에서도 로그아웃하세요.",
   "Sidebar rows": "사이드바 행",
   "One line": "한 줄",
   "Two lines": "두 줄",
@@ -140,6 +147,7 @@ export const SETTINGS_KO: Record<string, string> = {
   "Keys, order and custom combinations for the terminal.": "터미널 키와 순서, 사용자 조합을 설정합니다.",
   "Choose the keys and their order under the terminal. The keyboard mode button stays first.": "터미널 아래에 표시할 키와 순서를 고릅니다. 키보드 모드 버튼은 맨 앞에 유지됩니다.",
   "Key bar keys": "키 바의 키",
+  "Drag to reorder": "드래그하여 순서 변경",
   "Held modifier": "고정 보조 키",
   "Saved combination": "저장된 조합",
   "Remove {name}": "{name} 제거",
@@ -230,6 +238,7 @@ export const SETTINGS_KO: Record<string, string> = {
   "In a popup": "팝업으로",
   "Web links": "웹 링크",
   "Only a page this PC serves, such as a dev server on localhost, opens beside the pane. Shift-click opens it the other way.": "localhost 개발 서버처럼 이 PC가 여는 페이지만 창 옆에 열립니다. Shift-클릭하면 반대쪽으로 엽니다.",
+  "Pages this PC serves, such as Tailscale reports, can open in the app. Shift-click opens the other way.": "Tailscale 보고서처럼 이 PC가 제공하는 페이지는 앱 안에서 열 수 있습니다. Shift-클릭하면 반대쪽으로 엽니다.",
   "Beside the pane": "창 옆에",
   "In a new tab": "새 탭에서",
   "A phone shows one column either way.": "휴대전화에서는 어느 쪽이든 한 열로 표시됩니다.",

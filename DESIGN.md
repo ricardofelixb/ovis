@@ -24,10 +24,9 @@ mark, else the place's own glyph), a title, and a trailing cell that says how it
 and Agents are independent lists, as in herdr's Spaces and Agents panels; tab and pane navigation
 stays over the terminal and in the palette. Sections are parted by space and a dim head, never by
 a rule; the Agents list's workspace cards are an edge around rows, not a line between sections.
-Hover and selection are one neutral fill at two strengths; a selected row adds a neutral leading
-stroke, since no such fill reaches 3:1 on the panel. Brand marks are the only color
-there that is not a state, and a ready row draws no state at all. Amber connects focus, the chosen
-lens glyph and the terminal cursor.
+Hover and selection are one neutral fill at two strengths, with no stroke around a selected row.
+Brand marks are the only color there that is not a state, and a ready row draws no state at all.
+Amber connects focus, the chosen lens glyph and the terminal cursor.
 
 Messages say only what the person needs now, not everything the app knows:
 - Something to do: one sentence and the control that does it ("Couldn't attach [Try again]").
@@ -606,7 +605,18 @@ The values are the ones in `src/styles.css`. Every token but `--fs-input` is `ca
   meta keep their sizes. The chat scales all of them by `--chat-scale` (`--chat-fs-body` is the scaled
   `--fs-chat`), so the Chat font size setting names the body size and the prose is one step above it.
   `--chat-scale` is the chat's size over the interface's: unchosen, the chat follows the interface size;
-  chosen, it is drawn as itself whatever the interface size.
+  chosen, it is drawn as itself whatever the interface size. The space between and inside the
+  transcript's blocks scales with it (`--chat-space-*`, `--chat-chip-h` and `--chat-control-h` stand
+  for the spacing tokens, `--chip-h` and `--control-h` in the transcript and in a file preview's
+  blocks): at the page's spacing a small chat text sat loose between wide gaps and a large one
+  cramped. It follows Zed's Markdown preview, whose rem is its font size, so its spacing grows with
+  its text, and iOS Dynamic Type, which scales a layout's metrics with the text (`UIFontMetrics`).
+  Unlike Zed's preview, the view's edges keep the page's spacing (`--chat-edge`, which the virtual
+  list's inset takes, and a file preview's margin), so the transcript stays on the composer's
+  column, and `--touch-target` keeps its size: a meta row shrinks under its copy target's overhang,
+  while work block heads (folded or open), stacked work rows and code block headers keep a
+  `--touch-target` minimum row height on touch screens. A folded head keeps its full 44 px row,
+  without a transparent reach or negative margin, so the default chat size matches the page's spacing.
 
 ### Line breaking
 - The UI language is `<html lang>` (`lib/settings.ts`), and `src/styles.css` keys the breaking
@@ -938,7 +948,9 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   action is **Revoke all**; a refused write stays in it as a sentence that says nothing was revoked
   and to try again, naming the server's log reference (never a file name). A device that only
   watches reads a sentence that says who can do it, with no button (a disabled one would only be a
-  fainter dead control); an empty list has no row. After a yes the
+  fainter dead control); an empty list has no row. A browser Portal's own sign-in let in reads the
+  list under a dim line, **Signed in as {name} with {method}.**, and a hint that pairing and
+  revoking are for the token or a paired device; it has no Pair, Rename, Revoke or Revoke all. After a yes the
   list and the row are gone and one `role="status"` line says every device went and what still
   gets in. No keep-this-device choice: the one action the owner needs when a credential is lost
   is the one that ends them all. The design follows this app's own paired-device model (the
@@ -1028,6 +1040,15 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   navigation bar (and the Claude iOS app) keeps one overflow button in the bar and the content's
   controls below it. Wherever that ellipsis shows to a finger, the pane's banners (View only and the
   rest) start below it, so none covers it.
+- On a PC whose terminals are the Herdr app's (`HerdrIdentity.runtime` `herdr-core`), the app's
+  window owns the workspaces, tabs and splits, and herdr-core refuses to rename, reorder or move
+  them, to split, swap, zoom or resize a pane, and the worktree actions. The browser then leaves
+  those out wherever they are offered (the row, tab and pane menus, the touch tab menu, the
+  palette, Rename tab's field, the split shortcuts, F2, double-click, Alt+arrows, drags and the
+  dividers) rather than showing them disabled. It follows Zed, whose remote projects leave out
+  what the remote host cannot do (VS Code's `when` clauses work the same way); New workspace, New tab, New terminal, Close, Pin and Earlier
+  sessions stay. `AppLayoutContext` (lib/machineContext.tsx) carries it per PC: the selected PC,
+  each half of the split view and each PC's sidebar roster.
 
 ### Badge (`.badge`)
 - Agent states read **READY**, **RUN**, **INPUT**, **DONE**; unknown reads **—**. **BG** is a pane
@@ -1120,17 +1141,16 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   columns as the header zone's buttons above the list. One-line rows and section heads are
   `--control-h` tall, two-line agent rows `--control-h` + `--space-3`; fills use `--radius-md`.
   Hover is `color-mix(in srgb, var(--bg-hover) 50%, var(--bg-panel))`, only where a pointer hovers;
-  selection is `--bg-hover` with an inset `calc(2 * var(--hairline))` leading stroke in
-  `--text-dim`, at least 3:1 on that fill, the hover fill and the panel in every theme entry, where
-  the fill alone is 1.09-1.56:1 (#1618; `scripts/sidebar-selection-contrast-demo-regression.ts`).
-  It follows VS Code's leading bar on the active activity-bar item, kept neutral, not amber.
-  Keyboard focus draws the ring inside the row and no fill; on a selected row the stroke widens by
-  `--ring-offset` so it still shows inside the ring. The 3:1 holds for rows of a connected PC; an
-  offline PC's agent rows are disabled and dimmed to 0.5 on purpose, an inactive control the
-  contrast rule exempts, so the check skips them. In forced colors (Windows high contrast) the
-  shadow is dropped, so the selected row keeps a `Highlight` leading bar instead: a workspace row's
-  is a border pulled into the gutter so its content does not move; an agent row's is drawn inside
-  the row, since the Agents list scrolls and would clip it. No rule
+  selection is the `--bg-hover` fill alone, as the Codex and Claude apps mark the open
+  conversation in their sidebars. A leading stroke in `--text-dim` (#1618) was dropped: on a
+  `--radius-md` row it curved around the corners and read as a bracket. The fill is 1.04-1.56:1 on
+  the panel, under the 3:1 #1618 asked for, a trade-off the owner chose; `scripts/sidebar-selection-contrast-demo-regression.ts` records it per theme entry,
+  holds every text in the row at 4.5:1 and fails if a stroke comes back. Keyboard focus draws the
+  ring inside the row and no fill. In forced colors (Windows high contrast) the fill is repainted
+  as Canvas and would erase the selection, so there the selected row keeps a `Highlight` leading
+  bar of at least 3:1: a workspace row's is a border pulled into the gutter so its content does
+  not move; an agent row's is drawn inside the row, since the Agents list scrolls and would clip
+  it. No rule
   separates sections: `--space-4` and a dim `--fs-sm` head do.
 - The PC/workspace list and the lower Agents list scroll independently above the fixed footer.
   Agents takes the height of its rows, at most half the sidebar, docked above the footer; the
@@ -1353,7 +1373,7 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   included. As herdr draws its tree, each indented worktree hangs from its repository's folder on
   a `--hairline` `--border-strong` branch in the indent: a tee for each but the last, an elbow for
   the last.
-  Selection uses a neutral rounded fill and a neutral leading stroke; workspace rows have no amber
+  Selection uses a neutral rounded fill and no stroke; workspace rows have no amber
   rail or separate reorder gutter. Drag the row itself, or press `Alt+↑/↓` while its selector is
   focused, to reorder it.
   On a touch screen (`pointer: coarse`) the browser's drag is off: a long press (400ms, still
@@ -1661,6 +1681,18 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   release flushes the final ratio. A tab/topology change cancels the drag.
 - Every pane keeps its own xterm, attachment, input ownership, lens, chat state and file-path
   context. Only the active pane may take keyboard focus after an asynchronous operation.
+- The four most recently visited tabs keep their mounted terminal screens, as before. A hidden tab
+  lets go of its attach as before, and with it the pane's input and size; while the browser is in use
+  the most recent ones also watch their pane through herdr's read-only view (`watch`), drawn for the
+  tab's own grid, so a return shows the pane as it is now while the new attach is made. A desktop
+  watches the three hidden ones; a phone (a coarse pointer or a viewport up to 768px) only the tab
+  before the current one, to save its battery, and its older tabs show their last screen until the
+  attach, as before. It cannot take input, focus or the clipboard (OSC 52).
+  Leaving the window or eviction stops the view, and coming back to the window starts it again;
+  **Use alongside herdr's own window** stops it at the next of those. A reconnect resumes the views
+  the connection had, never a hidden attach. This follows Zed's multiple
+  terminal tabs (https://zed.dev/docs/terminal), with a bounded browser cache rather than
+  retaining every terminal indefinitely. No attached screen is rebuilt from `pane.read`.
 - Switching tabs retains an outgoing terminal while its explicit submit awaits a receipt;
   its chat/input UI is unmounted and its grid is not resized. The receipt settles the original
   draft before the pane attachment is released. No input is replayed. A canvas that already released
@@ -2095,7 +2127,10 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   A table fills the reply's width; its cells, file paths included, break between words only, so a
   column is never narrower than its longest word, and a table without room scrolls sideways in
   its own box.
-  Thinking renders as a folded block only when **Show thinking** is enabled.
+  Thinking renders as a folded block only when **Show thinking** is enabled. With **Expand
+  thinking** on as well (Settings → Chat, this device's, offered while Show thinking is on;
+  `expandThinking`) the block starts open (#2346); one the reader opens or folds stays so for its
+  message.
 - Auto-follow stops when the reader scrolls up, or opens a tool, a folded block or a whole output:
   they read there, and the opened row stays put while the turn streams below it (#1388). T3 Code
   keeps a reader at the very bottom pinned when they toggle a tool; Ovis already reads scrolling
@@ -2186,6 +2221,14 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   words are never behind the fold. A block the reader opened or folded stays as they left it, and
   so does one they focused or clicked inside: the fold at the end of a turn never takes the rows
   from under them.
+- **Collapse work** (Settings → Chat, this device's, off by default; `foldWork`,
+  `workBlockStartsOpen`) starts every block folded to its header, the running head included, so
+  a long turn is one line that still says its state, counts and failures (#2228). The head of a
+  blocked agent ("Needs you") still opens: it may hold what the reader answers. A block the
+  reader opens or folds keeps that for its message whatever the setting says, and the next
+  message starts folded again. Follows Zed's agent panel, whose `expand_terminal_card: false`
+  folds a terminal card even while its command runs, and the one working line of the Codex and
+  Claude apps; Ovis keeps its open default and makes the fold the opt-in.
 - The header is one line: the counts (`.work-block-summary`) take the width the title and the
   failure count leave and end in an ellipsis. `· 1 failed` (`.work-block-failed`) is its own item
   and is never cut, because the fold hides the failed row; at the largest chat type on the
@@ -2581,6 +2624,11 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   the message until the transcript proves it. Next-turn delivery and an explicit Send
   now action claim the same server ID. Connection loss never resumes automatic input. Previously
   held browser messages retain their explicit Send now/Discard recovery.
+  Any other follow-up's exact `sent` or `discarded` receipt is kept the same way (ten minutes, 1024,
+  same browser resume ID and device, local machine only) and replayed with `resumed: true` on its
+  browser's reattach, or to that browser's already attached successor when the Enter's reply comes
+  after the reload. It settles only that exact ID's saved copy: an uncertain copy, which ages out as
+  `dismissed`, stays unconfirmed, and nothing is typed again (#2421).
 - Not connected, the one word `Reconnecting…` (`Connecting…` before this page's first connection to
   the PC's socket) is the placeholder while the box is empty and moves into the status content once
   there is a draft (`composerStatusHint`), on a phone too; it says no more (nothing is queued, and
@@ -2978,6 +3026,15 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   closing the dialog resets it for the next open. The detail lists the terminal keys
   in their display order. Every key can be
   removed or moved with up/down buttons; those controls keep `--touch-target` hit areas on phones.
+  A leading Lucide grip gives pointer and touch users a shorter path: press to drag, with an
+  insertion line before or after the target row and a raised fill on the source. Only the grip
+  owns the gesture; swiping the row still scrolls. Holding it at the detail body's edge scrolls
+  that body. Release saves once; Escape or pointer cancellation leaves the order untouched.
+  Like [T3 Code's Arrange threads](https://github.com/pingdotgg/t3code/blob/main/docs/user/thread-sidebar.md#pin-and-reorder-threads),
+  the handle supplements Move up/down rather than replacing the no-drag path. This uses the
+  sidebar's existing hit-testing and edge scrolling, with an insertion line instead of animated
+  gaps. The up/down controls remain the keyboard and screen-reader path; the grip is decorative
+  to assistive technology. No transition is added.
   Add key offers the supported key catalog, and Ctrl/Alt/Shift toggles add or remove held-modifier
   buttons. Custom combination chooses one key or printable character plus modifiers, with its cap
   previewed before Add. Saved combinations send exactly those modifiers; ordinary keys inherit the
@@ -2995,6 +3052,26 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   or a wide Relay row whose text field and Start stack on a phone. Starting and stopping are one
   dim status line, at body size (`--fs-md`, `--fs-lg` under a finger) since it is what Portal is
   doing now; a failure is the server's sentence over Portal's own lines, folded.
+- Who may open the address is the first row of the stopped Portal group: four radios, each a
+  label with one dim sentence (token or paired device only, chosen at first; private link;
+  Ethereum wallet; Google or company login). A choice the `portal` on this PC does not list is
+  disabled, dim, and says why in `.settings-condition`. Under the chosen one: its allow-list as
+  chips (`--bg-input`, `--radius-pill`, mono) with a text field and Add that check each entry as
+  Portal does and say what is wrong in `.portal-warning` (`--status-blocked` border,
+  `--danger-tint`); a chip's remove button keeps its `--chip-h` look and reaches 24px under a
+  mouse through an invisible expander, and under a finger the chip itself is `--touch-target`
+  tall (chips one line apart would overlap their expanders). For Google or company login also a
+  Google/Other choice, the client ID and where the secret is read from, with a warning while it is
+  not set, and a line saying the redirect address shows once Portal has started. While Portal
+  runs the same choice is a read-only summary, since changing it means stopping Portal; for Google
+  or company login it carries the redirect address to register with the provider (copyable, in
+  `.phone-command`), which only exists once Portal is up. A private-link Portal adds **Invite
+  someone** (name or a `SettingsSelect` of the listed names, 1, 7, 30 or 90 days, Create link),
+  which shows the link once in a bearer-secret warning with Copy and Done; its selectable link
+  keeps the global focus ring and `.input`'s size on a phone. A browser Portal let in has no
+  Start, Stop or Invite (the server refuses them), as a watching device has none. No coding-agent app offers a public address with a sign-in, so the
+  design follows an operational one: Cloudflare Access's allow rules (emails and email domains)
+  and login methods. It differs on purpose: one method at a time, chosen where Portal starts.
 - A Portal that was serving and ends on its own is started again once by the server, on the same
   relay, port and identity: the address goes, the same dim status line says **Recovering…**
   with Stop still offered (disabled on a watch-only device), and a second exit or a restart
@@ -3081,7 +3158,11 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   upstream usage, warns about an existing account and requires Continue; the POST independently
   refuses an unconfirmed replacement. Antigravity offers app sign-in guidance
   instead of an unverified standalone login command. OpenCode explains which subscriptions
-  supply plan limits. Local sign-in uses a new native terminal tab on the connection server's local PC
+  supply plan limits. Claude Code and Codex use a private PTY host on the server PC, with a dialog
+  following the CLI's own device-code or paste-code step (the Codex and Claude Code CLI flows,
+  adapted without copied code). Only the initiating device can read, answer or cancel it.
+  **Open terminal** waits for cancellation before starting a visible terminal tab; it never points
+  to a hidden tab. Closing the dialog stops the private login. Other providers' local sign-in uses a new native terminal tab on the connection server's local PC
   without moving native focus. It uses in-app pane selection and the existing canonical link writer,
   not a page reload, even when another PC was selected. Hub OAuth
   keeps the synchronous popup, bounded waiting, Cancel and redirect-paste form. Closing account setup
@@ -3601,3 +3682,40 @@ headless choice; sign-in waits continue reconnecting automatically.
 | Terminal content accessibility relies on xterm defaults | `PaneTerminal.tsx` | Screen-reader mode changes terminal DOM and input behavior | Decide with herdr TUI owners |
 | Drawer has no focus trap | `.sidebar.is-open` | Closed state leaves the tab order, but open-state trapping is not implemented | Add a shared focus utility |
 | Modal focus is initialized, not fully trapped | Dialog components | Escape/scrim/close work; tab containment is not shared | Add the same focus utility |
+
+## Local Markdown images in Chat
+
+Chat follows the Codex app's inline image presentation reported by the user: a local
+`![alt](path)` in an answer displays the image in place. It reuses the file viewer's Markdown
+image component and machine-scoped stat/file endpoints, with the pane ID retained. Absolute
+Unix paths and local file URIs resolve without cwd. Relative paths stay relative for the pane file
+API, which prefers foreground_cwd over pane.cwd; bytes use the canonical path its stat returns.
+External URLs stay links. Failed local lookups (network, missing file, timeout, busy server) keep
+their link and offer Try again without a reconnect. The retry is disabled while in flight. Unsupported
+references, ambiguous paths, non-image files and access denials retain their plain fallback;
+images above 20 MiB offer a download. Images use the existing reserved layout while loading and
+unavailable-image state if decoding fails. Windows-drive paths retain the resolver's existing
+link fallback. Encoded filename characters decode once, including literal `#`, `?` and `%`.
+Only local file references are stat'ed; other URI schemes and control characters stay fallback.
+A standalone or inline image opens ChatView's existing image viewer on click or keyboard activation,
+with its alt text as caption and its actual filename for download. The opener regains focus on close.
+An image inside an authored link or a read-only label keeps that container's action, with no nested
+button. File previews do not get Chat's opener. A reconnect retries image stat resolutions that
+may have failed while offline; losing the socket alone keeps already decoded images in place. A byte
+load that failed retries after the new stat passes the size/type checks, without remounting decoded
+neighbors. No new setting, endpoint or permission grant is
+introduced.
+
+## Same-host web links
+
+The device's **Web links** setting stays on **In a new tab** by default. Choosing **In the app**
+opens only pages this PC serves, on the app's hostname, in the existing web panel. A wide window
+keeps the panel beside the pane; a narrow window uses the file viewer's modal surface, with a
+named close button, focus return and browser Back. Shift-click still chooses the other destination.
+The page and a docked file share one place and one history entry: either one replacing the other
+takes over that entry in place, so one Back closes the panel shown and the next leaves the conversation.
+A popup file moved beside the pane while the page is shown steps back past the page's entry and pushes the docked file from their opener, so Forward cannot bring the popup back; resizing under such a popup file adds no entry of its own.
+Other hosts keep opening in a new tab, and unsafe schemes stay blocked; the app's `frame-src` stays
+limited to its own host. This follows T3 Code's in-thread visual replies and full-screen page view,
+while keeping external page links in the browser as its [HTML renders guide](https://github.com/pingdotgg/t3code/blob/main/docs/user/html-renders.md)
+does. No code or visual assets are copied.

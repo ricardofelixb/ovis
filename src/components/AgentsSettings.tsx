@@ -10,6 +10,10 @@ import { Check, ChevronDown, ChevronRight, ChevronUp, Eye, EyeOff, KeyRound, Net
 
 import type { AgentCatalogRow } from "../../shared/agent-catalog.ts";
 import type { AgentIntegration, CLIProxyStatus, ProviderUsage, UsageProviderId } from "../../shared/protocol.ts";
+import type { UsageLoginRequest } from "../../shared/usage-login.ts";
+
+/** A sign-in the page follows in its own dialog, hosted at the page's root so no row or list it came from can take it away. */
+type FollowedSignIn = Extract<UsageLoginRequest, { provider: "claude" | "codex" }>;
 import { agentsPage, signInState, type AgentsPageRow } from "../lib/agentsPage.ts";
 import { CLAUDE_LAUNCH_MODES, CODEX_LAUNCH_MODES, type ClaudeLaunchMode, type CodexLaunchMode } from "../lib/agentLaunchMode.ts";
 import { ApiError, cliProxyRequest, fetchAgentCatalog } from "../lib/api.ts";
@@ -27,6 +31,7 @@ import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Segmented, SettingsGroup, SettingsRow, SettingsSelect, Toggle } from "./SettingsControls.tsx";
 import { UsageAccountDialog } from "./UsageAccountDialog.tsx";
 import { UsageSignInAgain } from "./UsageLocalLogin.tsx";
+import { UsageSignInDialog } from "./UsageSignInDialog.tsx";
 import "./UsageSettings.css";
 import "./AgentsSettings.css";
 
@@ -110,7 +115,7 @@ function IntegrationRow({ integration, label }: { integration: AgentIntegration;
 }
 
 /** One provider's accounts: whose, where from, its plan limit, its state; moved, hidden, or signed in again. */
-function ProviderAccounts({ id, providers, onLocalLogin }: { readonly id: UsageProviderId; readonly providers: readonly ProviderUsage[]; readonly onLocalLogin: ((paneId: string) => void) | undefined }) {
+function ProviderAccounts({ id, providers, onLocalLogin, onFollow }: { readonly id: UsageProviderId; readonly providers: readonly ProviderUsage[]; readonly onLocalLogin: ((paneId: string) => void) | undefined; readonly onFollow: (request: FollowedSignIn) => void }) {
   const { settings, update } = useSettings();
   const t = useT();
   const all = orderProviders(providers, settings.usageOrder);
@@ -136,7 +141,7 @@ function ProviderAccounts({ id, providers, onLocalLogin }: { readonly id: UsageP
             <span>{isHubAccount(usage) ? t("Hub") : t("This PC")}{usage.plan ? ` · ${usage.plan}` : ""}{limit ? ` · ${windowLabel(limit)} ${meterText(limit, settings.usageCount)}` : ""}</span>
             <span className={`usage-account-status${usage.problem ? " has-problem" : ""}`}>{status}</span>
           </span>
-          {onLocalLogin && canSignInAgain(usage) && <UsageSignInAgain usage={usage} onStarted={onLocalLogin} />}
+          {onLocalLogin && canSignInAgain(usage) && <UsageSignInAgain usage={usage} onStarted={onLocalLogin} onFollow={onFollow} />}
         </div>
         <span className="usage-accounts-actions">
           <button type="button" className="icon-button" aria-label={t("Move {name} up", { name })} disabled={index === 0} onClick={() => move(usage.key, -1)}><ChevronUp aria-hidden="true" /></button>
@@ -153,17 +158,18 @@ function ProviderAccounts({ id, providers, onLocalLogin }: { readonly id: UsageP
 
 /** The line under an agent's name: its sign-in as the accounts show it, or only that it is there. */
 function stateLine(entry: AgentsPageRow, read: boolean, t: Translate): { text: string; tone: "ok" | "warn" | "none" | "dim" } {
-  const state = signInState(entry.provider, entry.accounts, read);
+  const state = signInState(entry.provider, entry.accounts, read, entry.missing);
   switch (state.kind) {
     case "unknown": return { text: t("Installed"), tone: "dim" };
     case "none": return { text: t("Not signed in"), tone: "none" };
+    case "unreadable": return { text: t("Sign-in unreadable: {command} is not installed", { command: state.command }), tone: "warn" };
     case "signed-in": return { text: state.count > 1 ? t("Signed in · {count} accounts", { count: state.count }) : state.account ? t("Signed in · {account}", { account: state.account }) : t("Signed in"), tone: "ok" };
     case "problem": return { text: state.count === 1 ? t("Its account needs attention") : t("{count} accounts · {problems} need attention", { count: state.count, problems: state.problems }), tone: "warn" };
     default: { const unexpected: never = state; throw new Error(String(unexpected)); }
   }
 }
 
-function AgentItem({ entry, open, onToggle, allProviders, read, limitsOn, local, watching, integrationsRead, onLocalLogin, onAddAccount }: {
+function AgentItem({ entry, open, onToggle, allProviders, read, limitsOn, local, watching, integrationsRead, onLocalLogin, onAddAccount, onFollow }: {
   entry: AgentsPageRow;
   open: boolean;
   onToggle: () => void;
@@ -180,6 +186,8 @@ function AgentItem({ entry, open, onToggle, allProviders, read, limitsOn, local,
   integrationsRead: boolean;
   onLocalLogin: (paneId: string) => void;
   onAddAccount: (provider: UsageProviderId) => void;
+  /** a sign-in followed in the browser: Claude Code's or Codex's first one, or signing an account in again */
+  onFollow: (request: FollowedSignIn) => void;
 }) {
   const t = useT();
   const { agent, provider, accounts } = entry;
@@ -187,9 +195,10 @@ function AgentItem({ entry, open, onToggle, allProviders, read, limitsOn, local,
   const again = read && !watching ? accounts.filter(canSignInAgain) : [];
   const detailsId = `agents-details-${agent.id}`;
   // the one sign-in it lacks is a tap away while the row is shut; open, the list below has its own
-  const action = open || watching || !read || provider === null ? null
-    : again.length === 1 ? <UsageSignInAgain usage={again[0]!} onStarted={onLocalLogin} />
-      : accounts.length === 0 ? <button type="button" className="btn agents-row-action" aria-label={t("Sign in to {agent}", { agent: agent.name })} onClick={() => onAddAccount(provider)}><KeyRound aria-hidden="true" /><span className="agents-row-action-label">{t("Sign in")}</span></button>
+  // without the command it is read with, a sign-in would not show here either: the note says what to install instead
+  const action = open || watching || !read || provider === null || (entry.missing !== null && accounts.length === 0) ? null
+    : again.length === 1 ? <UsageSignInAgain usage={again[0]!} onStarted={onLocalLogin} onFollow={onFollow} />
+      : accounts.length === 0 ? <button type="button" className="btn agents-row-action" aria-label={t("Sign in to {agent}", { agent: agent.name })} onClick={() => provider === "claude" || provider === "codex" ? onFollow({ provider, default: true }) : onAddAccount(provider)}><KeyRound aria-hidden="true" /><span className="agents-row-action-label">{t("Sign in")}</span></button>
         : null;
   const signIn = agent.sign_in;
   return (
@@ -208,11 +217,13 @@ function AgentItem({ entry, open, onToggle, allProviders, read, limitsOn, local,
       {open && <div className="agents-details" id={detailsId}>
         {agent.state.meets_min_version === false && agent.min_version !== null && <p className="agents-detail-note settings-condition">{t("Ovis needs {version} or later.", { version: agent.min_version.version })}</p>}
         {provider !== null && (read ? <>
+          {entry.missing !== null && <p className="agents-detail-note settings-condition" role="status">{t("Ovis reads {agent}'s sign-in from the desktop keyring with {command}, which this PC does not have. Install it (the libsecret-tools package on Debian and Ubuntu, libsecret on Fedora and Arch), then open this page again.", { agent: agent.name, command: entry.missing })}</p>}
           <div className="agents-detail-head">
             <span>{t("Accounts")} <span className="usage-account-count">{accounts.length}</span></span>
             {!watching && <button type="button" className="btn btn-ghost" onClick={() => onAddAccount(provider)}><Plus aria-hidden="true" />{t("Add account")}</button>}
           </div>
-          <ProviderAccounts id={provider} providers={allProviders} onLocalLogin={watching ? undefined : onLocalLogin} />
+          {/* with the sign-in unreadable, "No accounts signed in" would be the guess the note replaces */}
+          {(entry.missing === null || accounts.length > 0) && <ProviderAccounts id={provider} providers={allProviders} onLocalLogin={watching ? undefined : onLocalLogin} onFollow={onFollow} />}
         </> : <p className="agents-detail-note" role="status">{limitsOn ? t("Loading…") : t("Turn on plan limits to see accounts.")}</p>)}
         {provider === null && signIn !== null && (local && signIn.provider === null
           ? <p className="agents-detail-note">{signIn.in_agent !== null ? t("{agent} signs in inside the agent ({how}). Ovis cannot read that sign-in, so it shows none here.", { agent: agent.name, how: signIn.in_agent }) : t("Ovis cannot read {agent}'s sign-in, so it shows none here.", { agent: agent.name })}</p>
@@ -307,6 +318,7 @@ export function AgentsSettings({ watching, onLocalLogin, onOpenPane, onOpenGuide
   const [hubError, setHubError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ kind: "add"; provider: UsageProviderId | null } | { kind: "hub" } | null>(null);
   const [confirmRemoval, setConfirmRemoval] = useState(false);
+  const [signingIn, setSigningIn] = useState<FollowedSignIn | null>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -323,7 +335,7 @@ export function AgentsSettings({ watching, onLocalLogin, onOpenPane, onOpenGuide
 
   const agents = catalog !== null && catalog.machineId === machineId ? catalog.agents : null;
   const providers = settings.showUsage ? usage.report?.providers ?? [] : [];
-  const page = agents === null && catalogError === null ? null : agentsPage({ agents: agents ?? [], providers, integrations: integrationOutcome?.kind === "list" ? integrationOutcome.integrations : [], accountsHere: local });
+  const page = agents === null && catalogError === null ? null : agentsPage({ agents: agents ?? [], providers, missing: settings.showUsage ? usage.report?.missing_commands ?? [] : [], integrations: integrationOutcome?.kind === "list" ? integrationOutcome.integrations : [], accountsHere: local });
   const otherProviders = page?.otherProviders ?? [...new Set(providers.map((entry) => entry.id))];
   const failed = Object.values(failures);
   const installNote = t("Install runs the maker's own installer in a terminal tab on this PC, where you can watch it.");
@@ -352,7 +364,7 @@ export function AgentsSettings({ watching, onLocalLogin, onOpenPane, onOpenGuide
               : <ul className="settings-card agents-card">
                 {page.rows.map((entry) => <AgentItem key={entry.agent.id} entry={entry} open={open.has(entry.agent.id)} onToggle={() => toggle(entry.agent.id)}
                   allProviders={providers} read={settings.showUsage && usage.report !== null} limitsOn={settings.showUsage} local={local} watching={watching} integrationsRead={integrationOutcome?.kind === "list"}
-                  onLocalLogin={onLocalLogin} onAddAccount={(provider) => setDialog({ kind: "add", provider })} />)}
+                  onLocalLogin={onLocalLogin} onAddAccount={(provider) => setDialog({ kind: "add", provider })} onFollow={setSigningIn} />)}
               </ul>}
         {integrationNote}
       </section>
@@ -376,7 +388,7 @@ export function AgentsSettings({ watching, onLocalLogin, onOpenPane, onOpenGuide
             <AgentMark agent={PROVIDER_MARK[id]} size={20} /><span>{PROVIDER_NAME[id]}</span>
             <span className="usage-account-count">{providers.filter((entry) => entry.id === id).length}</span>
           </div>
-          <ProviderAccounts id={id} providers={providers} onLocalLogin={watching ? undefined : onLocalLogin} />
+          <ProviderAccounts id={id} providers={providers} onLocalLogin={watching ? undefined : onLocalLogin} onFollow={setSigningIn} />
         </SettingsGroup>)}
         {settings.showUsage && providers.length === 0 && <p className="settings-note settings-hint">{usage.loading ? t("Loading…") : t("No accounts yet.")}</p>}
         {hubError && <p className="settings-hint account-error" role="alert">{hubError}</p>}
@@ -420,6 +432,7 @@ export function AgentsSettings({ watching, onLocalLogin, onOpenPane, onOpenGuide
           setHub(status); setConfirmRemoval(false); usage.refresh();
           requestAnimationFrame(() => addButton.current?.focus());
         }} />}
+      {signingIn && <UsageSignInDialog request={signingIn} onOpenTerminal={(paneId) => { setSigningIn(null); onLocalLogin(paneId); }} onSignedIn={usage.refresh} onClose={() => setSigningIn(null)} />}
       {dialog && <UsageAccountDialog editHub={dialog.kind === "hub"} provider={dialog.kind === "add" ? dialog.provider : null} hub={hub} onHubChanged={setHub} onAccountsChanged={usage.refresh} onLocalLogin={onLocalLogin} onClose={() => setDialog(null)} />}
     </>
   );

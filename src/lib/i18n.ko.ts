@@ -367,6 +367,8 @@ const BASE: Record<string, string> = {
   "Close pane {name}?": "{name} 패널을 닫을까요?",
   "The pane's running processes will stop. Closing its last pane also closes the workspace.": "패널에서 실행 중인 프로세스가 종료됩니다. 마지막 패널을 닫으면 워크스페이스도 닫힙니다.",
   "Close pane": "패널 닫기",
+  "Open terminal": "터미널 열기",
+  "Sign in to {agent}": "{agent}에 로그인",
 };
 
 /** The parts KO is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */
