@@ -133,6 +133,7 @@
 
 /* the notices (ComposerNotices.css) take the card's column too */
 .composer-quick,
+.composer-eyebrow,
 .composer-surface,
 .composer-note,
 .composer-notices {
@@ -1451,22 +1452,32 @@
   }
 }
 
-/* A phone's input card floats over the transcript's end, as an iPhone's input bar does: the
-   composer rises --composer-over into the transcript, whose last lines fade into the chat's
-   surface and blur behind the glass card. Only while the card follows the transcript directly
-   (no held message, pending row, prompt card or notice between them) and no greeting stands over it;
-   ChatView.css keeps the last line and its jump button clear of the card. The transcript's box
-   still shrinks as the card grows, so a reader at the end stays at the end. Raised over the
-   transcript, which is positioned (z-index 1) and comes first. */
+/* The composer rises --composer-over into the transcript's end, whose last lines fade into the
+   chat's surface there, so the eyebrow and the card never sit against a line of text. Only while
+   the card follows the transcript directly (no held message, pending row, prompt card or notice
+   between them) and no greeting stands over it; ChatView.css keeps the last line and its jump
+   button clear of the band. The transcript's box still shrinks as the card grows, so a reader at
+   the end stays at the end. Raised over the transcript, which is positioned (z-index 1) and comes
+   first. The eyebrow starts under the band, on the clear surface. */
+.terminal-stack.is-chat:not(.is-greeted):has(> .terminal-surface + .prompt-dock:empty + .composer:not(.has-notices)) {
+  --composer-over: var(--space-6);
+}
+
+.terminal-stack.is-chat:not(.is-greeted) > .terminal-surface + .prompt-dock:empty + .composer:not(.has-notices) {
+  z-index: 1;
+  margin-top: calc(-1 * var(--composer-over));
+  background: linear-gradient(transparent, var(--bg) var(--composer-over));
+}
+
+.terminal-stack.is-chat:not(.is-greeted) > .terminal-surface + .prompt-dock:empty + .composer:not(.has-notices):has(> .composer-eyebrow) {
+  padding-top: var(--composer-over);
+}
+
+/* A phone's input card floats over the transcript's end, as an iPhone's input bar does: a taller
+   band, and the last lines blur behind the glass card where no eyebrow stands over it. */
 @media (max-width: 768px) {
   .terminal-stack.is-chat:not(.is-greeted):has(> .terminal-surface + .prompt-dock:empty + .composer:not(.has-notices)) {
     --composer-over: var(--space-8);
-  }
-
-  .terminal-stack.is-chat:not(.is-greeted) > .terminal-surface + .prompt-dock:empty + .composer:not(.has-notices) {
-    z-index: 1;
-    margin-top: calc(-1 * var(--composer-over));
-    background: linear-gradient(transparent, var(--bg) var(--composer-over));
   }
 
   .terminal-stack.is-chat:not(.is-greeted) > .terminal-surface + .prompt-dock:empty + .composer:not(.has-notices) .composer-surface {
@@ -1522,12 +1533,16 @@
   transform: translateX(-50%);
 }
 
-/* the workspace and branch over the message box, on the box's column, in under half its width */
+/* the workspace and branch over the message box, in under half its width, starting where the
+   box's text does: on its flat top edge, clear of the rounded corner */
 .composer-eyebrow {
-  flex: 0 0 auto;
-  width: min(calc(100% - 2 * var(--space-4)), var(--chat-w));
-  margin: 0 auto;
-  padding: 0 var(--space-1) var(--space-1);
+  padding: 0 0 var(--space-1) calc(var(--space-4) + var(--hairline));
+}
+
+@media (max-width: 480px) {
+  .composer-eyebrow {
+    padding-left: calc(var(--space-3) + var(--hairline));
+  }
 }
 
 .composer-eyebrow-line {

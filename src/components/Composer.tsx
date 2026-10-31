@@ -101,6 +101,8 @@ export interface ComposerProps {
   restored?: string | null;
   /** an empty chat's greeting: it stands over the composer's column and takes no row of its own */
   greeting?: ReactNode;
+  /** the workspace and branch the message goes to, right over the input card */
+  eyebrow?: ReactNode;
   /** the pane's notices over the input card (PaneTerminal builds them): rows of its own, above the replies */
   notices?: ReactNode;
   /** the connection's confirmed role; PaneTerminal mounts no composer for observers */
@@ -270,6 +272,7 @@ export function Composer({
   suggestion = null,
   restored = null,
   greeting = null,
+  eyebrow = null,
   notices = null,
   role = "interact",
   inert = false,
@@ -1208,6 +1211,8 @@ export function Composer({
             </div>)}
         </div>
       )}
+
+      {eyebrow}
 
       <div
         ref={surfaceRef}
