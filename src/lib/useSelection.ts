@@ -274,9 +274,11 @@ export function useOpenWhenListed({ machines, machinesRef, selectionRef, selectT
   }, [machinesRef, selectionRef, selectTargetRef]);
   useEffect(openListed, [machines, openListed]);
   return useCallback((machineId: string, paneId: string, asked: SelectionMark) => {
+    // asked from a selection the user has left: it would only push out a newer tab still on its way
+    if (!selectionStill(asked, selectionRef.current)) return;
     pendingOpen.current = { machineId, paneId, asked };
     openListed();
-  }, [openListed]);
+  }, [openListed, selectionRef]);
 }
 
 export function useSelectPane({ pendingLink, pendingFile, setLinkLanded, selectionHint, setSelectedPaneId, setNotificationViewTarget, setTerminalPeek, setAutoSelected, setDrawerOpen, onPick }: {
