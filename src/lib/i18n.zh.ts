@@ -46,6 +46,7 @@ const BASE: Record<string, string> = {
   // ---- settings ----
   "Settings": "设置",
   "Chat": "聊天",
+  "View": "视图",
   "Agent default": "代理默认",
   "Phone & devices": "手机和设备",
   "Access token": "访问 Token",

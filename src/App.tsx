@@ -41,7 +41,6 @@ import { openPresentation } from "./lib/filePresentation.ts";
 import { MachineDialog } from "./components/MachineDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./components/RowMenu.tsx";
 import { ViewMenu } from "./components/ViewMenu.tsx";
-import { ComposerEyebrow } from "./components/ComposerEyebrow.tsx";
 import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
 import { paneStorageId } from "../shared/machines.ts";
 import { usePairedNotices } from "./lib/usePairedNotices.ts";
@@ -882,7 +881,6 @@ export function App() {
                     onRecoverUnsent={(target) => openUnsent({ machineId, pane: target })}
                     renderPane={(item, itemActive, herdrSplit) => <OpenFileContext.Provider value={item ? (path) => openFile({ path, paneId: item.pane_id, machineId }) : null}>
                       <PaneTerminal
-                        eyebrow={item ? <ComposerEyebrow machineId={machineId} workspaceId={item.workspace_id} workspace={(slotSnapshot?.workspaces.find((entry) => entry.workspace_id === item.workspace_id)?.label) ?? item.workspace_id} /> : undefined}
                         presentationKey={paneContentKey(machine, item, item ? lensOf(item) : slotView)}
                         finishEpoch={machine?.snapshot?.finish_epoch}
                         finishId={item?.finish_id}

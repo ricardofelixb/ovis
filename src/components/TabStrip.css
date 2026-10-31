@@ -291,3 +291,13 @@
 .tab-strip-faces.is-split > * + * {
   margin-left: -4px;
 }
+
+/* the head of a tab's menu: its workspace and branch, dim, cut at the menu's width */
+.tab-menu-place {
+  display: block;
+  overflow: hidden;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

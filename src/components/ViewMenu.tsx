@@ -28,6 +28,6 @@ export function ViewMenu({ view, terminalAttach, onPick }: { view: ShownView; te
       <Icon aria-hidden="true" />
       <ChevronDown className="view-menu-chevron" aria-hidden="true" />
     </button>
-    {anchor && <RowMenu anchor={anchor} restoreFocusTo={anchor} items={items} onClose={() => setAnchor(null)} />}
+    {anchor && <RowMenu anchor={anchor} restoreFocusTo={anchor} title={t("View")} items={items} onClose={() => setAnchor(null)} />}
   </>;
 }

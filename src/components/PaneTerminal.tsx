@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { fontSettled } from "../lib/fontFamily.ts";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -74,8 +74,6 @@ import { useTypedKeys } from "../lib/useTypedKeys.ts";
 const PASTE_GUIDANCE_MS = 6000;
 
 export interface PaneTerminalProps {
-  /** over the message box: the pane's workspace and branch (ComposerEyebrow) */
-  eyebrow?: ReactNode;
   /** App's content lifetime, including the current finish identity. */
   presentationKey?: string;
   finishEpoch?: string;
@@ -154,7 +152,6 @@ export interface PaneTerminalProps {
 const heldRowNotes = new Map<string, { owner: string; id: string; text: string }>();
 
 export function PaneTerminal({
-  eyebrow,
   presentationKey,
   finishEpoch,
   finishId,
@@ -1337,7 +1334,6 @@ export function PaneTerminal({
           role={observing ? "observe" : role}
           onOpenHistory={historyOffered ? onOpenHistory : undefined}
           onOpenNewSession={onOpenNewSession}
-          eyebrow={eyebrow}
           greeting={greetingDue ? (
             <div className={`composer-greeting${greeted ? "" : " is-out"}`} ref={greetingRef} aria-hidden={greeted ? undefined : true}>
               <p className="composer-greeting-title">{t("What should {agent} do in {folder}?", { agent: agentDisplayLabel(agent), folder })}</p>

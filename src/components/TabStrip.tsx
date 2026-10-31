@@ -28,6 +28,8 @@ import { CRAMPED_QUERY, loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas
 import { rosterPanes } from "../lib/dagPane.ts";
 import { useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
+import { DETACHED, usePaneBranch } from "../lib/paneBranch.ts";
+import { SHEET_QUERY } from "../lib/sheets.ts";
 import { useTabReorder } from "../lib/useTabReorder.ts";
 import { indicatorGlyph, paneStatus, rollupStatus } from "../lib/status.ts";
 import { useSettings } from "../lib/settings.ts";
@@ -71,6 +73,10 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const t = useT();
   const { settings } = useSettings();
   const machineId = useMachineId();
+  // where a tab's menu says it is: the header gave this up to the tabs (a phone's sheet says it under the tab's name)
+  const branch = usePaneBranch(machineId, workspace.workspace_id);
+  const place = branch === null ? workspace.label : `${workspace.label} · ${branch === DETACHED ? t("Detached HEAD") : branch}`;
+  const sheet = useMediaQuery(SHEET_QUERY);
   const { closeTab, renameTab, moveTab } = useMachineApi();
   const touchMenu = useMediaQuery("(pointer: coarse), (max-width: 768px)");
   // a mouse on a wide screen gets the same ellipsis, drawn while the strip is hovered or the tab
@@ -520,6 +526,8 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       {end === undefined ? row : <div className="tab-strip-row">{row}<div className="tab-strip-end">{end}</div></div>}
       {picker && <RowMenu key={picker.workspaces ? "workspaces" : "tab"} anchor={picker.anchor} point={picker.point} restoreFocusTo={picker.previousFocus}
         title={picker.workspaces ? t("Move {tab} to", { tab: nameOf(picker.tab) }) : nameOf(picker.tab)}
+        subtitle={picker.workspaces ? undefined : place}
+        header={picker.workspaces || sheet ? undefined : <span className="tab-menu-place" title={place}>{place}</span>}
         items={picker.workspaces ? workspaceItems(picker.tab) : pickerItems(picker.tab, picker.touch)} align="start" onClose={() => setPicker(null)} />}
       {confirm && <ConfirmDialog title={confirm.title} body={confirm.body} confirmLabel={t("Close tab")} onConfirm={async () => { await close(confirm.tab); setConfirm(null); }} onClose={() => setConfirm(null)} />}
     </>
