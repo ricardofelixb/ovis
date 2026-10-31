@@ -99,40 +99,20 @@ export interface AgentContextParts {
   title: string;
   /** the agent the row's mark draws, null for the generic mark: a kind the mark already says is not written again */
   markAgent: string | null;
-  /** the title the agent gave itself, said when a pane or tab name took the first line */
-  agentTitle: string | null;
+  /** null with a single PC: herdr does not name a lone machine either */
+  machineName: string | null;
+  workspaceLabel: string;
   tabName: string | null;
 }
 
-/**
- * An agent row's second line: who it is, what it calls its task when a name took the first line, and
- * its tab, without repeating a word the row already says. The workspace is the row it sits under.
- */
-export function agentContext({ agentLabel, title, markAgent, agentTitle, tabName }: AgentContextParts): string[] {
-  const shown = title.trim();
+/** An agent row's second line: who it is, then where it runs, without repeating a word the row already says. */
+export function agentContext({ agentLabel, title, markAgent, machineName, workspaceLabel, tabName }: AgentContextParts): string[] {
   const agent = nonblank(agentLabel);
-  const own = nonblank(agentTitle);
   const tab = nonblank(tabName);
   return [
-    agent && agent !== shown && agent.toLowerCase() !== markAgent?.toLowerCase() ? agent : null,
-    own && own !== shown ? own : null,
-    tab && tab !== shown ? tab : null,
+    agent && agent !== title.trim() && agent.toLowerCase() !== markAgent?.toLowerCase() ? agent : null,
+    nonblank(machineName),
+    workspaceLabel,
+    tab && tab !== workspaceLabel ? tab : null,
   ].filter((part): part is string => Boolean(part));
-}
-
-/**
- * The name an agent row leads with: the pane's own name, else its tab's when someone renamed the tab
- * and no other agent runs in it, else the title the agent gave itself, else herdr's pane title. An
- * agent can rename its tab or pane (`herdr tab rename`, `herdr pane rename`) to name its row.
- */
-export function agentRowName(entry: SidebarAgent, workspaceTabs: readonly TabInfo[], workspaceAgents: readonly SidebarAgent[]): string | null {
-  const { pane, tab, agent } = entry;
-  const alone = tab !== null && workspaceAgents.filter((other) => other.tab?.tab_id === tab.tab_id).length === 1;
-  return nonblank(pane.label) ?? (alone ? renamedTab(tab, workspaceTabs) : null) ?? nonblank(agent?.title) ?? nonblank(pane.title);
-}
-
-/** The name someone gave an agent's tab, judged by the tab's place in the row as agentTabName does; null while herdr numbers it. */
-export function renamedTab(tab: TabInfo | null, workspaceTabs: readonly TabInfo[]): string | null {
-  if (!tab) return null;
-  return customTabLabel(tab, workspaceTabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1 || tab.number);
 }

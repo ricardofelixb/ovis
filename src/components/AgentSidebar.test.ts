@@ -5,10 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { Machine } from "../../shared/machines.ts";
 import type { AgentInfo, HerdrPane, SessionSnapshot } from "../../shared/protocol.ts";
 import { setAgentRowTokens } from "../lib/agentRowTokens.ts";
-import { MachineContext } from "../lib/machineContext.tsx";
 import { SettingsProvider } from "../lib/settings.ts";
-import { sidebarAgents } from "../lib/sidebarAgents.ts";
-import { WorkspaceAgents } from "./AgentSidebar.tsx";
+import { AgentSidebar } from "./AgentSidebar.tsx";
 
 const pane = (pane_id: string, extra: Partial<HerdrPane> = {}): HerdrPane => ({
   pane_id, workspace_id: "w1", tab_id: "w1:t1", terminal_id: `term-${pane_id}`, focused: false, revision: 1,
@@ -25,12 +23,9 @@ const snapshot = (panes: HerdrPane[]): SessionSnapshot => ({
 });
 const machine = (panes: HerdrPane[], state: Machine["state"] = "connected"): Machine => ({ id: "local", name: "workstation", kind: "local", enabled: true, state, error: null, snapshot: snapshot(panes) });
 
-function render({ id, state, snapshot }: Machine): string {
-  const online = state === "connected";
+function render(machines: Machine[]): string {
   return renderToStaticMarkup(createElement(SettingsProvider, {
-    children: createElement(MachineContext.Provider, { value: id }, createElement(WorkspaceAgents, {
-      agents: sidebarAgents(snapshot), tabs: snapshot?.tabs ?? [], snapshot, online, selectedPaneId: null, watching: false, onSelect: () => {},
-    })),
+    children: createElement(AgentSidebar, { machines, selectedMachineId: "local", selectedPaneId: null, stateWord: () => "disconnected", onSelect: () => {} }),
   }));
 }
 const decode = (text: string): string => text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#x27;/g, "'").replace(/&amp;/g, "&");
@@ -41,11 +36,11 @@ const texts = (html: string, className: string): string[] =>
 const tooltips = (html: string): string[][] =>
   [...html.matchAll(/class="agent-select agent-row"[^>]* title="([^"]*)"/g)].map((match) => decode(match[1]!).split("\n"));
 
-describe("WorkspaceAgents plugin tokens", () => {
+describe("AgentSidebar plugin tokens", () => {
   const saved = Object.getOwnPropertyDescriptor(globalThis, "window");
   const savedLanguages = Object.getOwnPropertyDescriptor(navigator, "languages");
   beforeEach(() => {
-    // a desktop, in English
+    // the drawer query AgentSidebar asks at its first render, on a desktop, in English
     Object.defineProperty(globalThis, "window", { configurable: true, value: { matchMedia: () => ({ matches: false }) } });
     Object.defineProperty(navigator, "languages", { configurable: true, value: ["en"] });
   });
@@ -58,10 +53,10 @@ describe("WorkspaceAgents plugin tokens", () => {
   });
 
   test("a row draws every token its pane has, by name, as text; a pane without any draws no line", () => {
-    const html = render(machine([
+    const html = render([machine([
       pane("w1:p1", { tokens: { summary: "<b>reviewing</b> auth", quota: "5h 95% · Wk 67%", blank: "  " } }),
       pane("w1:p2"),
-    ]));
+    ])]);
     expect(texts(html, "agent-tokens")).toEqual(["5h 95% · Wk 67% · <b>reviewing</b> auth"]);
     // escaped, never markup
     expect(html).not.toContain("<b>reviewing</b>");
@@ -73,30 +68,31 @@ describe("WorkspaceAgents plugin tokens", () => {
       rows: [{ name: "progress" }, { name: "quota", rules: [{ equals: "unknown", hide: true }] }],
       by_agent: { codex: [{ name: "summary" }] },
     });
-    const html = render(machine([
+    const html = render([machine([
       pane("w1:p1", { tokens: { quota: "5h 95%", progress: "40% 12m", summary: "not in the rows" } }),
       pane("w1:p2", { tokens: { quota: "unknown", progress: "90% 1m" } }),
       pane("w1:p3", { agent: "codex", tokens: { quota: "5h 95%", summary: "codex's own rows" } }),
-    ]));
+    ])]);
     expect(texts(html, "agent-tokens")).toEqual(["40% 12m · 5h 95%", "90% 1m", "codex's own rows"]);
   });
 
   test("the row's tooltip says each token whole; a PC that is away draws none", () => {
     const long = `summary ${"x".repeat(200)}`;
-    const online = render(machine([pane("w1:p1", { tokens: { summary: long, quota: "5h 95%" } })]));
-    expect(tooltips(online)[0]).toEqual(["w1:p1", "5h 95%", long, "claude"]);
-    const away = render(machine([pane("w1:p1", { tokens: { summary: long } })], "disconnected"));
+    const online = render([machine([pane("w1:p1", { tokens: { summary: long, quota: "5h 95%" } })])]);
+    expect(tooltips(online)[0]).toEqual(["w1:p1", "checkout-api", "5h 95%", long, "claude"]);
+    const away = render([machine([pane("w1:p1", { tokens: { summary: long } })], "disconnected")]);
     expect(away).not.toContain("agent-tokens");
     expect(away).not.toContain(long);
   });
 
   test("display_agent, a plugin's line for the agent, is said where it says more than the agent's kind", () => {
-    const html = render(machine([
+    const html = render([machine([
       pane("w1:p1", { display_agent: "needs a login · 8m ago", title: "PRJ-1 Add a greeting" }),
       pane("w1:p2", { display_agent: "Claude", title: "Refactor" }),
-    ]));
+    ])]);
     const lines = [...html.matchAll(/<span class="agent-context">(.*?)<\/span>/g)].map((match) => match[1]);
-    // the second row's mark already draws Claude, and its workspace is the row it sits under: it has no line
-    expect(lines).toEqual(["needs a login · 8m ago"]);
+    expect(lines[0]).toStartWith("needs a login · 8m ago · checkout-api");
+    // the mark already draws Claude: the line does not say it again
+    expect(lines[1]).toBe("checkout-api");
   });
 });

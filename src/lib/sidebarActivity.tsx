@@ -3,15 +3,17 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import type { Machine } from "../../shared/machines.ts";
 import type { AgentStatus, HerdrPane } from "../../shared/protocol.ts";
 import type { SeenFinish } from "../../shared/seen.ts";
-import { shownStatus, type SeenRecord } from "./sidebarOrder.ts";
+import { liveSeqs, newSeqMemory, shownStatus, type SeenRecord, type SeqMemory } from "./sidebarOrder.ts";
 import { cleanSeen, loadSeen, saveSeen, seenKey, SEEN_LIMIT, subscribeSeen } from "./seenFinishes.ts";
 import { conversationFinishEvidence } from "./panePresentation.ts";
 import { fetchBridgeHealth } from "./api.ts";
 
 export interface SidebarActivity {
+  seqs(machineId: string): ReadonlyMap<string, number>;
   status(machineId: string, pane: Pick<HerdrPane, "pane_id" | "agent_status" | "background_wait" | "finish_id">): AgentStatus | undefined;
 }
-const SidebarActivityContext = createContext<SidebarActivity>({ status: (_machineId, pane) => shownStatus(pane, null) });
+const NO_SEQS: ReadonlyMap<string, number> = new Map();
+const SidebarActivityContext = createContext<SidebarActivity>({ seqs: () => NO_SEQS, status: (_machineId, pane) => shownStatus(pane, null) });
 export const SidebarActivityProvider = SidebarActivityContext.Provider;
 export const useSidebarActivity = (): SidebarActivity => useContext(SidebarActivityContext);
 
@@ -38,6 +40,16 @@ function sameSeen(left: ReadonlyMap<string, MachineSeen>, right: ReadonlyMap<str
 
 export function useSidebarActivityState(machines: readonly Machine[], selectedMachineId: string, presentedPaneId: string | null, paneInFront: () => boolean = unobscured,
   share?: (finish: SeenFinish) => Promise<void>): SidebarActivity {
+  const memories = useRef(new Map<string, { epoch: string | undefined; memory: SeqMemory }>());
+  const seqsByMachine = useMemo(() => new Map(machines.map((machine) => {
+    const epoch = machine.snapshot?.finish_epoch;
+    let kept = memories.current.get(machine.id);
+    if (!kept || kept.epoch !== epoch) {
+      kept = { epoch, memory: newSeqMemory() };
+      memories.current.set(machine.id, kept);
+    }
+    return [machine.id, liveSeqs(machine.snapshot, kept.memory)] as const;
+  })), [machines]);
   const [seen, setSeen] = useState<ReadonlyMap<string, MachineSeen>>(() => new Map());
   const seenRef = useRef(seen); seenRef.current = seen;
   const [pageVisible, setPageVisible] = useState(() => document.visibilityState === "visible");
@@ -189,10 +201,11 @@ export function useSidebarActivityState(machines: readonly Machine[], selectedMa
   }, [machines, selectedMachineId, presentedPaneId, paneInFront, pageVisible]);
 
   return useMemo<SidebarActivity>(() => ({
+    seqs: (machineId) => seqsByMachine.get(machineId) ?? NO_SEQS,
     status: (machineId, pane) => {
       const epoch = machines.find((machine) => machine.id === machineId)?.snapshot?.finish_epoch;
       const kept = seen.get(machineId);
       return shownStatus(pane, epoch && kept?.epoch === epoch ? kept.record : null);
     },
-  }), [machines, seen]);
+  }), [machines, seqsByMachine, seen]);
 }

@@ -6,7 +6,7 @@
  * roster) and the PC's recent folders are offered as jumps while the typed path leads to them.
  */
 
-import { sidebarPinKey, workspacePinKey } from "./sidebarPins.ts";
+import { sidebarPinKey } from "./sidebarPins.ts";
 
 export interface FolderQuery {
   /** the folder to list, as the server takes it (absolute, `~` or `~/…`) */
@@ -54,15 +54,11 @@ export function browseEntries(directories: readonly string[], filter: string): s
   return exact <= 0 ? visible : [visible[exact]!, ...visible.slice(0, exact), ...visible.slice(exact + 1)];
 }
 
-interface PinnedPane { pane_id: string; workspace_id?: string; cwd?: string | null; foreground_cwd?: string | null }
+interface PinnedPane { pane_id: string; cwd?: string | null; foreground_cwd?: string | null }
 
-/** The folders of this PC's pinned workspaces (their first pane's) and panes pinned before, in pin order, each once. */
+/** The folders of this PC's pinned panes, in pin order, each once. */
 export function pinnedFolders(pins: readonly string[], machineId: string, panes: readonly PinnedPane[]): string[] {
   const byKey = new Map(panes.map((pane) => [sidebarPinKey(machineId, pane.pane_id), pane]));
-  for (const pane of panes) {
-    const key = pane.workspace_id === undefined ? null : workspacePinKey(machineId, pane.workspace_id);
-    if (key !== null && !byKey.has(key)) byKey.set(key, pane);
-  }
   const folders = pins.flatMap((key) => {
     const pane = byKey.get(key);
     const path = pane?.foreground_cwd ?? pane?.cwd;

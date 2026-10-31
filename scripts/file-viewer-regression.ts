@@ -1180,7 +1180,7 @@ try {
       await sheetsSettled(popup);
       assert.equal(await popup.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
       if (process.env.UI_EVIDENCE_DIR) await popup.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, `markdown-tab-${width}-${theme}.png`) });
-      assert.equal(await popup.locator(".machine-list, .terminal-host, .modal-scrim").count(), 0, "no app around the document");
+      assert.equal(await popup.locator(".agents-sidebar, .terminal-host, .modal-scrim").count(), 0, "no app around the document");
       assert.equal(await popup.getByRole("button", { name: "Close file", exact: true }).count(), 0, "nothing to close: the tab is the document");
       assert.equal(await popup.getByRole("link", { name: "Open in a new tab", exact: true }).count(), 0);
       assert.match(await popup.title(), /^preview #1 & 한글\.MD · /);

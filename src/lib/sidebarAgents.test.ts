@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { AgentInfo, HerdrPane, SessionSnapshot, TabInfo, WorkspaceInfo } from "../../shared/protocol.ts";
-import { agentContext, agentRowName, agentTabName, paneMark, sidebarAgents, workspaceAgentLabels, type SidebarAgent } from "./sidebarAgents.ts";
+import { agentContext, agentTabName, paneMark, sidebarAgents, workspaceAgentLabels } from "./sidebarAgents.ts";
 
 function workspace(id: string): WorkspaceInfo {
   return { workspace_id: id, active_tab_id: `${id}:t1`, label: id, number: 1, tab_count: 1, pane_count: 1, focused: false, agent_status: "idle" };
@@ -109,53 +109,24 @@ describe("workspaceAgentLabels", () => {
 });
 
 describe("agentContext", () => {
-  const base = { agentLabel: "claude", title: "Idempotent payments", markAgent: null, agentTitle: null, tabName: null };
+  const base = { agentLabel: "claude", title: "Idempotent payments", markAgent: null, machineName: null, workspaceLabel: "checkout-api", tabName: null };
 
-  it("names neither the workspace nor the PC: the row sits under them", () => {
-    expect(agentContext(base)).toEqual(["claude"]);
+  it("leaves a lone PC unnamed, as herdr does", () => {
+    expect(agentContext(base)).toEqual(["claude", "checkout-api"]);
+    expect(agentContext({ ...base, machineName: "workstation" })).toEqual(["claude", "workstation", "checkout-api"]);
   });
 
-  it("says the agent's own title and a renamed tab when the first line does not", () => {
-    expect(agentContext({ ...base, title: "Payments", agentTitle: "Idempotent payments", tabName: "Payments" })).toEqual(["claude", "Idempotent payments"]);
-    expect(agentContext({ ...base, agentTitle: "Idempotent payments", tabName: "Review" })).toEqual(["claude", "Review"]);
-    expect(agentContext({ ...base, tabName: " " })).toEqual(["claude"]);
-    expect(agentContext({ ...base, title: "claude" })).toEqual([]);
+  it("does not repeat the workspace as its tab, or the title as its agent", () => {
+    expect(agentContext({ ...base, workspaceLabel: "cli-tools", tabName: "cli-tools" })).toEqual(["claude", "cli-tools"]);
+    expect(agentContext({ ...base, tabName: "Review" })).toEqual(["claude", "checkout-api", "Review"]);
+    expect(agentContext({ ...base, tabName: " " })).toEqual(["claude", "checkout-api"]);
+    expect(agentContext({ ...base, title: "claude" })).toEqual(["checkout-api"]);
   });
 
   it("leaves out the kind its mark already draws, and keeps a kind the mark does not say", () => {
-    expect(agentContext({ ...base, markAgent: "claude", tabName: "Review" })).toEqual(["Review"]);
-    expect(agentContext({ ...base, agentLabel: "Claude", markAgent: "claude" })).toEqual([]);
-    expect(agentContext({ ...base, agentLabel: "reviewer-bot", markAgent: "claude" })).toEqual(["reviewer-bot"]);
-  });
-});
-
-describe("agentRowName", () => {
-  const tab = (tab_id: string, label: string, number: number) => ({ tab_id, workspace_id: "w1", label, number, focused: false, pane_count: 1 }) as unknown as TabInfo;
-  const entry = (paneId: string, tabInfo: TabInfo, names: { label?: string; agentTitle?: string; paneTitle?: string } = {}) => ({
-    pane: { pane_id: paneId, label: names.label ?? null, title: names.paneTitle ?? null },
-    tab: tabInfo,
-    agent: names.agentTitle === undefined ? null : { title: names.agentTitle },
-  }) as unknown as SidebarAgent;
-
-  it("leads with the pane's name, then a renamed tab, then the agent's own title, then the pane's", () => {
-    const renamed = tab("t1", "Payments", 1);
-    const tabs = [renamed];
-    expect(agentRowName(entry("p1", renamed, { label: "Mine", agentTitle: "Idempotent payments" }), tabs, [])).toBe("Mine");
-    const alone = entry("p1", renamed, { agentTitle: "Idempotent payments" });
-    expect(agentRowName(alone, tabs, [alone])).toBe("Payments");
-    const numbered = tab("t1", "1", 1);
-    const plain = entry("p1", numbered, { agentTitle: "Idempotent payments" });
-    expect(agentRowName(plain, [numbered], [plain])).toBe("Idempotent payments");
-    const untitled = entry("p1", numbered, { paneTitle: "zsh" });
-    expect(agentRowName(untitled, [numbered], [untitled])).toBe("zsh");
-  });
-
-  it("leaves a tab's name to the agents' own titles when two agents share the tab", () => {
-    const shared = tab("t1", "Payments", 1);
-    const first = entry("p1", shared, { agentTitle: "Write the code" });
-    const second = entry("p2", shared, { agentTitle: "Review it" });
-    expect(agentRowName(first, [shared], [first, second])).toBe("Write the code");
-    expect(agentRowName(second, [shared], [first, second])).toBe("Review it");
+    expect(agentContext({ ...base, markAgent: "claude", tabName: "Review" })).toEqual(["checkout-api", "Review"]);
+    expect(agentContext({ ...base, agentLabel: "Claude", markAgent: "claude" })).toEqual(["checkout-api"]);
+    expect(agentContext({ ...base, agentLabel: "reviewer-bot", markAgent: "claude" })).toEqual(["reviewer-bot", "checkout-api"]);
   });
 });
 

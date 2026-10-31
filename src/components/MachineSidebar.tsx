@@ -8,6 +8,7 @@ import { describeProgress } from "../lib/bridgeProgress.ts";
 import { keepDismissed, noticeKey, readDismissed, waitingMachines, writeDismissed } from "../lib/machineNotice.ts";
 import type { AppActions } from "../lib/actions.ts";
 import { Sidebar } from "./Sidebar.tsx";
+import { AgentSidebar } from "./AgentSidebar.tsx";
 import { SidebarActivityProvider, type SidebarActivity } from "../lib/sidebarActivity.tsx";
 import { filterSuggestions, machineFilter, sidebarFilter, type SidebarBranchLabels } from "../lib/sidebarFilter.ts";
 import { SidebarFilterProvider, useSidebarFilter } from "../lib/sidebarFilterContext.ts";
@@ -191,6 +192,7 @@ export function MachineSidebar(props: Props) {
       {/* a PC kept out on this device is said, with the way to show it again */}
       {hiddenCount > 0 && <button type="button" className="machine-hidden-note" title={t("Choose the PCs this device shows")} onClick={() => { requestSettingsPage({ page: "remote", section: "sidebar-pcs" }); props.actions.openSettings(); }}>{hiddenCount === 1 ? t("1 PC hidden on this device") : t("{n} PCs hidden on this device", { n: hiddenCount })}</button>}
     </div>
+    <AgentSidebar machines={props.machines} selectedMachineId={props.selectedMachineId} selectedPaneId={props.selectedPaneId} stateWord={(machine) => t(STATE_WORD[machine.state])} watching={props.watching} onSelect={props.onSelect} />
     <footer className="sidebar-footer">
       {/* no Install app here: a page knows it is installed only in the app's own window, so a row kept
           showing in every tab. Settings → Phone & devices → Install offers it (SettingsDialog). */}

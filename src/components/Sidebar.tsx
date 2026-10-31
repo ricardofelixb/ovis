@@ -11,7 +11,6 @@ import type { AppActions } from "../lib/actions.ts";
 import { indicatorGlyph, knownStatus, rollupStatus, STATUS_WORD } from "../lib/status.ts";
 import { WorkspaceFavicon } from "./WorkspaceFavicon.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
-import { WorkspaceAgents } from "./AgentSidebar.tsx";
 import { RowMenu, type RowMenuItem } from "./RowMenu.tsx";
 import { WorktreeDialog, type WorktreeDialogMode } from "./WorktreeDialog.tsx";
 import { focusWorkspaceListToggle } from "../lib/focus.ts";
@@ -32,7 +31,7 @@ import { watchTouchReorder } from "../lib/touchReorder.ts";
 import { placeBlock, workspaceMoves, worktreeGroups as groupWorktrees } from "../lib/workspaceOrder.ts";
 import { worktreeLabel } from "../lib/worktreeName.ts";
 import { lastViewedPane, rememberViewedPane } from "../lib/lastViewedPane.ts";
-import { sidebarAgents, workspaceAgentLabels, type SidebarAgent } from "../lib/sidebarAgents.ts";
+import { sidebarAgents, workspaceAgentLabels } from "../lib/sidebarAgents.ts";
 import { PANE_DRAG_TYPE, paneDragData } from "../lib/split.ts";
 import { publishWorkspaceRows, workspaceRows } from "../lib/adjacentTarget.ts";
 import { currentSidebarPins, pinnedGroupIds, pinnedWorkspaceIds, pruneWorkspacePins, reorderWorkspacePins, setSidebarPins, splitPinnedGroups, subscribeSidebarPins, toggleSidebarPin, workspacePinKey, type WorkspaceGroup } from "../lib/sidebarPins.ts";
@@ -308,12 +307,6 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   const agentRows = useMemo(() => sidebarAgents(snapshot), [snapshot]);
   const agentByPane = useMemo(() => new Map(agentRows.map((entry) => [entry.pane.pane_id, entry])), [agentRows]);
   const agentNames = useMemo(() => workspaceAgentLabels(agentRows), [agentRows]);
-  // each workspace lists its agents under its row, in herdr's tab and pane order
-  const agentsByWorkspace = useMemo(() => {
-    const byWorkspace = new Map<string, SidebarAgent[]>();
-    for (const entry of agentRows) byWorkspace.set(entry.workspace.workspace_id, [...byWorkspace.get(entry.workspace.workspace_id) ?? [], entry]);
-    return byWorkspace;
-  }, [agentRows]);
   // a repository's worktree workspaces hang under one on its main checkout (lib/workspaceOrder.ts)
   const worktreeGroups = useMemo(() => groupWorktrees(orderedWorkspaces), [orderedWorkspaces]);
   // pinned workspaces stand first, in a card, in pin order (shared with the other browsers,
@@ -635,9 +628,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     const panes = roster.filter((pane) => pane.workspace_id === workspace.workspace_id);
     if (panes.length === 0) return null;
     const pane = currentPane(workspace, panes);
-    const agents = agentsByWorkspace.get(workspace.workspace_id) ?? [];
-    // a selected agent's own row under it says so; the workspace row does for its other panes
-    const selected = panes.some((candidate) => candidate.pane_id === selectedPaneId) && !agents.some((entry) => entry.pane.pane_id === selectedPaneId);
+    const selected = panes.some((candidate) => candidate.pane_id === selectedPaneId);
     const repoKey = workspace.worktree?.repo_key;
     const linked = workspace.worktree?.is_linked_worktree === true;
     const branch = branches.get(workspace.workspace_id);
@@ -656,13 +647,11 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     // and the selected one says so in words; a fold with a match in it stands open while the filter lasts
     const context = filtered !== null && !filtered.matchedWorkspaces.has(workspace.workspace_id);
     const collapsed = children.length > 0 && repoKey !== undefined && worktreesFolded(repoKey, children);
+    // a folded group's parent stands for its worktrees too, as herdr's collapsed parent does:
+    // a checkout that waits or has finished must not hide behind the fold
+    const statusPanes = collapsed ? [...panes, ...children.flatMap((child) => roster.filter((candidate) => candidate.workspace_id === child.workspace_id))] : panes;
     // a folded group still shows the checkout that is open; the count is of the ones put away
-    const foldedAway = collapsed ? children.filter((child) => !roster.some((candidate) => candidate.workspace_id === child.workspace_id && candidate.pane_id === selectedPaneId)) : [];
-    const foldedCount = foldedAway.length;
-    // the agent rows under it say their own state: the row says the state of what it does not show, its
-    // panes when no agent row stands for them and, as herdr's collapsed parent does, the worktrees put
-    // away by a fold, so a checkout that waits or has finished does not hide behind it
-    const statusPanes = [...agents.length === 0 ? panes : [], ...foldedAway.flatMap((child) => roster.filter((candidate) => candidate.workspace_id === child.workspace_id))];
+    const foldedCount = collapsed ? children.filter((child) => !roster.some((candidate) => candidate.workspace_id === child.workspace_id && candidate.pane_id === selectedPaneId)).length : 0;
     const editingWorkspace = editingWorkspaceId === workspace.workspace_id;
     const fixed = fixedIds.has(workspace.workspace_id) || filtered !== null;
     const filterNote = context && selected ? <span className="sidebar-filter-note">{t("Selected")}</span> : null;
@@ -739,7 +728,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
           </span>}
           <span className="sidebar-pane-meta">
             <span className="visually-hidden">{markName(pane)}</span>
-            {online && pane.restore_error ? <RestoreErrorBadge reason={pane.restore_error} /> : statusPanes.length > 0 && <StatusBadge compact status={online ? rollupStatus(statusPanes.map((candidate) => activity.status(machineId, candidate))) : undefined} />}
+            {online && pane.restore_error ? <RestoreErrorBadge reason={pane.restore_error} /> : <StatusBadge compact status={online ? rollupStatus(statusPanes.map((candidate) => activity.status(machineId, candidate))) : undefined} />}
           </span>
         </div>
         <div className="workspace-actions">
@@ -749,7 +738,6 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
         </div>
       </div>
       {inlineError?.workspaceId === workspace.workspace_id && <p className="sidebar-inline-error" role="alert">{inlineError.message}{inlineError.detail !== null && <><br /><code>{inlineError.detail}</code></>}</p>}
-      <WorkspaceAgents agents={agents} tabs={snapshot?.tabs.filter((tab) => tab.workspace_id === workspace.workspace_id) ?? []} snapshot={snapshot} online={online} selectedPaneId={selectedPaneId} watching={watching} onSelect={actions.selectPane} />
     </li>;
   };
 

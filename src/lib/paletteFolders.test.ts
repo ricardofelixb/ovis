@@ -56,7 +56,7 @@ describe("browseEntries", () => {
 });
 
 describe("pinnedFolders", () => {
-  test("the folders of this PC's pinned workspaces and panes, in pin order, once each", () => {
+  test("the folders of this PC's pinned panes, in pin order, once each", () => {
     const panes = [
       { pane_id: "p1", cwd: "/home/me/a" },
       { pane_id: "p2", cwd: "/home/me/b", foreground_cwd: "/home/me/b/src" },
@@ -64,8 +64,6 @@ describe("pinnedFolders", () => {
       { pane_id: "p4", cwd: null },
     ];
     expect(pinnedFolders(["local:p2", "other:p1", "local:p1", "local:p3", "local:p4", "local:gone"], "local", panes)).toEqual(["/home/me/b/src", "/home/me/a"]);
-    const workspaces = [{ pane_id: "p5", workspace_id: "w1", cwd: "/home/me/c" }, { pane_id: "p6", workspace_id: "w1", cwd: "/home/me/c/sub" }, ...panes];
-    expect(pinnedFolders(["local:workspace:w1", "local:p1", "other:workspace:w1"], "local", workspaces)).toEqual(["/home/me/c", "/home/me/a"]);
   });
 });
 

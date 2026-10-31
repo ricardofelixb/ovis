@@ -173,7 +173,7 @@ button.sidebar-section-label:focus-visible { outline-offset: calc(var(--ring-off
 
 /* beside the note a one-line row's secondary words would be cut to an ellipsis: they step aside for it */
 .workspace-group.is-filter-context.is-selected > .workspace-header .worktree-workspace-label,
-.workspace-agents.is-one-line .agent-item.is-filter-context.is-selected .agent-context {
+.agents-sidebar.is-one-line .agent-item.is-filter-context.is-selected .agent-context {
   display: none;
 }
 
@@ -341,17 +341,6 @@ button.sidebar-section-label:focus-visible { outline-offset: calc(var(--ring-off
 }
 
 .worktree-children .workspace-group:last-child > .workspace-header::before { bottom: 50%; }
-
-/* the branch runs on past a worktree's agents to the next worktree */
-.worktree-children .workspace-group:not(:last-child)::before {
-  position: absolute;
-  inset-block: 0;
-  left: calc(var(--side-box) / 2);
-  width: var(--hairline);
-  content: "";
-  background: var(--border-strong);
-  pointer-events: none;
-}
 
 .worktree-children .workspace-group > .workspace-header::after {
   top: 50%;

@@ -127,7 +127,7 @@ const manifest: Shot[] = [];
 
 const WEB = panes.web;
 const workspaceRows = (page: Page): Locator => page.locator(".machine-list .workspace-group");
-const agentRows = (page: Page): Locator => page.locator(".workspace-agents .agent-item");
+const agentRows = (page: Page): Locator => page.locator(".agents-sidebar .agent-item");
 const filterInput = (page: Page): Locator => page.locator(".sidebar-filter-input");
 const clearButton = (page: Page): Locator => page.locator(".sidebar-filter-clear");
 
@@ -147,25 +147,27 @@ async function rosterView(page: Page) {
         nested: row.closest(".worktree-children") !== null,
         selected: row.classList.contains("is-selected"),
         context: row.classList.contains("is-filter-context"),
-        note: row.querySelector(":scope > .workspace-header .sidebar-filter-note")?.textContent ?? null,
+        note: row.querySelector(".sidebar-filter-note")?.textContent ?? null,
         folded: row.querySelector<HTMLElement>(":scope > .workspace-header .workspace-toggle")?.getAttribute("aria-expanded") === "false",
         foldCount: row.querySelector(".workspace-fold-count")?.textContent ?? null,
         draggable: row.querySelector<HTMLElement>(".workspace-select")?.getAttribute("draggable"),
         shortcuts: row.querySelector<HTMLElement>(".workspace-select")?.getAttribute("aria-keyshortcuts"),
       })),
     }));
-    const agents = [...document.querySelectorAll<HTMLElement>(".workspace-agents .agent-item")].map((row) => ({
+    const agents = [...document.querySelectorAll<HTMLElement>(".agents-sidebar .agent-item")].map((row) => ({
       machine: row.dataset["machine"] ?? "",
       pane: row.dataset["pane"] ?? "",
       title: row.querySelector(".agent-title")?.textContent ?? "",
+      pinned: row.closest(".agent-list-pinned") !== null,
       selected: row.classList.contains("is-selected"),
       context: row.classList.contains("is-filter-context"),
       offline: row.classList.contains("is-offline"),
       note: row.querySelector(".sidebar-filter-note")?.textContent ?? null,
-      // drawn, not only in the document: a folded PC or repository keeps its agent rows hidden
+      // drawn, not only in the document: a folded Agents list keeps its rows hidden
       visible: row.getClientRects().length > 0,
     }));
-    return { groups, agents, empty: document.querySelector(".sidebar-filter-empty")?.textContent ?? null, selectedPane: (document.querySelector<HTMLElement>('.workspace-select[aria-current="true"]') ?? document.querySelector<HTMLElement>('.agent-select[aria-current="true"]')?.closest<HTMLElement>(".agent-item"))?.dataset["pane"] ?? null, activeIsFilter: document.activeElement?.classList.contains("sidebar-filter-input") ?? false };
+    const agentsExpanded = document.querySelector(".agent-section-toggle")?.getAttribute("aria-expanded") === "true";
+    return { groups, agents, agentsExpanded, empty: document.querySelector(".sidebar-filter-empty")?.textContent ?? null, selectedPane: document.querySelector<HTMLElement>('.workspace-select[aria-current="true"]')?.dataset["pane"] ?? null, activeIsFilter: document.activeElement?.classList.contains("sidebar-filter-input") ?? false };
   });
 }
 
@@ -205,14 +207,14 @@ async function closeDrawer(page: Page, language: Language = "en"): Promise<void>
 
 const shownIds = (page: Page) => page.evaluate(() => ({
   ids: [...document.querySelectorAll<HTMLElement>(".machine-list .workspace-group")].filter((row) => !row.closest("[hidden]")).map((row) => row.dataset["workspace"]),
-  agents: [...document.querySelectorAll<HTMLElement>(".workspace-agents .agent-item")].map((row) => `${row.dataset["machine"]}:${row.dataset["pane"]}`),
+  agents: [...document.querySelectorAll<HTMLElement>(".agents-sidebar .agent-item")].map((row) => `${row.dataset["machine"]}:${row.dataset["pane"]}`),
 }));
 
 async function waitWorkspaceIds(page: Page, predicate: string): Promise<void> {
   try {
     await page.waitForFunction((body) => {
       const ids = [...document.querySelectorAll<HTMLElement>(".machine-list .workspace-group")].filter((row) => !row.closest("[hidden]")).map((row) => row.dataset["workspace"]);
-      const agents = [...document.querySelectorAll<HTMLElement>(".workspace-agents .agent-item")].map((row) => `${row.dataset["machine"]}:${row.dataset["pane"]}`);
+      const agents = [...document.querySelectorAll<HTMLElement>(".agents-sidebar .agent-item")].map((row) => `${row.dataset["machine"]}:${row.dataset["pane"]}`);
       return new Function("ids", "agents", `return ${body};`)(ids, agents);
     }, predicate, { timeout: 10_000 });
   } catch (error) {
@@ -327,7 +329,7 @@ async function measure(page: Page): Promise<Record<string, unknown>> {
       inputEdge: edge(input),
       // the roster's own rows and states, as they were before the filter (visual/out-of-scope.md)
       rosterWorkspace: text(document.querySelector(".machine-group:not([hidden]) .workspace-group > .workspace-header .workspace-name")),
-      rosterAgent: text(document.querySelector(".workspace-agents .agent-item .agent-title")),
+      rosterAgent: text(document.querySelector(".agents-sidebar .agent-item .agent-title")),
       offlineWorkspace: text(document.querySelector(".machine-group.is-offline:not([hidden]) .workspace-name")),
       offlineAgent: text(document.querySelector(".agent-item.is-offline .agent-title")),
       noSavedSessions: text(document.querySelector(".machine-group:not([hidden]) .machine-empty")),
@@ -436,13 +438,14 @@ async function pressClear(page: Page, scene: Scene): Promise<void> {
 
 async function happyPath(browser: Browser, scene: Scene): Promise<void> {
   const name = `${scene.phone ? "phone" : "desktop"} ${scene.theme}`;
-  const pins = JSON.stringify([`local:workspace:w1H`]);
+  const pins = JSON.stringify([`local:workspace:w1H`, `build:${panes.omp}`]);
   const { context, page, errors } = await newPage(browser, scene, `pane=${encodeURIComponent(WEB)}`, { "ovis:sidebar-agent-pins": pins });
   try {
     const before = await rosterView(page);
     const storageBefore = await storageView(page);
     assert.equal(before.groups.map((group) => group.name).join(","), "Laptop,Build PC", `${name}: two connected PCs`);
     assert.ok(before.groups[0]!.workspaces.some((row) => row.id === "w1H" && row.pinned), `${name}: the flaky worktree is pinned on the laptop`);
+    assert.ok(before.agents.some((row) => row.machine === "build" && row.pane === panes.omp && row.pinned), `${name}: the build PC's omp agent is pinned`);
     assert.equal(before.selectedPane, WEB, `${name}: the web pane is selected`);
     await capture(page, scene, "rest");
     report(`measurements-rest-${scene.phone ? 390 : 1440}-${scene.theme}`, await measure(page));
@@ -463,16 +466,16 @@ async function happyPath(browser: Browser, scene: Scene): Promise<void> {
     const laptop = during.groups[0]!, build = during.groups[1]!;
     assert.equal(laptop.name, "Laptop"); assert.equal(build.name, "Build PC");
     // the laptop: the pinned flaky worktree stays in its card, then the repository head as context over the selected worktree;
-    // the build PC: its head as context over its matching worktree. Agents sit under their workspace, so the pinned
-    // flaky worktree's comes first.
-    assert.deepEqual(laptop.workspaces.map((row) => [row.id, row.pinned, row.nested, row.context, row.note]), [["w1H", true, false, false, null], ["w1C", false, false, true, null], ["w1D", false, true, true, null]], `${name}: laptop rows under the filter`);
+    // the build PC: its head as context over its matching worktree. The pinned build agent is no match and waits.
+    assert.deepEqual(laptop.workspaces.map((row) => [row.id, row.pinned, row.nested, row.context, row.note]), [["w1H", true, false, false, null], ["w1C", false, false, true, null], ["w1D", false, true, true, "Selected"]], `${name}: laptop rows under the filter`);
     assert.deepEqual(build.workspaces.map((row) => [row.id, row.nested, row.context]), [["w1C", false, true], ["w1H", true, false]], `${name}: build PC rows under the filter`);
-    assert.deepEqual(during.agents.map((row) => [row.machine, row.pane, row.context, row.note]), [["local", panes.flaky, false, null], ["local", WEB, true, "Selected"], ["build", panes.flaky, false, null]], `${name}: agent rows under the filter`);
+    assert.deepEqual(during.agents.map((row) => [row.machine, row.pane, row.pinned, row.context, row.note]), [["local", WEB, false, true, "Selected"], ["local", panes.flaky, false, false, null], ["build", panes.flaky, false, false, null]], `${name}: agent rows under the filter`);
     assert.ok(subsequence(laptop.workspaces.filter((row) => !row.pinned).map((row) => row.id), before.groups[0]!.workspaces.filter((row) => !row.pinned).map((row) => row.id)), `${name}: laptop rows keep their order`);
     assert.ok(subsequence(during.agents.map((row) => `${row.machine}:${row.pane}`), before.agents.map((row) => `${row.machine}:${row.pane}`)), `${name}: agent rows keep their order`);
     assert.ok(laptop.workspaces.every((row) => row.draggable !== "true" && row.shortcuts === null), `${name}: no row can be moved while the filter is on`);
-    // the rows kept are drawn, not only kept
-    assert.ok(during.agents.every((row) => row.visible), `${name}: every kept agent row is visible: ${JSON.stringify(during.agents)}`);
+    // the rows kept are drawn, not only kept: a phone's folded Agents list opens for the filter's time
+    assert.ok(during.agentsExpanded && during.agents.every((row) => row.visible), `${name}: every kept agent row is visible: ${JSON.stringify(during.agents)}`);
+    if (scene.phone) assert.equal(before.agentsExpanded, false, `${name}: a phone's Agents list starts folded`);
     assert.equal(await pickerArrowDrawn(page), false, `${name}: the browser's suggestions arrow is not drawn beside the clear`);
     await capture(page, scene, "typing");
     const measured = await measure(page);
@@ -536,9 +539,9 @@ async function selectedNonMatch(browser: Browser, scene: Scene): Promise<void> {
     const during = await rosterView(page);
     assert.equal(during.empty, scene.language === "ko" ? "일치하는 워크스페이스나 에이전트가 없습니다\n다른 단어로 찾거나 필터를 지우세요." : "No workspaces or agents match\nTry other words, or clear the filter.", `${name}: the lists say nothing matched`);
     assert.deepEqual(during.groups.map((group) => [group.name, group.context]), [["Laptop", true]], `${name}: only the selected PC stays, as context`);
-    assert.deepEqual(during.groups[0]!.workspaces.map((row) => [row.id, row.nested, row.selected, row.context, row.note]), [["w1C", false, false, true, null], ["w1D", true, false, true, null]], `${name}: the selected agent's worktree and its head stay, as context`);
+    assert.deepEqual(during.groups[0]!.workspaces.map((row) => [row.id, row.nested, row.selected, row.context, row.note]), [["w1C", false, false, true, null], ["w1D", true, true, true, scene.language === "ko" ? "선택됨" : "Selected"]], `${name}: the selected worktree and its head stay, the selected one said in words`);
     assert.deepEqual(during.agents.map((row) => [row.pane, row.selected, row.context, row.note, row.visible]), [[WEB, true, true, scene.language === "ko" ? "선택됨" : "Selected", true]], `${name}: the selected agent row stays, said in words, and is drawn`);
-    assert.ok(await page.locator('.workspace-group[data-workspace="w1D"] > .workspace-header').evaluate((row) => row.getClientRects().length > 0), `${name}: the selected agent's workspace row is drawn`);
+    assert.ok(await page.locator(".workspace-group.is-selected").evaluate((row) => row.getClientRects().length > 0), `${name}: the selected workspace row is drawn`);
     assert.equal(during.selectedPane, WEB, `${name}: the selection is unchanged`);
     assert.ok(during.activeIsFilter, `${name}: the focus stays in the field`);
     assert.ok(during.groups[0]!.workspaces[0]!.folded, `${name}: the fold itself is not written open`);
@@ -552,7 +555,7 @@ async function selectedNonMatch(browser: Browser, scene: Scene): Promise<void> {
     await waitWorkspaceIds(page, 'ids.join(",") === "w1C,w1D,w1H,w1C,w1H"');
     const revealed = await rosterView(page);
     assert.equal(revealed.groups[0]!.workspaces.find((row) => row.id === "w1C")!.folded, false, `${name}: a match in a folded group opens it for the filter's time`);
-    assert.deepEqual(revealed.agents.filter((row) => row.selected).map((row) => [row.pane, row.context, row.note]), [[WEB, true, scene.language === "ko" ? "선택됨" : "Selected"]], `${name}: among matches the selected non-match is said in words`);
+    assert.deepEqual(revealed.groups[0]!.workspaces.filter((row) => row.selected).map((row) => [row.id, row.context, row.note]), [["w1D", true, scene.language === "ko" ? "선택됨" : "Selected"]], `${name}: among matches the selected non-match is said in words`);
     if (scene.language === "ko") await capture(page, scene, "retained-selection");
     assert.deepEqual(await storageView(page), storageBefore, `${name}: the fold and everything else in storage stay as they were`);
     if (scene.phone) {
@@ -622,7 +625,7 @@ async function openWorktreeUnderFilter(browser: Browser, scene: Scene): Promise<
 
 async function liveOfflineRoster(browser: Browser, scene: Scene): Promise<void> {
   const name = `${scene.phone ? "phone" : "desktop"} ${scene.theme}`;
-  const pins = JSON.stringify([`local:workspace:w1K`]);
+  const pins = JSON.stringify([`local:workspace:w1K`, `build:${panes.omp}`]);
   const { context, page, errors } = await newPage(browser, scene, `pane=${encodeURIComponent(WEB)}&long=1&loading=1&error=1`, { "ovis:sidebar-agent-pins": pins });
   try {
     const before = await rosterView(page);
@@ -644,7 +647,8 @@ async function liveOfflineRoster(browser: Browser, scene: Scene): Promise<void> 
     const filtered = await rosterView(page);
     // a PC whose roster has not come cannot be searched: it stays, as context, saying its state
     assert.deepEqual(filtered.groups.map((group) => [group.name, group.context]), [["Laptop", false], ["Build PC", false], ["Old PC", true], ["Rack PC", true]], `${name}: the PCs that have not answered stay as context`);
-    assert.deepEqual(filtered.agents.map((row) => `${row.machine}:${row.pane}`), [`local:${panes.cli}`, `local:${WEB}`, `local:${panes.omp}`, `local:${panes.hermes}`, `build:${panes.omp}`, `build:${panes.cli}`, `build:${panes.hermes}`], `${name}: the selected agent and the agents of the matched repositories, under their workspaces`);
+    assert.ok(filtered.agents[0]!.machine === "build" && filtered.agents[0]!.pane === panes.omp && filtered.agents[0]!.pinned, `${name}: the pinned build agent keeps its card, first`);
+    assert.deepEqual(filtered.agents.map((row) => `${row.machine}:${row.pane}`), [`build:${panes.omp}`, `local:${WEB}`, `local:${panes.omp}`, `local:${panes.cli}`, `local:${panes.hermes}`, `build:${panes.cli}`, `build:${panes.hermes}`], `${name}: the selected agent and the agents of the matched repositories, in order`);
     await capture(page, scene, "retained-selection");
     await page.locator(".machine-group", { has: page.locator(".machine-name", { hasText: "Rack PC" }) }).scrollIntoViewIfNeeded();
     await capture(page, scene, "pending-pcs-filtered");
@@ -697,6 +701,11 @@ async function liveOfflineRoster(browser: Browser, scene: Scene): Promise<void> 
     // the pointer leaves the sidebar, so the scrolled ends show no hover
     if (!scene.phone) await page.mouse.move(1400, 880);
     await capture(page, scene, "list-end");
+    // the drawer's Agents list starts folded: open it for the eye, then scroll both lists to their ends
+    if (await page.locator(".agent-section-toggle[aria-expanded=\"false\"]").count() > 0) await page.locator(".agent-section-toggle").click();
+    await page.locator(".agent-list-contents:not([hidden]) .agent-item").first().waitFor();
+    await page.evaluate(() => { const list = document.querySelector<HTMLElement>(".agent-list-contents"); if (list) list.scrollTop = list.scrollHeight; });
+    await capture(page, scene, "agents-end");
     // a long unbroken query scrolls inside the field, which never grows
     const fieldBox = await input.boundingBox();
     await input.fill(LONG_LABEL + LONG_TITLE);
@@ -725,7 +734,7 @@ async function waitRoster(page: Page, what: string, predicate: (view: Awaited<Re
 /**
  * Folds and query transitions: a PC hidden by one query is found again by its branch in the next; a match under
  * a folded parent, or a parent's match, opens the fold; a folded selected PC opens for the selection; and while the
- * filter is on, the PC's and the worktrees' carets fold and open what is drawn, never the saved fold.
+ * filter is on, the PC's, the worktrees' and the Agents list's carets fold and open what is drawn, never the saved fold.
  */
 async function foldTransitions(browser: Browser, scene: Scene): Promise<void> {
   const name = `${scene.phone ? "phone" : "desktop"} ${scene.theme}`;
@@ -782,18 +791,23 @@ async function foldTransitions(browser: Browser, scene: Scene): Promise<void> {
       await input.fill("zzqx");
       const selection = await waitRoster(page, "the selected context under the folded laptop", (view) => view.empty !== null && (groupRows(view, "Laptop") ?? []).join(",") === "w1C,w1D");
       assert.equal(selection.groups[0]!.folded, false, `${name}: a folded PC opens for the selection it holds`);
-      assert.ok(await page.locator(".agent-item.is-selected").evaluate((row) => row.getClientRects().length > 0), `${name}: the selected agent is drawn`);
+      assert.ok(await page.locator(".workspace-group.is-selected").evaluate((row) => row.getClientRects().length > 0), `${name}: the selected workspace is drawn`);
       await input.fill("flaky");
       const matched = await waitRoster(page, "flaky under the laptop", (view) => (groupRows(view, "Laptop") ?? []).includes("w1H"));
       await machineGroup(page, "Laptop").locator(".machine-toggle").click();
       const caretFolded = await waitRoster(page, "the laptop folded by its caret", (view) => view.groups[0]!.folded && view.groups[0]!.workspaces.length === 0);
       await machineGroup(page, "Laptop").locator(".machine-toggle").click();
       const caretOpened = await waitRoster(page, "the laptop opened by its caret", (view) => !view.groups[0]!.folded && (groupRows(view, "Laptop") ?? []).includes("w1H"));
+      // the Agents list's caret folds it for the filter's time as well
+      await page.locator(".agent-section-toggle").click();
+      const agentsFolded = await waitRoster(page, "the Agents list folded", (view) => !view.agentsExpanded && view.agents.every((row) => !row.visible));
+      await page.locator(".agent-section-toggle").click();
+      await waitRoster(page, "the Agents list open", (view) => view.agentsExpanded && view.agents.every((row) => row.visible));
       assert.deepEqual(await folds(), foldsBefore, `${name}: no caret under the filter wrote a fold`);
       await clearButton(page).click();
       const cleared = await waitRoster(page, "the saved PC fold back", (view) => view.groups.length === 2 && view.groups[0]!.folded);
       assert.deepEqual(cleared, { ...rest, activeIsFilter: true }, `${name}: clearing brings every saved fold back`);
-      results["foldedSelectedPc"] = { rest, selection, matched, caretFolded, caretOpened, cleared };
+      results["foldedSelectedPc"] = { rest, selection, matched, caretFolded, caretOpened, agentsFolded, cleared };
       assert.deepEqual(errors, [], `${name}: no uncaught browser errors`);
     } finally { await context.close(); }
   }

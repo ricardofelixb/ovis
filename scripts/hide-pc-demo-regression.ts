@@ -11,7 +11,7 @@ import { openSettingsPage } from "./settings-page.ts";
 // Settings → Remote PCs → Show in sidebar on the unmodified app over the demo's fixture transport,
 // at a phone's and a desktop's width. Only this disposable fixture rewrites the roster into two
 // connected PCs, the Host "Laptop" and "Work PC"; no herdr session is opened. Hiding Work PC takes
-// it out of the sidebar with its agents and the command palette on this device, moves the
+// it out of the sidebar, the Agents list and the command palette on this device, moves the
 // selection off it, keeps the last PC shown, survives a reload, and leaves a link to its pane
 // working; the sidebar's note brings it back. Screenshots go to UI_EVIDENCE_DIR when it is set.
 const app = mkdtempSync(join(tmpdir(), "herdr-hide-pc-demo-"));
@@ -134,7 +134,7 @@ try {
           assert.equal(await page.locator(".machine-context-name").first().innerText(), "Laptop");
           await sidebar(page, phone);
           assert.equal(await workGroup(page).count(), 0, "a hidden PC leaves the sidebar");
-          assert.equal(await page.locator('.agent-item[data-machine="work"]').count(), 0, "and its agents with it");
+          assert.equal(await page.locator('.agent-item[data-machine="work"]').count(), 0, "and the Agents list");
           assert.ok(await page.locator('.agent-item[data-machine="local"]').count() > 0);
           assert.equal(await page.locator(".machine-hidden-note").innerText(), "1 PC hidden on this device");
           if (evidence) { await still(page); await page.screenshot({ path: join(evidence, `hide-pc-sidebar-${width}.png`) }); }

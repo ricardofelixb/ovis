@@ -5,7 +5,7 @@ import { translate } from "./i18n.ts";
 import { matchesQuery } from "./paletteSearch.ts";
 import { filterSuggestions, filterWorkspaceGroups, machineFilter, paneLabels, sidebarFilter, workspaceLabels } from "./sidebarFilter.ts";
 import { sidebarAgents } from "./sidebarAgents.ts";
-import { splitPinnedGroups } from "./sidebarPins.ts";
+import { splitPinnedGroups, splitPinnedRows } from "./sidebarPins.ts";
 import { worktreeGroups } from "./workspaceOrder.ts";
 
 const t = (key: string, vars?: Record<string, string | number>) => translate("en", key, vars);
@@ -147,10 +147,13 @@ describe("sidebarFilter", () => {
     const narrower = machineFilter(sidebarFilter("guard", roster, nobody, t), "local")!.workspaces;
     expect(filterWorkspaceGroups(pinned.pinned, narrower)).toEqual([]);
     expect(filterWorkspaceGroups(pinned.rest, narrower).map((group) => [group.workspace.workspace_id, group.children.map((child) => child.workspace_id)])).toEqual([["api", ["guard"]]]);
-    // agent rows keep every PC's order
+    // agent rows keep every PC's order and the pin order among them
     const rows = roster.flatMap((machine) => sidebarAgents(machine.snapshot).map((entry) => ({ machine, entry })));
     const keptRows = rows.filter(({ machine, entry }) => machineFilter(filter, machine.id)!.panes.has(entry.pane.pane_id));
     expect(keptRows.map(({ machine, entry }) => `${machine.id}:${entry.pane.pane_id}`)).toEqual(["local:api:p1", "local:guard:p1", "local:flaky:p1", "local:docs:p1", "build:pay:p1"]);
+    const split = splitPinnedRows(keptRows, ["build:pay:p1", "local:flaky:p1"], ({ machine, entry }) => `${machine.id}:${entry.pane.pane_id}`);
+    expect(split.pinned.map(({ entry }) => entry.pane.pane_id)).toEqual(["pay:p1", "flaky:p1"]);
+    expect(split.rest.map(({ entry }) => entry.pane.pane_id)).toEqual(["api:p1", "guard:p1", "docs:p1"]);
   });
 
   it("retains selected nonmatch and ancestors", () => {
