@@ -302,7 +302,6 @@ try {
   // pointer move still does.
   await page.setViewportSize({ width: 1280, height: 400 });
   await openPalette();
-  const restingOptionCount = await palette.getByRole("option").count();
   const firstOption = (await palette.locator("#palette-item-0").boundingBox())!;
   await page.mouse.move(firstOption.x + firstOption.width / 2, firstOption.y + firstOption.height / 2);
   await until(async () => await paletteSearch.getAttribute("aria-activedescendant") === "palette-item-0", "the resting pointer is over the first option");
@@ -314,7 +313,8 @@ try {
   await paletteSearch.press("ArrowUp");
   await until(async () => await page.evaluate(() => (window as unknown as { paletteHovered: string[] }).paletteHovered.some((id) => id !== "" && id !== "palette-item-0")),
     "the scroll moves another option under the resting pointer");
-  assert.equal(await paletteSearch.getAttribute("aria-activedescendant"), `palette-item-${restingOptionCount - 1}`,
+  // ArrowUp wrapped to the last option, read now: the list may have grown since it opened
+  assert.equal(await paletteSearch.getAttribute("aria-activedescendant"), await palette.getByRole("option").last().getAttribute("id"),
     "a scroll under a resting pointer leaves the arrow's selection alone");
   const hoveredId = await page.evaluate(() => (window as unknown as { paletteHovered: string[] }).paletteHovered.findLast((id) => id !== "")!);
   const hoveredBox = (await palette.locator(`#${hoveredId}`).boundingBox())!;
@@ -494,8 +494,9 @@ try {
   for (const peer of ["working", "done", "blocked", "idle"] as const) {
     backgroundPeer = peer;
     await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
-    const expected = peer === "idle" ? "waiting" : peer;
-    await page.locator(`.tab-strip-tab[aria-selected="true"] .tab-strip-dot[data-status="${expected}"]`).waitFor();
+    // an agent's tab shows its friend, whose mood is the state: waiting, as working, moves it
+    const mood = peer === "done" ? "is-done" : peer === "blocked" ? "is-blocked" : "is-working";
+    await page.locator(`.tab-strip-tab[aria-selected="true"] .tab-strip-faces .agent-friend.${mood}`).waitFor();
   }
   backgroundPeer = null;
   await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
@@ -1940,7 +1941,7 @@ try {
   await tabSheet.waitFor();
   const touchTabItems = await tabSheet.locator(".row-sheet-item").allTextContents();
   assert.deepEqual(touchTabItems.slice(-6), ["Move tab left", "Move tab right", "Move to workspace…", "New tab with agent…", "Rename tab", "Close tab"], "a tab between siblings offers both adjacent moves on touch");
-  assert.ok(touchTabItems.includes("Rename pane") && touchTabItems.includes("Close pane"), "the touch menu carries the open pane's actions");
+  assert.ok(!touchTabItems.includes("Rename pane") && !touchTabItems.includes("Close pane"), "a one-pane tab's touch menu acts on the tab alone");
   await tabSheet.getByRole("button", { name: "Cancel", exact: true }).tap();
   await tabSheet.waitFor({ state: "detached" });
   if (tabPhoneEvidence) await tabPhoneEvidence.finish();
@@ -1949,7 +1950,7 @@ try {
   await until(async () => (await tabsInHerdr()).join() === "first,build", "the extra neighbour is closed again");
   // a tab whose agent is at work asks before it closes; a no leaves it
   await herdrRpc("pane.report_agent", { pane_id: createdTab.pane_id, source: "manual", agent: "codex", state: "working" });
-  await strip.locator('.tab-strip-dot[data-status="working"]').waitFor();
+  await strip.locator(".tab-strip-faces .agent-friend.is-working").waitFor();
   await strip.getByRole("tab", { name: "build", exact: true }).click({ button: "right" });
   await page.getByRole("menu", { name: "build", exact: true }).getByRole("menuitem", { name: "Close tab", exact: true }).click();
   const closeTabDialog = page.getByRole("alertdialog", { name: "Close tab build?", exact: true });
@@ -1959,7 +1960,7 @@ try {
   assert.equal((await tabsInHerdr()).join(), "first,build");
   // A tab whose agent has finished closes at once from its menu, and the tab beside it opens.
   await herdrRpc("pane.report_agent", { pane_id: createdTab.pane_id, source: "manual", agent: "codex", state: "idle" });
-  await strip.locator('.tab-strip-dot[data-status="working"]').waitFor({ state: "detached" });
+  await strip.locator(".tab-strip-faces .agent-friend.is-working").waitFor({ state: "detached" });
   await herdrRpc("tab.create", { workspace_id: created.workspace_id, label: "third", focus: false });
   const third = strip.getByRole("tab", { name: "third", exact: true });
   await third.click();
