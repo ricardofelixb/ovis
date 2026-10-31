@@ -45,7 +45,7 @@ import { MachineDialog } from "./components/MachineDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./components/RowMenu.tsx";
 import { ViewMenu } from "./components/ViewMenu.tsx";
 import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
-import { LOCAL_MACHINE, paneStorageId } from "../shared/machines.ts";
+import { paneStorageId } from "../shared/machines.ts";
 import { usePairedNotices } from "./lib/usePairedNotices.ts";
 import { takeAuthTokenFromUrl } from "./lib/authLink.ts";
 import { rosterPanes } from "./lib/dagPane.ts";
@@ -73,8 +73,7 @@ import { FilesDialog } from "./components/FilesDialog.tsx";
 import { folderQueryFor } from "./lib/paletteFolders.ts";
 import { FileViewer } from "./components/FileViewer.tsx";
 import { WebPanel } from "./components/WebPanel.tsx";
-import { remotePcUrl, WebPanelContext, type WebPanelOpener } from "./lib/webPanel.ts";
-import { openWebLink } from "./lib/terminalFileLinks.ts";
+import { usePaneLinkOpener, WebPanelContext } from "./lib/webPanel.ts";
 import { RepoDiffViewer } from "./components/RepoDiffViewer.tsx";
 import { OpenFileContext } from "./lib/filePaths.ts";
 import { useAccessState, useLockedRef, usePairFromAddress } from "./lib/useAccess.ts";
@@ -218,13 +217,7 @@ export function App() {
   // the pane canvas's actions, for the phone's tab menu (TabStrip)
   const paneActionsRef = useRef<((target: HerdrPane) => RowMenuItem[]) | null>(null);
   const { filesOpen, setFilesOpen, viewing, openFile, closeFile, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, closeWebPage, openWebPage, openDiffFile, reportFileKind, toggleFilePresentation, viewFile } = useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId });
-  // a remote PC's localhost link opens on that PC's SSH host, in a tab: the panel frames only this app's own PC
-  const openPaneLink = useCallback<WebPanelOpener>((uri, shiftKey, machineId) => {
-    const remote = machineId === LOCAL_MACHINE ? null : remotePcUrl(uri, machines.find((item) => item.id === machineId)?.target?.destination);
-    if (remote === null) return openWebPage(uri, shiftKey, machineId);
-    openWebLink(remote);
-    return true;
-  }, [machines, openWebPage]);
+  const openPaneLink = usePaneLinkOpener(machines, openWebPage);
   const { settingsOpen, setSettingsOpen, settingsLinkPage, setSettingsLinkPage, settingsLinkSection, settingsPage, settingsSection, setSettingsSection, closeSettings, onSettingsPage } = useSettingsDialog(initialLink);
   const { newSessionOpen, setNewSessionOpen, newPrefill, setNewPrefill, newFields, setNewFields, pendingCreate, newTab, setNewTab, sessionHistory, setSessionHistory } = useNewSessionState({ initialLink });
   const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped } = useConnectionChip();
