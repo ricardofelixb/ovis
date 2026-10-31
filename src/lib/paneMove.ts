@@ -7,14 +7,14 @@
  */
 import { paneStorageId } from "../../shared/machines.ts";
 import { composerDrafts, type ComposerDraftStore } from "./composerDraft.ts";
-import { paneLifetimes } from "./paneLifetime.ts";
+import { COMPUTER_PREFIX, paneLifetimes } from "./paneLifetime.ts";
 import { PANE_VIEW_KEY_PREFIX } from "./settings.ts";
 import { REPLY_COMMENTS_PREFIX, replyComments, type ReplyCommentStore } from "./replyComments.ts";
 import { readTerminalDraft, terminalDraftSending, writeTerminalDraft } from "./terminalDraft.ts";
 
 type KeyStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
-const CARRIED = ["ovis:terminal-draft:", PANE_VIEW_KEY_PREFIX];
+const CARRIED = ["ovis:terminal-draft:", PANE_VIEW_KEY_PREFIX, COMPUTER_PREFIX];
 
 export function carryPaneState(machineId: string, from: string, to: string, drafts: ComposerDraftStore = composerDrafts, storage: () => KeyStorage = () => paneLifetimes.paneStorage,
   comments: ReplyCommentStore = replyComments): void {

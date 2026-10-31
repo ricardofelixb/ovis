@@ -31,6 +31,9 @@ import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { useTabReorder } from "../lib/useTabReorder.ts";
 import { indicatorGlyph, paneStatus, rollupStatus } from "../lib/status.ts";
 import { useSettings } from "../lib/settings.ts";
+import { friendKey } from "../../shared/friends.ts";
+import { useFriends } from "../lib/friends.ts";
+import { AgentFriend } from "./AgentFriend.tsx";
 import { AgentMark } from "./AgentMark.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { displayPaneTitle } from "./Sidebar.tsx";
@@ -121,7 +124,14 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       move: paneDrag.move, back: paneDrag.back, drop: paneDrag.drop, cancel: paneDrag.cancel,
     } : undefined,
   });
-  const nameOf = (tab: HerdrTab): string => sent?.tabId === tab.tab_id ? sent.label : tabLabel(tab, t, tabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1);
+  const friends = useFriends();
+  // a tab herdr still names by its place says its one agent's title instead
+  const nameOf = (tab: HerdrTab): string => {
+    if (sent?.tabId === tab.tab_id) return sent.label;
+    const place = tabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1;
+    const agents = panesOf(tab).filter((pane) => pane.agent);
+    return customTabLabel(tab, place) ?? (agents.length === 1 ? displayPaneTitle(agents[0]!) : tabLabel(tab, t, place));
+  };
 
   useEffect(() => {
     // the pane each tab was last seen on, per PC: a tab clicked again opens where it was left
@@ -477,7 +487,16 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
                   // the middle button closes a tab, as it does a browser's
                   onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); requestClose(tab); } }}
                 >
-                  {(status === "working" || status === "blocked" || status === "waiting" || status === "done") && (settings.statusIndicators === "classic"
+                  {/* a tab's agents show as their friends, which move with their state; a split shows two */}
+                  {own.some((pane) => pane.agent) ? <span className={`tab-strip-faces${own.filter((pane) => pane.agent).length > 1 ? " is-split" : ""}`} aria-hidden="true">
+                    {own.filter((pane) => pane.agent).slice(0, 2).map((pane) => {
+                      const friend = friends[friendKey(machineId, pane.pane_id)];
+                      const paneState = paneStatus(pane as HerdrPane);
+                      return friend
+                        ? <AgentFriend key={pane.pane_id} friend={friend} agent={pane.agent!} status={paneState === "waiting" ? "working" : paneState === "unknown" ? undefined : paneState} />
+                        : <AgentMark key={pane.pane_id} agent={pane.agent!} size={16} />;
+                    })}
+                  </span> : (status === "working" || status === "blocked" || status === "waiting" || status === "done") && (settings.statusIndicators === "classic"
                     ? <span className="tab-strip-dot" data-status={status} aria-hidden="true" />
                     : <span className="tab-strip-dot tab-strip-glyph" data-status={status} aria-hidden="true">{indicatorGlyph(status, settings.statusIndicators)}</span>)}
                   <span className="tab-strip-label">{name}</span>

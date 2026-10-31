@@ -1521,3 +1521,39 @@
   white-space: nowrap;
   transform: translateX(-50%);
 }
+
+/* the workspace and branch over the message box, on the box's column, in under half its width */
+.composer-eyebrow {
+  flex: 0 0 auto;
+  width: min(calc(100% - 2 * var(--space-4)), var(--chat-w));
+  margin: 0 auto;
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.composer-eyebrow-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  max-width: 48%;
+  min-width: 0;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.composer-eyebrow-workspace {
+  flex: 0 1 auto;
+  min-width: 2em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+
+.composer-eyebrow-sep {
+  flex: 0 0 auto;
+}
+
+.composer-eyebrow .context-branch {
+  flex: 0 1 auto;
+}

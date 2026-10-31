@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { fontSettled } from "../lib/fontFamily.ts";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
@@ -74,6 +74,8 @@ import { useTypedKeys } from "../lib/useTypedKeys.ts";
 const PASTE_GUIDANCE_MS = 6000;
 
 export interface PaneTerminalProps {
+  /** over the message box: the pane's workspace and branch (ComposerEyebrow) */
+  eyebrow?: ReactNode;
   /** App's content lifetime, including the current finish identity. */
   presentationKey?: string;
   finishEpoch?: string;
@@ -152,6 +154,7 @@ export interface PaneTerminalProps {
 const heldRowNotes = new Map<string, { owner: string; id: string; text: string }>();
 
 export function PaneTerminal({
+  eyebrow,
   presentationKey,
   finishEpoch,
   finishId,
@@ -1309,6 +1312,7 @@ export function PaneTerminal({
       {presented && paneId !== null && chatMounted && <div className="prompt-dock" ref={setPromptDock} aria-live="polite" inert={peek !== null || undefined} />}
       {/* the composer belongs to the chat lens: in terminal mode the grid itself is
           the input surface (key bar included), so a second box would only duplicate it */}
+      {presented && paneId !== null && chatMounted && !secretActive && !observing && !ended && eyebrow}
       {presented && paneId !== null && chatMounted && !secretActive && !observing && !ended && (
         <Composer
           key={paneId}

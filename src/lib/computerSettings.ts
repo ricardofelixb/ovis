@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { paneStorageId } from "../../shared/machines.ts";
+import { COMPUTER_PREFIX, paneLifetimes } from "./paneLifetime.ts";
 
 /**
  * The Computer view's settings for one PC, kept in this browser only: a phone and a desktop want their own
@@ -84,11 +86,28 @@ export function viewerOptions(settings: ComputerSettings): Record<string, unknow
 }
 
 /**
- * Whether the Computer view is open, and whether it is kept connected out of sight: for the minutes its
- * settings give after it closes (2 by default), so coming back within them needs no new connection.
+ * Whether the selected pane is shown as its PC's desktop, a lens each pane remembers in this browser as it
+ * does Chat or Terminal (lib/usePaneLens.ts), and whether the view is kept connected out of sight: for
+ * the minutes its settings give after it closes (2 by default), so coming back within them, from this
+ * pane or another on Computer, needs no new connection.
  */
-export function useComputerView(machineId: string): [open: boolean, setOpen: (open: boolean) => void, kept: boolean] {
-  const [open, setOpen] = useState(false);
+export function useComputerView(machineId: string, paneId: string | null): [open: boolean, setOpen: (open: boolean) => void, kept: boolean] {
+  const key = paneId === null ? null : `${COMPUTER_PREFIX}${paneStorageId(machineId, paneId)}`;
+  // a pick this page made stands even where storage cannot be written
+  const [picks, setPicks] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const stored = (pane: string): boolean => {
+    try { return paneLifetimes.paneStorage.getItem(pane) === "1"; } catch { return false; }
+  };
+  const open = key !== null && (picks.get(key) ?? stored(key));
+  const setOpen = useCallback((next: boolean) => {
+    if (key === null) return;
+    setPicks((current) => current.get(key) === next ? current : new Map(current).set(key, next));
+    try {
+      if (next) paneLifetimes.paneStorage.setItem(key, "1"); else paneLifetimes.paneStorage.removeItem(key);
+    } catch {
+      /* private mode */
+    }
+  }, [key]);
   const [kept, setKept] = useState(false);
   useEffect(() => {
     if (open) {

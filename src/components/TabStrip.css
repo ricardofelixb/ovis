@@ -266,3 +266,28 @@
 }
 .tab-strip-item.is-drop-before::before { left: 0; }
 .tab-strip-item.is-drop-after::after { right: 0; }
+
+/* a tab's agents as their friends, in place of its status dot: a split's two sit overlapped */
+.tab-strip-faces {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.tab-strip-faces .agent-friend {
+  width: 18px;
+  height: 18px;
+}
+
+.tab-strip-faces .agent-friend-badge {
+  display: none;
+}
+
+.tab-strip-faces.is-split .agent-friend {
+  width: 15px;
+  height: 15px;
+}
+
+.tab-strip-faces.is-split > * + * {
+  margin-left: -4px;
+}
