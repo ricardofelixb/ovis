@@ -2033,32 +2033,40 @@ button {
   }
 }
 
-/* the open pane's lens: both icons in one button, the shown one lit (ViewToggle) */
-.view-toggle {
+/* the open pane's lens: its icon and a chevron, both lenses in its menu (ViewMenu) */
+.view-menu-button {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 2px;
   flex: 0 0 auto;
   height: var(--control-h);
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-1) 0 var(--space-2);
   border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-dim);
+  background: var(--accent-tint);
+  color: var(--accent);
   cursor: pointer;
 }
 
-.view-toggle svg {
+.view-menu-button svg {
   width: 16px;
   height: 16px;
 }
 
-.view-toggle svg.is-shown { color: var(--accent); }
+.view-menu-button .view-menu-chevron {
+  width: 12px;
+  height: 12px;
+  color: var(--text-dim);
+}
 
-.view-toggle[aria-disabled="true"] { cursor: default; }
+/* a PC's desktop covers the pane: the lens is not what shows */
+.view-menu-button[data-covered] {
+  background: transparent;
+  color: var(--text-dim);
+}
 
-.view-toggle:hover,
-.view-toggle:focus-visible {
+.view-menu-button:hover,
+.view-menu-button:focus-visible {
   border-color: var(--border-strong);
 }
 
@@ -2968,13 +2976,13 @@ button {
   }
 
   /* drawn at the bar's control height, tapped at the full target through an invisible expander */
-  .view-toggle {
+  .view-menu-button {
     position: relative;
     min-width: var(--touch-target-header);
     justify-content: center;
   }
 
-  .view-toggle::before {
+  .view-menu-button::before {
     content: "";
     position: absolute;
     inset: calc((var(--control-h) - var(--touch-target-header)) / 2) 0;

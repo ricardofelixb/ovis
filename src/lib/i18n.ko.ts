@@ -41,6 +41,7 @@ const BASE: Record<string, string> = {
   "Input line": "입력창",
   // ---- settings ----
   "Settings": "설정",
+  "View": "보기",
   "Chat": "채팅",
   "Agent default": "에이전트 기본값",
   "Phone & devices": "폰 및 기기",
@@ -82,6 +83,7 @@ const BASE: Record<string, string> = {
   "Chat transcript (⌘⇧J)": "채팅 기록 (⌘⇧J)",
   "Live terminal (⌘⇧J)": "실시간 터미널 (⌘⇧J)",
   "Live terminal: coming to Windows PCs once herdr can attach there": "실시간 터미널: herdr가 Windows에서 attach를 지원하면 열립니다",
+  "soon": "준비 중",
   "Terminal": "터미널",
   "This PC's desktop can't be shown.": "이 PC의 데스크톱을 표시할 수 없습니다.",
   "Full screen": "전체 화면",

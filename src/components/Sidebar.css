@@ -8,7 +8,7 @@
   --side-row-2: calc(var(--control-h) + var(--space-3));
   --side-action: var(--space-6);
   --side-hover: color-mix(in srgb, var(--bg-hover) 50%, var(--bg-panel));
-  --side-selected: var(--bg-hover);
+  --side-selected: color-mix(in srgb, var(--text) 6%, var(--bg-hover));
   display: flex;
   flex-direction: column;
   height: 100%;

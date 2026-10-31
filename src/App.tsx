@@ -40,7 +40,7 @@ import { FilePanelResizer } from "./components/FilePanelResizer.tsx";
 import { openPresentation } from "./lib/filePresentation.ts";
 import { MachineDialog } from "./components/MachineDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./components/RowMenu.tsx";
-import { ViewToggle } from "./components/ViewToggle.tsx";
+import { ViewMenu } from "./components/ViewMenu.tsx";
 import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
 import { paneStorageId } from "../shared/machines.ts";
 import { usePairedNotices } from "./lib/usePairedNotices.ts";
@@ -693,7 +693,7 @@ export function App() {
             a split view keeps each column's strip over its column */}
         {selectedPane && !splitOn && <div ref={setHeaderTabs} className="header-tabs" hidden={screenMachineId !== null} />}
         {screenMachineId !== null && <span className="machine-context-name header-screen-name">{machineName(screenMachineId)}</span>}
-        {selectedPane && <ViewToggle view={screenMachineId === null ? view : null} terminalAttach={terminalAttach}
+        {selectedPane && <ViewMenu view={view} covered={screenMachineId !== null} terminalAttach={terminalAttach}
           onPick={(next) => { setScreenMachineId(null); setView(next); setDrawerOpen(false); }} />}
         {selectedPane && wideScreen && (
           <>
