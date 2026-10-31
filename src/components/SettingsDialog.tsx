@@ -367,11 +367,14 @@ function AppearancePage() {
           {LANGUAGE_SETTINGS.map((language) => <option key={language} value={language}>{language === "system" ? t("System") : LANGUAGE_NAMES[language]}</option>)}
         </SettingsSelect>
       </SettingsRow>
-      <SettingsRow label={t("Sidebar rows")} description={t("Show each agent's details after its name, or on a line under it")} wide>
+      <SettingsRow label={t("Sidebar rows")} description={t("Name each workspace on one line, or show what its agent is doing with the workspace under it")} wide>
         <Segmented label={t("Sidebar rows")} value={settings.sidebarRows} onChange={(sidebarRows) => update({ sidebarRows })} options={[{ value: "one", label: t("One line") }, { value: "two", label: t("Two lines") }]} />
       </SettingsRow>
       <SettingsRow label={t("Sidebar filter")} description={t("Show the Filter field above the sidebar's lists on this device. When off, Filter workspaces and agents in the command palette opens it.")}>
         <Toggle label={t("Sidebar filter")} checked={settings.sidebarFilter} onChange={(sidebarFilter) => update({ sidebarFilter })} />
+      </SettingsRow>
+      <SettingsRow label={t("Agents order")} description={t("Activity keeps a waiting agent on top, then the one that changed last; herdr's own order is not changed")} wide>
+        <Segmented label={t("Agents order")} value={settings.agentOrder} onChange={(agentOrder) => update({ agentOrder })} options={[{ value: "workspace", label: t("Workspaces") }, { value: "activity", label: t("Activity") }]} />
       </SettingsRow>
       <SettingsRow label={t("Agent logos")} description={t("Draw each agent's logo in its brand colors, or without color")} wide>
         <Segmented label={t("Agent logos")} value={settings.agentMarks} onChange={(agentMarks) => update({ agentMarks })} options={[{ value: "color", label: t("Color") }, { value: "mono", label: t("Mono") }]} />
@@ -654,18 +657,18 @@ function VoicePage() {
 
       <SettingsGroup title={t("Read aloud")} section="read-aloud">
         <SettingsRow label={t("Voice")} description={t("The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.")} htmlFor="settings-speech-voice">
-          <select id="settings-speech-voice" className="select settings-select" value={settings.speechVoice} onChange={(event) => update({ speechVoice: event.target.value as SpeechVoice })}>
+          <SettingsSelect id="settings-speech-voice" value={settings.speechVoice} onChange={(event) => update({ speechVoice: event.target.value as SpeechVoice })}>
             {SPEECH_VOICES.map((voice) => <option key={voice} value={voice}>{`${voice.charAt(3).toUpperCase()}${voice.slice(4)} · ${voice.startsWith("a") ? t("American") : t("British")}`}</option>)}
-          </select>
+          </SettingsSelect>
         </SettingsRow>
       </SettingsGroup>
 
       <SettingsGroup title={t("Live voice")} section="live-voice">
         <SettingsRow label={t("Voice")} description={t("The voice of a live call with a Pi pane, from the next call on. Same as Pi uses the voice set in Pi's /openai-settings.")} htmlFor="settings-live-voice">
-          <select id="settings-live-voice" className="select settings-select" value={settings.liveVoice} onChange={(event) => update({ liveVoice: isPiVoice(event.target.value) ? event.target.value : "pi" })}>
+          <SettingsSelect id="settings-live-voice" value={settings.liveVoice} onChange={(event) => update({ liveVoice: isPiVoice(event.target.value) ? event.target.value : "pi" })}>
             <option value="pi">{t("Same as Pi")}</option>
             {PI_VOICES.map((voice) => <option key={voice} value={voice}>{`${voice.charAt(0).toUpperCase()}${voice.slice(1)}`}</option>)}
-          </select>
+          </SettingsSelect>
         </SettingsRow>
       </SettingsGroup>
 
@@ -928,7 +931,7 @@ function DevicesPage({ auth, security, onSignOut, onRevokedAll }: { auth: Health
 }
 
 /**
- * Which PCs this device shows in its sidebar and command palette, the Host first. The
+ * Which PCs this device shows in its sidebar, Agents list and command palette, the Host first. The
  * choice stays in this browser; the last PC shown cannot be hidden (lib/hiddenMachines.ts).
  */
 function SidebarPcsGroup({ machines }: { machines: readonly Machine[] }) {

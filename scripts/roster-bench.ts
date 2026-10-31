@@ -199,7 +199,7 @@ async function bench(): Promise<void> {
 
       const rows = (status: string | null) => page.evaluate(([ids, wanted]) => {
         let count = 0;
-        for (const row of document.querySelectorAll<HTMLElement>(".workspace-agents .agent-item[data-machine=\"local\"]")) {
+        for (const row of document.querySelectorAll<HTMLElement>(".agents-sidebar .agent-item[data-machine=\"local\"]")) {
           if (!(ids as string[]).includes(row.dataset["pane"] ?? "")) continue;
           if (wanted === null || row.querySelector(`.badge[data-status="${wanted}"]`)) count++;
         }

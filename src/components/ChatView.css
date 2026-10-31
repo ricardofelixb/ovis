@@ -746,7 +746,8 @@ ol.markdown-list {
 }
 
 .work-block-head,
-.work-row-head {
+.work-row-head,
+.work-run-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -764,13 +765,15 @@ ol.markdown-list {
 
 /* the header, its rows and the prose around them start on one line: the hover plate overhangs it */
 .work-block-head,
-.work-row-head {
+.work-row-head,
+.work-run-head {
   width: calc(100% + 2 * var(--space-1));
   margin-inline: calc(-1 * var(--space-1));
 }
 
 .work-block-head:hover,
-.work-row-head:hover {
+.work-row-head:hover,
+.work-run-head:hover {
   background: var(--bg-hover);
 }
 
@@ -955,7 +958,8 @@ ol.markdown-list {
   flex-direction: column;
 }
 
-.work-row-head {
+.work-row-head,
+.work-run-head {
   min-height: calc(var(--control-h) - var(--space-2));
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
@@ -1297,6 +1301,7 @@ ol.markdown-list {
 @media (pointer: coarse) {
   .work-block-head,
   .work-row-head,
+  .work-run-head,
   .chat-copy,
   .chat-bubble-fold,
   .markdown-code-copy,

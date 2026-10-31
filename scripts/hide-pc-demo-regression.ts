@@ -11,7 +11,7 @@ import { openSettingsPage } from "./settings-page.ts";
 // Settings → Remote PCs → Show in sidebar on the unmodified app over the demo's fixture transport,
 // at a phone's and a desktop's width. Only this disposable fixture rewrites the roster into two
 // connected PCs, the Host "Laptop" and "Work PC"; no herdr session is opened. Hiding Work PC takes
-// it out of the sidebar with its agents and the command palette on this device, moves the
+// it out of the sidebar, the Agents list and the command palette on this device, moves the
 // selection off it, keeps the last PC shown, survives a reload, and leaves a link to its pane
 // working; the sidebar's note brings it back. Screenshots go to UI_EVIDENCE_DIR when it is set.
 const app = mkdtempSync(join(tmpdir(), "herdr-hide-pc-demo-"));
@@ -129,12 +129,10 @@ try {
           // closing Settings steps back over its history entries, onto the one that named Work PC's pane:
           // once it has landed, the address says the pane picked meanwhile, not Work PC's
           await page.waitForFunction(() => !(history.state !== null && typeof history.state === "object" && "ovis:settings" in history.state) && !location.search.includes("machine=work"));
-          await page.locator(".machine-context-name").first().waitFor({ state: "attached" });
           assert.equal(await selection(page), "local", "the selection stays off the hidden PC after Settings closes");
-          assert.equal(await page.locator(".machine-context-name").first().innerText(), "Laptop");
           await sidebar(page, phone);
           assert.equal(await workGroup(page).count(), 0, "a hidden PC leaves the sidebar");
-          assert.equal(await page.locator('.agent-item[data-machine="work"]').count(), 0, "and its agents with it");
+          assert.equal(await page.locator('.agent-item[data-machine="work"]').count(), 0, "and the Agents list");
           assert.ok(await page.locator('.agent-item[data-machine="local"]').count() > 0);
           assert.equal(await page.locator(".machine-hidden-note").innerText(), "1 PC hidden on this device");
           if (evidence) { await still(page); await page.screenshot({ path: join(evidence, `hide-pc-sidebar-${width}.png`) }); }
@@ -157,7 +155,6 @@ try {
           await page.goto(`${origin}/?machine=work&pane=${pane}`);
           await page.locator(".conn-live").waitFor({ state: "attached" });
           await page.waitForFunction(() => JSON.parse(localStorage.getItem("ovis:selection") ?? "null")?.machine_id === "work");
-          await page.locator(".machine-context-name", { hasText: "Work PC" }).first().waitFor({ state: "attached" });
           assert.equal(await page.getByText("That link's PC is not set up here").count(), 0);
           assert.equal(await selection(page), "work");
           await sidebar(page, phone);

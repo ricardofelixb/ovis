@@ -33,7 +33,7 @@ const TEXT_MIN = 4.5;
 // the row as a pointer and the keyboard reach it, and the box its selection paints
 const ROW: Record<RowKind, { painted: string; target: string }> = {
   workspace: { painted: ".workspace-group.is-selected > .workspace-header", target: ".workspace-group.is-selected > .workspace-header > .workspace-select" },
-  agent: { painted: ".workspace-agents .agent-item.is-selected", target: ".workspace-agents .agent-item.is-selected > .agent-row" },
+  agent: { painted: ".agents-sidebar .agent-item.is-selected", target: ".agents-sidebar .agent-item.is-selected > .agent-row" },
 };
 
 interface Measurement {
@@ -192,22 +192,10 @@ async function enter(page: Page, kind: RowKind, state: State): Promise<Locator> 
   return painted;
 }
 
-/** each page's shell workspace, made through the demo's own API: every demo workspace runs an agent */
-const shells = new WeakMap<Page, string>();
-
-/** One row is selected at a time: an agent's, or the row of a workspace without one. */
-async function select(page: Page, kind: RowKind): Promise<void> {
-  if (await page.locator(ROW[kind].painted).count() === 0) {
-    if (kind === "agent") await page.locator(".workspace-agents .agent-row:enabled").first().click();
-    else {
-      if (!shells.has(page)) shells.set(page, await page.evaluate(async () => {
-        const response = await fetch("/api/workspace/create", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ label: "scratch", cwd: "/home/demo/scratch" }) });
-        return ((await response.json()) as { pane_id: string }).pane_id;
-      }));
-      await page.locator(`.workspace-select[data-pane="${shells.get(page)}"]`).click();
-    }
-  }
-  await page.locator(ROW[kind].painted).waitFor({ state: "attached" });
+async function selectRows(page: Page): Promise<void> {
+  if (await page.locator(ROW.agent.painted).count() === 0) await page.locator(".agents-sidebar .agent-row:enabled").first().click();
+  await page.locator(ROW.agent.painted).waitFor({ state: "attached" });
+  await page.locator(ROW.workspace.painted).waitFor({ state: "attached" });
 }
 
 async function open(browser: Browser, url: string, mode: Mode, phone: boolean): Promise<{ page: Page; errors: string[]; close(): Promise<void> }> {
@@ -222,7 +210,7 @@ async function open(browser: Browser, url: string, mode: Mode, phone: boolean): 
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(url);
   await page.locator(".conn-live").waitFor({ state: "attached" });
-  await page.locator(".workspace-agents .agent-item").first().waitFor({ state: "attached" });
+  await page.locator(".agents-sidebar .agent-item").first().waitFor({ state: "attached" });
   await page.evaluate(() => document.fonts.ready);
   return { page, errors, close: () => context.close() };
 }
@@ -241,10 +229,10 @@ const failures: string[] = [];
 async function measureMode(browser: Browser, url: string, mode: Mode): Promise<void> {
   const { page, errors, close } = await open(browser, url, mode, false);
   try {
+    await selectRows(page);
     for (const { id } of SUPPORTED_ENTRIES.filter((entry) => entry.mode === mode)) {
       await usePalette(page, id, mode);
       for (const kind of ["workspace", "agent"] as const) {
-        await select(page, kind);
         for (const state of ["selected", "selected+hover", "selected+focus"] as const) {
           const painted = await enter(page, kind, state);
           const measured = await painted.evaluate(measure, { target: ROW[kind].target, strokeMinPx: STROKE_MIN_PX });
@@ -270,8 +258,8 @@ async function measureForced(browser: Browser, url: string, mode: Mode): Promise
   try {
     await page.emulateMedia({ forcedColors: "active", colorScheme: mode });
     assert.ok(await page.evaluate(() => matchMedia("(forced-colors: active)").matches), `forced colors are active in ${mode}`);
+    await selectRows(page);
     for (const kind of ["workspace", "agent"] as const) {
-      await select(page, kind);
       for (const state of ["selected", "selected+hover", "selected+focus"] as const) {
         const painted = await enter(page, kind, state);
         const measured = await painted.evaluate(measure, { target: ROW[kind].target, strokeMinPx: STROKE_MIN_PX });
@@ -299,10 +287,16 @@ async function screenshots(browser: Browser, url: string, dir: string): Promise<
         await page.getByRole("button", { name: "Open workspace list", exact: true }).click();
         await page.locator(".sidebar.is-open").waitFor();
       }
-      await select(page, "agent");
+      await selectRows(page);
       if (phone && await page.locator(".sidebar.is-open").count() === 0) {
         await page.getByRole("button", { name: "Open workspace list", exact: true }).click();
         await page.locator(".sidebar.is-open").waitFor();
+      }
+      // a phone's drawer folds the Agents list by default: open it so the shot shows a selected agent row too
+      const agentsToggle = page.locator(".agent-section-toggle");
+      if (await agentsToggle.getAttribute("aria-expanded") === "false") {
+        await agentsToggle.click();
+        await page.locator(ROW.agent.painted).waitFor({ state: "visible" });
       }
       await page.locator(ROW.agent.painted).scrollIntoViewIfNeeded();
       await away(page);

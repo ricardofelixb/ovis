@@ -15,7 +15,7 @@ import { chromePath } from "./chrome-path.ts";
 import { contextMenuKey } from "./context-menu-key.ts";
 
 /**
- * An agent row's Mute alerts (#1052) on the unmodified app over the demo's fixture transport,
+ * The Agents list's Mute alerts (#1052) on the unmodified app over the demo's fixture transport,
  * with the shared preferences served by the real PreferenceStore (server/preferences.ts) through
  * this script's loopback server, so two tabs are two browsers of one server. Status events are
  * injected into the app's event stream, the tab's Notification and AudioContext are spies, and a
@@ -194,7 +194,7 @@ async function capture(page: Page, theme: string, language: string, state: strin
 
 // ---- the pages -----------------------------------------------------------------------------------
 
-const row = (page: Page, machineId: string, paneId: string) => page.locator(`.workspace-agents .agent-item[data-machine="${machineId}"][data-pane="${paneId}"]`);
+const row = (page: Page, machineId: string, paneId: string) => page.locator(`.agents-sidebar .agent-item[data-machine="${machineId}"][data-pane="${paneId}"]`);
 const status = (page: Page, machineId: string, paneId: string, value: string) => row(page, machineId, paneId).locator(`.sidebar-status[data-status="${value}"]`);
 const muteItem = (page: Page) => page.locator('.row-menu [role="menuitemcheckbox"], .row-sheet-item[aria-pressed]');
 const droplet = (page: Page) => page.locator(".droplet-card");
@@ -233,6 +233,8 @@ const getPreferences = (page: Page): Promise<SharedPreferences> => page.evaluate
 async function openDrawer(page: Page): Promise<void> {
   const toggle = page.locator('button[aria-controls="workspace-drawer"]');
   if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.tap();
+  const agents = page.locator(".agents-sidebar .agent-section-toggle");
+  if (await agents.getAttribute("aria-expanded") !== "true") await agents.tap();
 }
 
 /** opens the row's menu: a right-click on a desktop, the ⋯ and its sheet on a phone */
@@ -246,7 +248,7 @@ async function openMenu(page: Page, phone: boolean, machineId: string, paneId: s
     await target.locator(".agent-select").click({ button: "right" });
     await page.locator(".row-menu").waitFor();
   }
-  await page.locator('.row-menu [role^="menuitem"], .row-sheet-item').first().waitFor();
+  await page.locator('.row-menu [role="menuitem"], .row-sheet-item').first().waitFor();
 }
 
 async function closeMenu(page: Page): Promise<void> {
@@ -493,12 +495,10 @@ try {
         const context = await newContext(browser, false, {});
         const page = await openTab(context);
         assert.equal("muted_panes" in (await getPreferences(page)), false, "the older server's document has no list");
-        // with nothing to offer, the agent row has no menu
-        await row(page, "local", P).waitFor();
-        assert.equal(await row(page, "local", P).locator(".row-menu-toggle").count(), 0, "no Mute alerts on an older server");
-        // a change of something else (a workspace pin) goes out without a list
-        await page.locator(`.workspace-group[data-workspace="${P.split(":")[0]}"] > .workspace-header .workspace-select`).click({ button: "right" });
-        await page.locator('.row-menu [role="menuitem"]', { hasText: "Pin workspace" }).click();
+        await openMenu(page, false, "local", P);
+        assert.equal(await muteItem(page).count(), 0, "no Mute alerts on an older server");
+        // a change of something else (a pin) goes out without a list
+        await page.locator('.row-menu [role="menuitem"]', { hasText: "Pin agent" }).click();
         await storeHolds("the pin", (document) => (document.pins?.length ?? 0) > 0);
         assert.ok(fixture.puts.length > 0 && fixture.puts.every((body) => !("muted_panes" in body)), `no fabricated list was sent: ${JSON.stringify(fixture.puts)}`);
         assert.deepEqual(errorsOf(page), []);
@@ -599,7 +599,7 @@ try {
             // the offline PC's muted row at the list's bottom edge, with the rest of its rows still below
             await row(page, "pc-2", P).evaluate((item) => item.scrollIntoView({ block: "end" }));
             await capture(page, theme, language, "offline-pc");
-            await page.locator(".machine-list").evaluate((list) => { list.scrollTop = list.scrollHeight; });
+            await page.locator(".agents-sidebar .agent-list-contents").evaluate((list) => { list.scrollTop = list.scrollHeight; });
             await capture(page, theme, language, "list-end");
             // the alert of a pane that is not muted draws as before, over the muted roster
             await page.evaluate(() => window.muteFixture.roster({ secondPc: "connected" }));
@@ -631,11 +631,10 @@ try {
             // the roster before it is known, and with nothing in it
             await page.evaluate(() => window.muteFixture.roster({ secondPc: null, loading: true }));
             if (phone) await openDrawer(page);
-            await page.locator(".machine-list .workspace-group").first().waitFor({ state: "detached" });
-            const loadingWords = await page.locator(".machine-list .tree-state").first().textContent();
+            await page.locator(".agents-sidebar .agent-empty", { hasText: "Loading" }).waitFor();
             await capture(page, theme, language, "roster-loading");
             await page.evaluate(() => window.muteFixture.roster({ loading: false, empty: true }));
-            await page.waitForFunction((before) => { const state = document.querySelector(".machine-list .tree-state"); return state !== null && state.textContent !== before; }, loadingWords);
+            await page.locator(".agents-sidebar .agent-empty", { hasText: "No agents" }).waitFor();
             await capture(page, theme, language, "roster-empty");
           }
           assert.deepEqual(errorsOf(page), []);

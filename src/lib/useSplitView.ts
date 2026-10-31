@@ -2,7 +2,7 @@ import { type Dispatch, type DragEvent, type RefObject, type SetStateAction, use
 import type { HerdrPane, HerdrWorkspace } from "../../shared/protocol.ts";
 import { paneStorageId, type Machine } from "../../shared/machines.ts";
 import { fetchSession, type HealthInfo } from "./api.ts";
-import { activateColumn, closeColumn, columnsFit, dockPane, draggedPane, dropAt, inColumn, PANE_DRAG_TYPE, shownColumns, storedSplit, storeSplit, type SplitDrop, type SplitSlot, type SplitState, type SplitTarget } from "./split.ts";
+import { activateColumn, closeColumn, columnsFit, dockPane, draggedPane, dropAt, inColumn, PANE_DRAG_TYPE, sameTarget, shownColumns, storedSplit, storeSplit, type SplitDrop, type SplitSlot, type SplitState, type SplitTarget } from "./split.ts";
 import { paneDrag, type PaneDrag } from "./paneDrag.ts";
 import { columnPlaces, slideColumns } from "./columnMotion.ts";
 
@@ -294,9 +294,19 @@ export function useSplitLayout({ machines, split, wideScreen, selectedPaneId, se
   };
   /** A pane opened by a drop: the column under it, or a new one, shows it and is the active one; a
    *  pane another column shows moves with that column instead (lib/split.ts). */
+  /** The pane the one column keeps when the pane it shows is dragged to a column of its own: another
+   *  pane of that tab, so the tab stays beside it. A pane alone in its tab has nothing to leave. */
+  const leftBehind = (dragged: SplitTarget): SplitTarget | null => {
+    const active = current();
+    if (splitOn || !sameTarget(active, dragged)) return active;
+    const panes = machines.find((m) => m.id === dragged.machineId)?.snapshot?.panes ?? [];
+    const tab = panes.find((item) => item.pane_id === dragged.paneId)?.tab_id;
+    const other = panes.find((item) => item.tab_id === tab && item.pane_id !== dragged.paneId);
+    return other ? { machineId: dragged.machineId, paneId: other.pane_id } : active;
+  };
   const dock = (dragged: SplitTarget, drop: SplitDrop): void => {
     if (!wideScreen || selectedPaneId === null) return;
-    const result = dockPane(splitOn ? split : null, current(), dragged, drop, soloSlot, shown);
+    const result = dockPane(splitOn ? split : null, leftBehind(dragged), dragged, drop, soloSlot, shown);
     if (!result) return;
     applySplit(result.split, result.select, result.split.active);
     // a new column that needs the docked sidebar's room hides the sidebar, as its button would

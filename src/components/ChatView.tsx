@@ -721,7 +721,7 @@ function WorkRunRow({ paneId, run, work, stateKeyOf, live }: { paneId: string; r
   const counts = (list: RunCount[]) => list.map(({ name, count }) => `${name} ×${count}`).join(", ");
   const groupsShown = [["done", "✓", done], ["failed", "✗", failed], ["running", "•", running]] as const;
   return <div className="work-row work-run">
-    <button type="button" className="work-row-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+    <button type="button" className="work-run-head" aria-expanded={open} onClick={() => setOpen(!open)}>
       <span className="work-row-caret" aria-hidden="true">{open ? <ChevronDown /> : <ChevronRight />}</span>
       <span className="work-run-counts">{groupsShown.filter(([, , list]) => list.length > 0).map(([outcome, mark, list], index) =>
         <span key={outcome} className={`work-run-${outcome}`}>{index > 0 && " · "}<span className="work-run-mark">{mark}</span> {counts(list)}</span>)}</span>
@@ -2021,7 +2021,8 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     const heldInPlace = scrollingUp && !byReader && (shrankUnderView || distanceFromBottom <= LAYOUT_ALLOWANCE_PX);
     const leftEnd = scrollingUp && !heldInPlace;
     // Reaching the rounded endpoint clears reading intent unless still paging upward.
-    if ((!pagingAway.current || scrollingDown) && distanceFromBottom <= 1) pagingAway.current = false;
+    // After the reader opened a row, the list settling back onto the end is not them going back.
+    if ((!pagingAway.current || (scrollingDown && (byReader || !openedAway.current))) && distanceFromBottom <= 1) pagingAway.current = false;
     if (leftEnd && distanceFromBottom > allowance && stickToBottom.current) {
       pagingAway.current = true;
       dropPendingListScroll(timeline.current);

@@ -179,8 +179,9 @@ try {
         await page.locator(".conn-live").waitFor();
         if (width === 390) {
           await page.getByRole("button", { name: "Open workspace list", exact: true }).click();
+          await page.locator(".agents-sidebar .agent-section-toggle").click();
         }
-        const row = page.locator(`.workspace-agents .agent-item[data-pane="${paneId}"]`);
+        const row = page.locator(`.agents-sidebar .agent-item[data-pane="${paneId}"]`);
         const badge = row.getByTestId("plan-progress");
         await badge.waitFor({ state: "visible" });
         assert.equal(await badge.textContent(), "1/3");

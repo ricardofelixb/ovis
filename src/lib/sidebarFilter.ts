@@ -81,8 +81,7 @@ function nonblank(value: string | null | undefined): string | null {
 /**
  * The one title a pane's row shows for it: the name the user gave it, the agent's own title, herdr's
  * pane title, else the terminal's title shortened as the roster shortens a path (components/Sidebar.tsx
- * displayPaneTitle, AgentSidebar.tsx; a renamed tab can stand in for the agent's title there, and is
- * found as the tab). Only the first of them is on the row, so only it can be found;
+ * displayPaneTitle, AgentSidebar.tsx). Only the first of them is on the row, so only it can be found;
  * the id a nameless pane falls back to is not a name.
  */
 function shownPaneTitle(pane: HerdrPane, agentTitle: string | null | undefined): string | null {

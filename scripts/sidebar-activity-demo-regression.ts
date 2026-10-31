@@ -236,7 +236,7 @@ function installSidebarFixture(): void {
   };
 }
 
-// The sidebar's agent rows, their state and the workspace pins, on the unmodified app over the
+// Settings → Agents order (Activity) and the Agents list's pins, on the unmodified app over the
 // demo's fixture transport, whose agents carry herdr's state_change_seq and bump it on every state
 // change. The demo's Claude pane finishes by itself 4.5s in (site/demo/transport.ts), and a message
 // sent from a chat runs for 2.4s and then finishes. All files and HTTP traffic stay in this
@@ -248,7 +248,7 @@ const WEB = "Guard the export button";    // codex, blocked
 const INFRA = "Plan the config file";     // omp, idle: the agent a message is sent from
 const AGENTS_HERDR_ORDER = [API, WEB, "Fix the flaky retry test", INFRA, "Ship the retry flag", "Draft the changelog"];
 
-const agents = (page: Page) => page.locator(".workspace-agents .agent-item");
+const agents = (page: Page) => page.locator(".agents-sidebar .agent-item");
 const agentTitles = (page: Page) => agents(page).locator(".agent-title").allTextContents();
 const agent = (page: Page, title: string) => agents(page).filter({ has: page.locator(".agent-title", { hasText: title }) });
 /** waits until xterm has parsed the text and nothing is queued or in flight, so a later check cannot pass by timing */
@@ -259,6 +259,8 @@ const outputParsed = (page: Page, text: string) => page.waitForFunction((expecte
   return probe.written.includes(expected) && probe.inFlight === 0 && probe.queued === 0;
 }, text);
 const waitStatus = (page: Page, title: string, status: string) => agent(page, title).locator(`.sidebar-status[data-status="${status}"]`).waitFor({ timeout: 10_000 });
+const waitAgentAt = (page: Page, index: number, title: string) => page.waitForFunction(([at, name]) =>
+  [...document.querySelectorAll(".agents-sidebar .agent-item .agent-title")][at as number]?.textContent === name, [index, title] as const, { timeout: 5_000 });
 
 async function withPage(browser: Browser, settings: object, run: (page: Page) => Promise<void>, mobile = false): Promise<void> {
   const context = await browser.newContext({
@@ -619,12 +621,13 @@ try {
         await withPage(browser, {}, async (page) => {
           await page.goto(`${url}?pane=${encodeURIComponent(panes.omp)}&sidebar=shown`);
           await page.locator(".sidebar.is-open").waitFor();
+          await page.locator(".agents-sidebar .agent-section-toggle").tap();
           await page.evaluate((id) => window.sidebarFixture.finish(id, "working", 100), panes.omp);
           await waitStatus(page, INFRA, "working");
           await page.evaluate((id) => window.sidebarFixture.finish(id, "done", 101), panes.omp);
           await waitStatus(page, INFRA, "done");
-          assert.equal(await agent(page, INFRA).locator(".sidebar-status").getAttribute("data-status"), "done",
-            "a finish behind the phone drawer stays unread on its agent row");
+          assert.equal(await page.locator(`.workspace-select[data-pane="${panes.omp}"] .sidebar-status`).getAttribute("data-status"), "done",
+            "a finish behind the phone drawer stays unread in the workspace roll-up");
           assert.equal(await page.locator(".sidebar.is-open").count(), 1);
           const evidence = process.env["UI_EVIDENCE_DIR"];
           if (evidence) {
@@ -861,16 +864,16 @@ try {
       }
       if (!finishCase) {
       // Workspace menus no longer mix in pane operations; header More keeps pane movement.
-      // herdr's order, each agent under its workspace, which its row no longer names, with its row and its ⋯
+      // herdr's order in a flat list, each row naming its own workspace, with its row and its ⋯
       await withPage(browser, {}, async (page) => {
         assert.deepEqual(await agentTitles(page), AGENTS_HERDR_ORDER);
-        assert.equal(await page.locator(`.workspace-group[data-workspace="${panes.api.split(":")[0]}"] > .workspace-agents .agent-title`).textContent(), API, "an agent sits under its workspace");
-        assert.doesNotMatch((await agent(page, API).locator(".agent-context").allTextContents()).join(""), /checkout-api/, "its row does not repeat the workspace");
+        assert.match(await agent(page, API).locator(".agent-context").textContent() ?? "", /checkout-api/, "a row names its workspace");
         // a desktop draws no row ⋯: a right-click or the context-menu key opens the menu
         assert.equal(await agent(page, API).getByRole("button").count(), 1, "a desktop row is its selector alone");
         assert.equal(await page.locator(".row-menu-toggle:visible").count(), 0, "no row ⋯ on a desktop");
+        assert.equal(await page.locator(".agents-sidebar .agent-list-pinned").count(), 0, "no pinned list without pins");
       });
-      console.log("PASS agents sit under their workspaces in herdr's order, each row a selector with no ⋯ on a desktop");
+      console.log("PASS the Agents list is flat, in herdr's order, each row a selector with no ⋯ on a desktop");
 
       // a pane's plan: the composer's chip shows how far it got and opens its steps, as the background
       // tasks do; the header carries no plan of its own
@@ -996,14 +999,58 @@ try {
         assert.deepEqual(await workspaceTitles(), [infraName, ...herdrOrder.filter((title) => title !== infraName)], "the rest keep herdr's order");
         // it is moved within its card (the pin order), not out of it: workspace-touch-reorder-demo-regression.ts
         assert.equal(await infraWorkspace.getAttribute("draggable"), "true", "a pinned workspace can be dragged within its card");
-        assert.ok((await pins()).includes(`local:workspace:${await infraWorkspace.evaluate((row) => row.closest(".workspace-group")?.getAttribute("data-workspace"))}`), "the pin is saved");
+        assert.ok((await pins()).includes(`local:workspace:${await infraWorkspace.evaluate((row) => row.closest(".workspace-group")?.getAttribute("data-workspace"))}`), "the pin is saved with the agents'");
         await infraWorkspace.click({ button: "right" });
         await infraMenu.getByRole("menuitem", { name: "Unpin workspace", exact: true }).click();
         await pinnedWorkspaces.waitFor({ state: "detached" });
         assert.deepEqual(await workspaceTitles(), herdrOrder, "unpinned, it returns to herdr's order");
         const agentRow = agent(page, API);
         const agentSelect = agentRow.locator(".agent-select");
-        console.log("PASS workspace right-click scope, pointer anchor and focus; the context-menu key opens the same menu; a workspace pins into a card and returns to herdr's order");
+        // pin an agent that is not first from its right-click menu: it moves to the top, and nothing is selected
+        const infraSelect = agent(page, INFRA).locator(".agent-select");
+        await page.locator(".header-more-button").focus();
+        await infraSelect.click({ button: "right" });
+        const agentMenu = page.getByRole("menu", { name: INFRA, exact: true });
+        // Mute alerts joins once the mutes have loaded (pane-mute-demo-regression.ts): left out here
+        const agentMenuItems = async () => (await agentMenu.getByRole("menuitem").allTextContents()).filter((item) => item !== "Mute alerts" && item !== "Unmute alerts");
+        await agentMenu.waitFor();
+        assert.deepEqual(await agentMenuItems(), ["Pin agent", "Close pane"], "an agent's right-click menu offers its pin");
+        await agentMenu.getByRole("menuitem", { name: "Pin agent" }).click();
+        await page.waitForFunction((key) => JSON.parse(localStorage.getItem("ovis:sidebar-agent-pins") ?? "[]").includes(key), `local:${panes.omp}`);
+        assert.deepEqual(await agentTitles(page), [INFRA, ...AGENTS_HERDR_ORDER.filter((title) => title !== INFRA)], "a pinned agent moves to the top, the rest keep herdr's order");
+        assert.equal(await page.evaluate(() => sessionStorage.getItem("ovis:selection")), selected, "pinning does not select the agent");
+        assert.equal(await page.locator(".header-more-button").evaluate((button) => document.activeElement === button), true, "the menu hands focus back where it was");
+        await page.reload();
+        await page.locator(".conn-live").waitFor({ state: "attached" });
+        await agents(page).first().waitFor({ state: "attached" });
+        assert.equal((await agentTitles(page))[0], INFRA, "the pin survives a reload");
+        // the keyboard's context-menu key opens the same menu, now with Unpin
+        await infraSelect.focus();
+        await contextMenuKey(page);
+        await agentMenu.waitFor();
+        assert.deepEqual(await agentMenuItems(), ["Unpin agent", "Close pane"], "a pinned agent's menu offers Unpin");
+        // the menu focuses its first item on the next frame: Enter goes to it once it has the focus
+        await page.waitForFunction(() => document.activeElement?.textContent === "Unpin agent", undefined, { timeout: 5_000 });
+        await page.keyboard.press("Enter");
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem("ovis:sidebar-agent-pins") ?? "[]").length === 0);
+        assert.deepEqual(await pins(), []);
+        assert.deepEqual(await agentTitles(page), AGENTS_HERDR_ORDER, "unpin restores the source order");
+        assert.equal(await infraSelect.evaluate((button) => document.activeElement === button), true, "focus returns to the row as it moves back");
+        assert.equal(await page.locator(".row-menu, .row-sheet").count(), 0, "the menu closes after its item runs");
+        // pinned, an agent stands first, in a list named Pinned under the Agents head alone
+        await agentSelect.click({ button: "right" });
+        const apiMenu = page.getByRole("menu", { name: API, exact: true });
+        await apiMenu.waitFor();
+        await apiMenu.getByRole("menuitem", { name: "Pin agent" }).click();
+        await page.waitForFunction((key) => JSON.parse(localStorage.getItem("ovis:sidebar-agent-pins") ?? "[]").includes(key), `local:${panes.api}`);
+        assert.equal(await page.getByRole("list", { name: "Pinned", exact: true }).count(), 1, "the pinned list is named Pinned");
+        assert.deepEqual(await page.locator(".agents-sidebar .agent-list-pinned .agent-title").allTextContents(), [API], "the pinned list holds the pinned agent");
+        await agentSelect.click({ button: "right" });
+        await apiMenu.getByRole("menuitem", { name: "Unpin agent" }).click();
+        await page.waitForFunction(() => JSON.parse(localStorage.getItem("ovis:sidebar-agent-pins") ?? "[]").length === 0);
+        assert.equal(await page.locator(".agents-sidebar .agent-list-pinned").count(), 0, "the pinned list goes with the last pin");
+        assert.deepEqual(await agentTitles(page), AGENTS_HERDR_ORDER);
+        console.log("PASS workspace right-click scope, pointer anchor and focus; the context-menu key opens the same menu; a workspace pins into a card and returns to herdr's order; an agent pins and unpins from its right-click menu and the key");
         await waitStatus(page, API, "done");
         assert.deepEqual(await agentTitles(page), AGENTS_HERDR_ORDER, "a finish does not move an agent");
         await agentSelect.click();
@@ -1011,28 +1058,79 @@ try {
         assert.equal(await agentSelect.getAttribute("aria-current"), "true", "ordinary click still selects the agent");
         assert.equal(await page.locator(".row-menu, .row-sheet").count(), 0, "selecting the agent does not open a menu");
         await waitStatus(page, API, "idle");
-        assert.equal(await page.locator(`.workspace-select[data-pane="${panes.api}"] .sidebar-status`).count(), 0, "the workspace row leaves the state to its agent's row");
+        const rollUp = () => page.locator(`.workspace-select[data-pane="${panes.api}"] .sidebar-status`).getAttribute("data-status");
+        assert.notEqual(await rollUp(), "done", "the workspace row's roll-up drops the opened finish too");
         assert.deepEqual(await agentTitles(page), AGENTS_HERDR_ORDER, "reading a finish does not move an agent");
       });
-      console.log("PASS agent rows keep herdr's order through a finish, and an opened DONE reads as ready");
+      console.log("PASS the Agents list keeps herdr's order through a finish, and an opened DONE reads as ready");
 
       await withPage(browser, {}, async (page) => {
         const drawerToggle = page.locator('button[aria-controls="workspace-drawer"]');
         await drawerToggle.tap();
+        const agentToggle = page.locator(".agents-sidebar .agent-section-toggle");
+        assert.equal(await agentToggle.getAttribute("aria-expanded"), "false", "the phone's Agents section still starts folded");
+        await agentToggle.tap();
         const agentRow = agent(page, API);
         const agentSelect = agentRow.locator(".agent-select");
         await agentSelect.waitFor();
+        // the ⋯ shows on touch, where a long press opens no menu: its sheet pins the agent
+        const more = agentRow.getByRole("button", { name: `More for ${API}`, exact: true });
+        assert.ok(await more.isVisible(), "the ⋯ is visible on touch");
+        await more.tap();
+        const sheet = page.getByRole("dialog", { name: API, exact: true });
+        await sheet.waitFor();
+        await sheet.getByRole("button", { name: "Pin agent" }).tap();
+        await page.waitForFunction((key) => JSON.parse(localStorage.getItem("ovis:sidebar-agent-pins") ?? "[]").includes(key), `local:${panes.api}`);
+        await sheet.waitFor({ state: "detached" });
+        assert.deepEqual(await page.locator(".agents-sidebar .agent-list-pinned .agent-title").allTextContents(), [API], "the pinned row stands in the pinned list");
         await agentSelect.tap();
         await page.waitForFunction((paneId) => JSON.parse(sessionStorage.getItem("ovis:selection") ?? "{}").pane_id === paneId, panes.api, { timeout: 5_000 });
         assert.equal(await agentSelect.getAttribute("aria-current"), "true", "a tap still selects the agent");
         assert.equal(await page.locator(".row-menu, .row-sheet").count(), 0, "a tap opens no agent action sheet");
         assert.equal(await drawerToggle.getAttribute("aria-expanded"), "false", "selecting an agent closes the phone drawer");
       }, true);
-      console.log("PASS on a phone a tap on an agent row selects it and opens no menu");
+      console.log("PASS on a phone the ⋯ pins an agent from its sheet; a tap on the row selects it and opens no menu");
+
+      await withPage(browser, { agentOrder: "activity" }, async (page) => {
+        assert.equal((await agentTitles(page))[0], WEB, "the blocked agent is pinned on top");
+        assert.match(await agent(page, WEB).locator(".agent-context").textContent() ?? "", /export-guard/, "a row names its workspace");
+
+        // the demo's Claude pane finishes out of sight: it rises under the blocked one, and keeps its dot
+        await waitStatus(page, API, "done");
+        await waitAgentAt(page, 1, API);
+
+        // a message sent from an agent takes it to the top while it runs ...
+        await agent(page, INFRA).locator(".agent-select").click();
+        await page.locator(".composer-text").fill("Check the plan again");
+        await page.locator(".composer-text").press("Enter");
+        await waitStatus(page, INFRA, "working");
+        await waitAgentAt(page, 1, INFRA);
+        // ... and keeps it there when it finishes while another pane is open, with its dot
+        await page.locator(".machine-workspaces .workspace-select", { hasText: "flaky-retry-test" }).first().click();
+        await waitStatus(page, INFRA, "done");
+        assert.equal((await agentTitles(page))[1], INFRA, "the agent just worked in stays on top after it finishes");
+
+        // opening it here reads it: its DONE draws as ready, and stays so once another pane is open
+        // and after a reload (the record is this browser's)
+        await agent(page, INFRA).locator(".agent-select").click();
+        await page.waitForFunction((paneId) => JSON.parse(sessionStorage.getItem("ovis:selection") ?? "{}").pane_id === paneId, panes.omp, { timeout: 5_000 });
+        await waitStatus(page, INFRA, "idle");
+        assert.equal((await agentTitles(page))[1], INFRA, "reading a finish does not move it");
+        await page.locator(".machine-workspaces .workspace-select", { hasText: "flaky-retry-test" }).first().click();
+        await waitStatus(page, INFRA, "idle");
+        // a later finish not looked at gets its dot again
+        await agent(page, INFRA).locator(".agent-select").click();
+        await page.locator(".composer-text").fill("One more check");
+        await page.locator(".composer-text").press("Enter");
+        await waitStatus(page, INFRA, "working");
+        await page.locator(".machine-workspaces .workspace-select", { hasText: "flaky-retry-test" }).first().click();
+        await waitStatus(page, INFRA, "done");
+      });
+      console.log("PASS Activity pins blocked and follows recency; an opened DONE reads as ready after switching until the next finish");
 
       // the demo keeps its agent template after its last agent closes (#529 review): a workspace
       // made in an emptied demo still lists its agent with herdr's counter
-      await withPage(browser, {}, async (page) => {
+      await withPage(browser, { agentOrder: "activity" }, async (page) => {
         const made = await page.evaluate(async () => {
           const post = (path: string, body: object) => fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
           const session = async () => (await (await fetch("/api/session")).json()).snapshot as { workspaces: { workspace_id: string }[]; agents: { pane_id: string; state_change_seq?: number }[] };

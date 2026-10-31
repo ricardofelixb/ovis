@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { createServer } from "../server/index.ts";
 import { herdrRpc, sessionSnapshot, workspaceCreate, workspaceClose } from "../server/herdr/client.ts";
+import { openWorkRuns } from "./work-runs.ts";
 
 if (process.platform !== "linux") { console.log("SKIP Grok browser QA stand-in uses Linux /proc"); process.exit(0); }
 const root = mkdtempSync(join(tmpdir(), "herdr-grok-browser-"));
@@ -48,6 +49,7 @@ try {
   await log.getByText("Fictional Grok answer.", { exact: true }).waitFor();
   const head = log.locator(".work-block-head");
   if (await head.getAttribute("aria-expanded") !== "true") await head.click();
+  await openWorkRuns(log);
   await log.locator(".work-row-head").click();
   await log.locator(".chat-tool-more").click();
   await log.getByText(/FIRST_END/).waitFor();
@@ -77,7 +79,7 @@ try {
     assert.ok(box && box.y >= 0 && box.y + box.height <= viewport.height, "working status is visible above the composer");
     appendFileSync(path, event({ sessionUpdate: "tool_call", toolCallId: `activity-${promptIndex}`, title: `Activity tool ${promptIndex}`, rawInput: { path: "fiction.txt" } }));
     // a tool row opens the turn's work block, whose head says Working: the line under it goes
-    await log.locator(".work-block.is-live .work-row-head").last().waitFor({ state: "visible" });
+    await log.locator(".work-block.is-live .work-run-head").last().waitFor({ state: "visible" });
     await log.locator(".work-block.is-live .work-block-title", { hasText: "Working…" }).waitFor();
     await activity.waitFor({ state: "detached" });
     if (viewport.width === 390 && process.env.UI_EVIDENCE_DIR) {

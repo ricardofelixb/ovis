@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import type { ConversationTurn } from "../shared/protocol.ts";
 import type {} from "./chat-virtual-fixture.tsx";
+import { openWorkRuns } from "./work-runs.ts";
 
 const root = mkdtempSync(join(tmpdir(), "herdr-chat-virtual-"));
 const evidence = process.env.UI_EVIDENCE_DIR;
@@ -527,6 +528,7 @@ try {
     await reveal(page, "local E1 ROW-497");
     const work = page.locator("[data-chat-row]").filter({ hasText: "local E1 ROW-497" });
     await work.locator(".work-block-head").click();
+    await openWorkRuns(work);
     await work.locator(".work-row-head").click();
     // A click first scrolls its target into view, and rows above measured late can leave this button
     // just below the fold: that scroll is the click's, not the output's.
@@ -588,6 +590,7 @@ try {
       await reveal(page, "local E1 ROW-497");
       const retained = page.locator("[data-chat-row]").filter({ hasText: "local E1 ROW-497" });
       await retained.locator(".work-block-head").click();
+      await openWorkRuns(retained);
       await retained.locator(".work-row-head").click();
       const identity = await retained.getAttribute("data-chat-row");
       const selectedText = await retained.evaluate((row) => {

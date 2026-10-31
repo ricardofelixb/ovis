@@ -71,12 +71,12 @@ describe("shared preferences", () => {
     expect(first.status).toBe(200);
     expect(await first.json()).toEqual({ revision: 2, settings: { showThinking: false, theme: "light" }, pins: ["local:w1:p1", "pc:w2:p3"], muted_panes: [] });
     // a change lays its settings over what is held, and leaves the pins when it names none
-    await put(store, JSON.stringify({ settings: { agentMarks: "mono" } }));
-    expect(store.get()).toEqual({ revision: 3, settings: { showThinking: false, theme: "light", agentMarks: "mono" }, pins: ["local:w1:p1", "pc:w2:p3"], muted_panes: [] });
+    await put(store, JSON.stringify({ settings: { agentOrder: "activity" } }));
+    expect(store.get()).toEqual({ revision: 3, settings: { showThinking: false, theme: "light", agentOrder: "activity" }, pins: ["local:w1:p1", "pc:w2:p3"], muted_panes: [] });
     await put(store, JSON.stringify({ settings: { theme: "dark" }, pins: [] }));
     expect(heard).toEqual([1, 2, 3, 4]);
-    expect(JSON.parse(readFileSync(join(dir, "preferences.json"), "utf8"))).toMatchObject({ revision: 4, settings: { showThinking: false, theme: "dark", agentMarks: "mono" }, pins: [] });
-    expect(new PreferenceStore(dir).get()).toEqual({ revision: 4, settings: { showThinking: false, theme: "dark", agentMarks: "mono" }, pins: [], muted_panes: [] });
+    expect(JSON.parse(readFileSync(join(dir, "preferences.json"), "utf8"))).toMatchObject({ revision: 4, settings: { showThinking: false, theme: "dark", agentOrder: "activity" }, pins: [] });
+    expect(new PreferenceStore(dir).get()).toEqual({ revision: 4, settings: { showThinking: false, theme: "dark", agentOrder: "activity" }, pins: [], muted_panes: [] });
   });
 
   it("refuses what is not a preferences document", async () => {
@@ -224,7 +224,7 @@ describe("shared preferences", () => {
     expect((await put(store, JSON.stringify({ settings: { showThinking: false }, muted_panes: ["w1:p1"] }))).status).toBe(500);
     rmSync(blocker, { recursive: true });
     // the next save is laid over the repair, not over what memory held before it
-    expect(await (await put(store, JSON.stringify({ settings: { agentMarks: "mono" } }))).json()).toEqual({ revision: 6, settings: { theme: "light", agentMarks: "mono" }, pins: ["local:w1:p1"], muted_panes: [] });
+    expect(await (await put(store, JSON.stringify({ settings: { agentOrder: "activity" } }))).json()).toEqual({ revision: 6, settings: { theme: "light", agentOrder: "activity" }, pins: ["local:w1:p1"], muted_panes: [] });
   });
 
   it("absent field does not clear mutes", async () => {
@@ -276,7 +276,7 @@ describe("a damaged preferences file", () => {
     expect(readFileSync(bad(dir))).toEqual(current);
     expectPrivate(bad(dir));
     expect(new PreferenceStore(dir).get()).toEqual({ revision: 1, settings: { theme: "light" }, muted_panes: [] });
-    store.set({ settings: { agentMarks: "mono" } });
+    store.set({ settings: { agentOrder: "activity" } });
     expect(readFileSync(bad(dir))).toEqual(current);
     expect(files(dir)).toEqual(["preferences.json", "preferences.json.bad"]);
     // damaged again: one generation, the latest
@@ -317,8 +317,8 @@ describe("a damaged preferences file", () => {
     const heard: unknown[] = [];
     store.subscribe((preferences) => heard.push(preferences));
     // repaired by hand while the server runs
-    writeFileSync(file(dir), JSON.stringify({ revision: 5, settings: { theme: "dark", agentMarks: "mono" }, pins: ["pc:w1:p1"] }));
-    const expected = { revision: 6, settings: { theme: "light", agentMarks: "mono" }, pins: ["pc:w1:p1"], muted_panes: [] };
+    writeFileSync(file(dir), JSON.stringify({ revision: 5, settings: { theme: "dark", agentOrder: "activity" }, pins: ["pc:w1:p1"] }));
+    const expected = { revision: 6, settings: { theme: "light", agentOrder: "activity" }, pins: ["pc:w1:p1"], muted_panes: [] };
     expect(store.set({ settings: { theme: "light" } })).toEqual(expected);
     expect(heard).toEqual([expected]);
     expect(files(dir)).toEqual(["preferences.json"]);

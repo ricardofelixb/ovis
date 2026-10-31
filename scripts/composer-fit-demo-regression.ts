@@ -313,19 +313,22 @@ try {
             return conversation.turns.some((turn: { role: string; parts: { kind: string; text?: string }[] }) => turn.role === "user" && turn.parts.some((part) => part.kind === "text" && part.text === text));
           }, { paneId: panes.api, text }, { timeout: 5_000 });
         };
-        await box.fill("Default Return sends");
-        await box.press("Enter");
-        await sent("Default Return sends");
+        // by default a desktop's Enter sends, and a phone's Return breaks the line, where a keyboard's Ctrl+Enter sends
+        await box.fill("Default send");
+        await box.press(width === 390 ? "Control+Enter" : "Enter");
+        await sent("Default send");
         await settings();
         const label = width === 390 ? "Return inserts a new line" : "Enter sends";
         const toggle = page.getByRole("switch", { name: label, exact: true });
-        assert.equal(await toggle.getAttribute("aria-checked"), width === 390 ? "false" : "true", "the default still sends Return");
+        assert.equal(await toggle.getAttribute("aria-checked"), "true", "the default is this device's");
         await toggle.click();
         await close();
         await page.reload();
         await box.waitFor();
         await settings();
-        assert.equal(await toggle.getAttribute("aria-checked"), width === 390 ? "true" : "false", "the choice survives reload on this device");
+        assert.equal(await toggle.getAttribute("aria-checked"), "false", "the choice survives reload on this device");
+        // a phone goes back to its default, so Return breaks the line below as a desktop's Enter now does
+        if (width === 390) await toggle.click();
         if (width === 390 && process.env.UI_EVIDENCE_DIR) {
           const evidence = process.env.UI_EVIDENCE_DIR;
           mkdirSync(evidence, { recursive: true });
@@ -580,7 +583,7 @@ try {
       });
       // Typography is applied by SettingsProvider after the render. At this fixed card width,
       // the larger interface font must step effort out without needing a viewport resize.
-      await withCard(browser, 1075, { agent: "codex", model: LONG_MODEL }, async (page) => {
+      await withCard(browser, 1000, { agent: "codex", model: LONG_MODEL }, async (page) => {
         const before = await measure(page);
         assert.equal(before.draw, "full");
         assert.equal(before.model?.clipped, false);
@@ -736,17 +739,19 @@ try {
         await box.fill("see @src");
         await page.getByRole("listbox", { name: "Files", exact: true }).waitFor();
         await box.fill("look at /tmp");
-        await box.press("Enter");
+        // Return breaks the line on a touch screen, where a keyboard's Ctrl+Enter sends
+        await box.press(await page.evaluate(() => matchMedia("(pointer: coarse)").matches) ? "Control+Enter" : "Enter");
         await page.getByText("look at /tmp", { exact: true }).waitFor();
-        assert.equal(await box.inputValue(), "", "Enter sends a path verbatim instead of accepting a fuzzy skill");
+        assert.equal(await box.inputValue(), "", "the send key sends a path verbatim instead of accepting a fuzzy skill");
         console.log(`PASS skill completion at word boundaries (${agent}, ${width}px)`);
       });
       // One primary control across agents: Stop with an empty working draft, Send with text.
       for (const agent of ["claude", "codex"] as const) for (const width of [350, 390, 800, 1440]) for (const mic of [false, true]) await withCard(browser, width, { agent, model: "gpt-5.6", mic }, async (page) => {
         const rest = await measure(page);
         assert.ok(rest.stop && !rest.send && !rest.sendOptions && !rest.queue, JSON.stringify(rest));
+        // a phone has no hover: its ring is a button whose tap shows the numbers, as a desktop's is
         if (width <= 480) assert.equal(await page.locator(".composer-context").evaluate((node) =>
-          node.tagName === "SPAN" && !node.hasAttribute("title") && !node.hasAttribute("aria-expanded") && !node.hasAttribute("tabindex")), true, "mobile context is a read-only ring");
+          node.tagName === "BUTTON" && node.getAttribute("aria-expanded") === "false" && node.hasAttribute("aria-label")), true, "mobile context is a ring a tap opens");
         await draft(page);
         const row = await measure(page);
         await drawn(page, row.draw as Draw, `${agent} ${width}px, a written follow-up`);
@@ -876,9 +881,9 @@ try {
       });
       await withCard(browser, 390, { agent: "codex", model: "gpt-5.6", showUsage: true }, async (page) => {
         assert.equal(await page.locator(".composer-status .composer-usage").count(), 0, "mobile omits the desktop quota even when sidebar limits are enabled");
-        assert.equal(await page.locator(".composer-context").evaluate((node) => node.tagName === "SPAN" && !node.hasAttribute("aria-expanded")), true);
+        assert.equal(await page.locator(".composer-context").evaluate((node) => node.tagName === "BUTTON" && node.getAttribute("aria-expanded") === "false"), true, "mobile keeps only the context ring");
       });
-      console.log("PASS desktop quota is read-only and session-first with weekly fallback; mobile keeps only the inert context ring");
+      console.log("PASS desktop quota is read-only and session-first with weekly fallback; mobile keeps only the context ring");
 
       // The message box is typed at the transcript's size (Settings → Chat font size): with a mouse
       // exactly, on a phone never under 16px, the smallest size iOS does not zoom the page for

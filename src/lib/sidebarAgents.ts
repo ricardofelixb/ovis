@@ -89,50 +89,41 @@ export function workspaceAgentLabels(agents: readonly SidebarAgent[]): Map<strin
  */
 export function agentTabName(tab: TabInfo | null | undefined, workspaceTabs: readonly TabInfo[], t: Parameters<typeof tabLabel>[1]): string | null {
   if (!tab) return null;
-  const place = workspaceTabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1 || tab.number;
+  const place = tabPlace(tab, workspaceTabs);
   return workspaceTabs.length > 1 || customTabLabel(tab, place) ? tabLabel(tab, t, place) : null;
 }
+
+/** The name a tab was given, null while herdr still names it by its place: an agent row is called by it. */
+export function givenTabName(tab: TabInfo | null | undefined, workspaceTabs: readonly TabInfo[]): string | null {
+  return tab ? customTabLabel(tab, tabPlace(tab, workspaceTabs)) : null;
+}
+
+const tabPlace = (tab: TabInfo, workspaceTabs: readonly TabInfo[]): number => workspaceTabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1 || tab.number;
 
 export interface AgentContextParts {
   agentLabel: string | null;
   /** the row's first line; an agent named like it is not said twice */
   title: string;
+  /** the agent's own title, said first when the row is called by a tab it shares with another pane */
+  agentTitle?: string | null;
   /** the agent the row's mark draws, null for the generic mark: a kind the mark already says is not written again */
   markAgent: string | null;
-  /** the title the agent gave itself, said when a pane or tab name took the first line */
-  agentTitle: string | null;
+  /** null with a single PC: herdr does not name a lone machine either */
+  machineName: string | null;
+  workspaceLabel: string;
   tabName: string | null;
 }
 
-/**
- * An agent row's second line: who it is, what it calls its task when a name took the first line, and
- * its tab, without repeating a word the row already says. The workspace is the row it sits under.
- */
-export function agentContext({ agentLabel, title, markAgent, agentTitle, tabName }: AgentContextParts): string[] {
-  const shown = title.trim();
+/** An agent row's second line: who it is, then where it runs, without repeating a word the row already says. */
+export function agentContext({ agentLabel, title, agentTitle = null, markAgent, machineName, workspaceLabel, tabName }: AgentContextParts): string[] {
   const agent = nonblank(agentLabel);
   const own = nonblank(agentTitle);
   const tab = nonblank(tabName);
   return [
-    agent && agent !== shown && agent.toLowerCase() !== markAgent?.toLowerCase() ? agent : null,
-    own && own !== shown ? own : null,
-    tab && tab !== shown ? tab : null,
+    own,
+    agent && agent !== title.trim() && agent !== own && agent.toLowerCase() !== markAgent?.toLowerCase() ? agent : null,
+    nonblank(machineName),
+    workspaceLabel,
+    tab && tab !== workspaceLabel ? tab : null,
   ].filter((part): part is string => Boolean(part));
-}
-
-/**
- * The name an agent row leads with: the pane's own name, else its tab's when someone renamed the tab
- * and no other agent runs in it, else the title the agent gave itself, else herdr's pane title. An
- * agent can rename its tab or pane (`herdr tab rename`, `herdr pane rename`) to name its row.
- */
-export function agentRowName(entry: SidebarAgent, workspaceTabs: readonly TabInfo[], workspaceAgents: readonly SidebarAgent[]): string | null {
-  const { pane, tab, agent } = entry;
-  const alone = tab !== null && workspaceAgents.filter((other) => other.tab?.tab_id === tab.tab_id).length === 1;
-  return nonblank(pane.label) ?? (alone ? renamedTab(tab, workspaceTabs) : null) ?? nonblank(agent?.title) ?? nonblank(pane.title);
-}
-
-/** The name someone gave an agent's tab, judged by the tab's place in the row as agentTabName does; null while herdr numbers it. */
-export function renamedTab(tab: TabInfo | null, workspaceTabs: readonly TabInfo[]): string | null {
-  if (!tab) return null;
-  return customTabLabel(tab, workspaceTabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1 || tab.number);
 }

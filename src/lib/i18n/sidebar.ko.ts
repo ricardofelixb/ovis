@@ -4,6 +4,8 @@
  * Register and fixed terms follow ../i18n.ko.ts; a key another feature also uses goes there.
  */
 export const SIDEBAR_KO: Record<string, string> = {
+  "Pin agent": "에이전트 고정",
+  "Unpin agent": "에이전트 고정 해제",
   "Mute alerts": "알림 끄기",
   "Unmute alerts": "알림 켜기",
   "Alerts muted": "알림 꺼짐",
@@ -13,7 +15,9 @@ export const SIDEBAR_KO: Record<string, string> = {
   "Background tasks running: {count}": "실행 중인 백그라운드 작업: {count}",
   "Agent waiting on background work": "에이전트가 백그라운드 작업을 기다리는 중",
   "Agent {status}": "에이전트 {status}",
+  "Loading agents…": "에이전트 불러오는 중…",
   "Herdr workspaces": "herdr 워크스페이스",
+  "No agents running": "실행 중인 에이전트가 없습니다",
   "Expand worktrees of {name}": "{name}의 워크트리 펼치기",
   "Collapse worktrees of {name}": "{name}의 워크트리 접기",
   "Agents: {names}": "에이전트: {names}",

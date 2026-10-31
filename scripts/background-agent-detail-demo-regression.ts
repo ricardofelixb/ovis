@@ -97,7 +97,7 @@ interface View { width: 390 | 1440; theme: Theme; language?: "ko" }
 const name = ({ width, theme, language }: View, state?: string): string => `background-agent-${width}-${theme}${language ? `-${language}` : ""}${state ? `-${state}` : ""}.png`;
 const shot = async (page: Page, view: View, state?: string): Promise<void> => { if (evidence) await page.screenshot({ path: join(evidence, name(view, state)) }); };
 /** every animation on the page has ended: a sheet has risen, a scrim has darkened */
-const settled = (page: Page): Promise<void> => page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))).then(() => undefined));
+const settled = (page: Page): Promise<void> => page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity).map((animation) => animation.finished.catch(() => undefined))).then(() => undefined));
 const log = (page: Page): Promise<Log> => page.evaluate(() => window.bgLog);
 const detailReads = async (page: Page): Promise<number> => (await log(page)).requests.filter((request) => request.endsWith("/api/pane/background-agent")).length;
 /** what the run measured in the page, for the evidence summary: none of it is judged from pixels */
@@ -336,7 +336,7 @@ try {
           if (!mobile) {
             // a Back to the pane before, under the open sheet (a desktop's Back is the panes'): the read's answer opens nothing there
             const select = async (pane: string): Promise<void> => {
-              await page.locator(`.workspace-agents .agent-item[data-pane="${pane}"] .agent-select`).click();
+              await page.locator(`.agents-sidebar .agent-item[data-pane="${pane}"] .agent-select`).click();
               await page.waitForFunction((pane) => new URL(location.href).searchParams.get("pane") === pane, pane);
             };
             await select(panes.api);
@@ -355,8 +355,8 @@ try {
           pass(`${view.width}px ${view.theme}: late answers to a closed sheet and a left pane are dropped`);
           // nothing of this is an action: no POST, no input, no focus, no stop
           const seen = await log(page);
-          // the app's own bookkeeping (a finish seen here, a connection breadcrumb) is the one thing it writes
-          assert.deepEqual(seen.requests.filter((request) => !request.startsWith("GET ") && !request.startsWith("HEAD ") && !/^POST \/api\/(seen|connection-diagnostics)$/.test(request)), [], "only reads went out");
+          // the app's own bookkeeping (a finish seen here, a connection breadcrumb, the agents' friends) is the one thing it writes
+          assert.deepEqual(seen.requests.filter((request) => !request.startsWith("GET ") && !request.startsWith("HEAD ") && !/^POST \/api\/(seen|connection-diagnostics|friends)$/.test(request)), [], "only reads went out");
           assert.deepEqual(seen.requests.filter((request) => /\/api\/pane\/(input|keys|focus|close|clear|stop|prompt\/answer)$/.test(request)), [], "no pane action went out");
           assert.deepEqual(seen.frames.filter((frame) => ["input", "keys", "submit", "resize", "focus", "take-over"].includes(frame)), [], "no input or control frame went out");
           assert.deepEqual(errors, []);
