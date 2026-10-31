@@ -24,7 +24,8 @@ import type { RenameRequest } from "../lib/useRenameRequest.ts";
 import { customTabLabel, tabLabel } from "../lib/tabName.ts";
 import { STRIP_AT_REST, stripPlaced, stripScrolled, stripSelected, type StripScroll } from "../lib/tabStripScroll.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "../lib/paneRegion.ts";
-import { CRAMPED_QUERY, loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
+import { loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
+import { useCramped } from "../lib/useCramped.ts";
 import { rosterPanes } from "../lib/dagPane.ts";
 import { useAppLayout, useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
@@ -88,7 +89,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const soloPanes = useMediaQuery(SOLO_PANE_QUERY);
   // a short phone screen (landscape, a small phone) has no height to spare: a lone tab is not
   // drawn there, so an approval card keeps its options in reach; its actions stay in the header
-  const cramped = useMediaQuery(CRAMPED_QUERY);
+  const cramped = useCramped();
   const strip = useRef<HTMLDivElement>(null);
   const [picker, setPicker] = useState<{ anchor: HTMLElement; tab: HerdrTab; point?: { x: number; y: number }; previousFocus: HTMLElement | null; touch: boolean; workspaces?: true } | null>(null);
   const [editing, setEditing] = useState<{ tabId: string; value: string } | null>(null);
@@ -209,10 +210,9 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     if (!open) return;
     const view = row.getBoundingClientRect();
     const item = open.getBoundingClientRect();
-    const end = row.querySelector<HTMLElement>(".tab-strip-add")?.getBoundingClientRect().left ?? view.right;
     const before = row.scrollLeft;
     if (item.left < view.left) row.scrollLeft -= view.left - item.left;
-    else if (item.right > end) row.scrollLeft += item.right - end;
+    else if (item.right > view.right) row.scrollLeft += item.right - view.right;
     // where the browser really left it; a strip that did not have to move may hold a scroll of
     // the user's whose event is still to come, and that one is left for the event to tell
     if (row.scrollLeft !== before || scroll.current.at === null) scroll.current = stripPlaced(scroll.current, row.scrollLeft);
@@ -232,8 +232,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   // a mouse wheel turns vertically: over a strip whose tabs do not fit it moves them sideways.
   // Anything with sideways motion (a trackpad, even a mostly vertical diagonal swipe) is the
   // browser's: moved by deltaY alone, the strip would go against the swipe's sideways part (#2103).
-  // React's own onWheel is passive, so the listener is the strip's own; `end` coming or going (a
-  // split opened or closed) draws the strip as a new node, which needs it again.
+  // React's own onWheel is passive, so the listener is the strip's own.
   const tabsHidden = loneTabHidden(cramped, tabs.length);
   useEffect(() => {
     const row = strip.current;
@@ -248,7 +247,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     };
     row.addEventListener("wheel", onWheel, { passive: false });
     return () => row.removeEventListener("wheel", onWheel);
-  }, [shown, tabsHidden, end === undefined]);
+  }, [shown, tabsHidden]);
   // in the header the strip's width follows the bar's other buttons, which can settle after the
   // open tab was brought into view: a narrower strip brings it again, as a late face does
   useEffect(() => {
@@ -257,7 +256,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     const observer = new ResizeObserver(() => { if (!scroll.current.moved) bringOpenTab(); });
     observer.observe(row);
     return () => observer.disconnect();
-  }, [shown, tabsHidden, end === undefined]);
+  }, [shown, tabsHidden]);
   const onScroll = (): void => {
     const row = strip.current;
     if (row) scroll.current = stripScrolled(scroll.current, row.scrollLeft, row.scrollWidth - row.clientWidth);
@@ -444,100 +443,102 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   // only while the pane's own tab is in this snapshot (paneTabPanelLabel); the same call answers
   // here, so a tab never claims to control a panel that is not standing there as one.
   const panePanel = paneTabPanelLabel(snapshot, selectedPane, t) !== null ? panelId : undefined;
-  const row = (
-      <div ref={strip} className="tab-strip" role="tablist" aria-label={t("Tabs of {workspace}", { workspace: workspace.label })} aria-busy={reorder.moving} onKeyDown={onKeyDown} onScroll={onScroll}
-        onFocus={(event) => { if (event.target.getAttribute("role") === "tab") focusedTab.current = event.target; }}
-        onBlur={(event) => { if (event.relatedTarget !== null) focusedTab.current = null; }}>
-        {tabs.map((tab, index) => {
-          const active = tab.tab_id === selectedPane.tab_id;
-          const own = panesOf(tab);
-          // Settle each pane's wait before rolling up, so a sibling's RUN or DONE stays visible.
-          const status = rollupStatus(own.map((pane) => paneStatus(pane as HerdrPane)));
-          const pickerOpen = picker?.tab.tab_id === tab.tab_id;
-          const name = nameOf(tab);
-          return (
-            <div className={`tab-strip-item${active ? " is-active" : ""}${own.length > 1 ? " has-panes" : ""}${editing?.tabId === tab.tab_id ? " is-editing" : ""}${reorder.drag?.tabId === tab.tab_id ? " is-dragging" : ""}${reorder.drag?.boundary === index ? " is-drop-before" : ""}${reorder.drag?.boundary === tabs.length && index === tabs.length - 1 ? " is-drop-after" : ""}`} key={tab.tab_id}>
-              {editing?.tabId === tab.tab_id ? (
-                <input
-                  className="input tab-strip-rename"
-                  aria-label={t("Tab name")}
-                  autoFocus
-                  size={Math.max(8, editing.value.length + 1)}
-                  maxLength={MAX_LABEL_CHARS}
-                  placeholder={name}
-                  value={editing.value}
-                  onFocus={(event) => event.currentTarget.select()}
-                  onChange={(event) => setEditing({ tabId: tab.tab_id, value: event.target.value })}
-                  onBlur={() => setEditing(null)}
-                  onKeyDown={(event) => {
-                    event.stopPropagation();
-                    // an IME's Enter and Escape are the composition's, not the field's
-                    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-                    if (event.key === "Enter") saveRename(tab);
-                    if (event.key === "Escape") { refocus.current = tab.tab_id; setEditing(null); }
-                  }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  role="tab"
-                  className="tab-strip-tab"
-                  data-tab-id={tab.tab_id}
-                  aria-selected={active}
-                  aria-haspopup="menu"
-                  aria-keyshortcuts={appLayout ? "Shift+F10" : "Shift+F10 Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"}
-                  aria-controls={panePanel}
-                  tabIndex={active ? 0 : -1}
-                  title={own.length === 1 && own[0] ? displayPaneTitle(own[0]) : t("{n} panes", { n: own.length })}
-                  onPointerDown={(event) => reorder.onPointerDown(event, tab.tab_id)}
-                  onPointerMove={reorder.onPointerMove}
-                  onPointerUp={reorder.onPointerUp}
-                  onPointerCancel={reorder.cancelDrag}
-                  onLostPointerCapture={reorder.cancelDrag}
-                  onDragStart={(event) => event.preventDefault()}
-                  onMouseDown={(event) => { if (event.button === 2 || (event.button === 0 && event.ctrlKey)) event.preventDefault(); }}
-                  onClick={(event) => {
-                    if (reorder.consumeClick(event.detail) || event.ctrlKey) return;
-                    event.currentTarget.focus({ preventScroll: true });
-                    const pane = paneFor(tab);
-                    if (pane && pane.pane_id !== selectedPane.pane_id) onSelectPane(pane.pane_id);
-                  }}
-                  onDoubleClick={appLayout ? undefined : () => beginRename(tab)}
-                  onContextMenu={(event) => { event.preventDefault(); openPicker(event, tab); }}
-                  // the middle button closes a tab, as it does a browser's
-                  onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); requestClose(tab); } }}
-                >
-                  {/* a tab's agents show as their friends, which move with their state; a split shows two */}
-                  {own.some((pane) => pane.agent) ? <span className={`tab-strip-faces${own.filter((pane) => pane.agent).length > 1 ? " is-split" : ""}`} aria-hidden="true">
-                    {own.filter((pane) => pane.agent).slice(0, 2).map((pane) => {
-                      const friend = friends[friendKey(machineId, pane.pane_id)];
-                      const paneState = paneStatus(pane as HerdrPane);
-                      return friend
-                        ? <AgentFriend key={pane.pane_id} friend={friend} agent={pane.agent!} status={paneState === "waiting" ? "working" : paneState === "unknown" ? undefined : paneState} />
-                        : <AgentMark key={pane.pane_id} agent={pane.agent!} size={16} />;
-                    })}
-                  </span> : (status === "working" || status === "blocked" || status === "waiting" || status === "done") && (settings.statusIndicators === "classic"
-                    ? <span className="tab-strip-dot" data-status={status} aria-hidden="true" />
-                    : <span className="tab-strip-dot tab-strip-glyph" data-status={status} aria-hidden="true">{indicatorGlyph(status, settings.statusIndicators)}</span>)}
-                  <span className="tab-strip-label">{name}</span>
-                </button>
-              )}
-              {menuButton && active && editing?.tabId !== tab.tab_id && <button type="button" className="tab-strip-menu" aria-label={t("Actions for {tab}", { tab: name })} title={t("Actions for {tab}", { tab: name })} aria-haspopup="menu" aria-expanded={pickerOpen} onClick={(event) => openPicker(event, tab)}>
-                <Ellipsis aria-hidden="true" />
-              </button>}
-            </div>
-          );
-        })}
+  // the + and an error follow the tabs outside their scroller, on the row's surface: tabs that do
+  // not fit scroll before the +, never under it
+  return (
+    <>
+      <div className="tab-strip-row">
+        <div ref={strip} className="tab-strip" role="tablist" aria-label={t("Tabs of {workspace}", { workspace: workspace.label })} aria-busy={reorder.moving} onKeyDown={onKeyDown} onScroll={onScroll}
+          onFocus={(event) => { if (event.target.getAttribute("role") === "tab") focusedTab.current = event.target; }}
+          onBlur={(event) => { if (event.relatedTarget !== null) focusedTab.current = null; }}>
+          {tabs.map((tab, index) => {
+            const active = tab.tab_id === selectedPane.tab_id;
+            const own = panesOf(tab);
+            // Settle each pane's wait before rolling up, so a sibling's RUN or DONE stays visible.
+            const status = rollupStatus(own.map((pane) => paneStatus(pane as HerdrPane)));
+            const pickerOpen = picker?.tab.tab_id === tab.tab_id;
+            const name = nameOf(tab);
+            return (
+              <div className={`tab-strip-item${active ? " is-active" : ""}${own.length > 1 ? " has-panes" : ""}${editing?.tabId === tab.tab_id ? " is-editing" : ""}${reorder.drag?.tabId === tab.tab_id ? " is-dragging" : ""}${reorder.drag?.boundary === index ? " is-drop-before" : ""}${reorder.drag?.boundary === tabs.length && index === tabs.length - 1 ? " is-drop-after" : ""}`} key={tab.tab_id}>
+                {editing?.tabId === tab.tab_id ? (
+                  <input
+                    className="input tab-strip-rename"
+                    aria-label={t("Tab name")}
+                    autoFocus
+                    size={Math.max(8, editing.value.length + 1)}
+                    maxLength={MAX_LABEL_CHARS}
+                    placeholder={name}
+                    value={editing.value}
+                    onFocus={(event) => event.currentTarget.select()}
+                    onChange={(event) => setEditing({ tabId: tab.tab_id, value: event.target.value })}
+                    onBlur={() => setEditing(null)}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                      // an IME's Enter and Escape are the composition's, not the field's
+                      if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+                      if (event.key === "Enter") saveRename(tab);
+                      if (event.key === "Escape") { refocus.current = tab.tab_id; setEditing(null); }
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    role="tab"
+                    className="tab-strip-tab"
+                    data-tab-id={tab.tab_id}
+                    aria-selected={active}
+                    aria-haspopup="menu"
+                    aria-keyshortcuts={appLayout ? "Shift+F10" : "Shift+F10 Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"}
+                    aria-controls={panePanel}
+                    tabIndex={active ? 0 : -1}
+                    title={own.length === 1 && own[0] ? displayPaneTitle(own[0]) : t("{n} panes", { n: own.length })}
+                    onPointerDown={(event) => reorder.onPointerDown(event, tab.tab_id)}
+                    onPointerMove={reorder.onPointerMove}
+                    onPointerUp={reorder.onPointerUp}
+                    onPointerCancel={reorder.cancelDrag}
+                    onLostPointerCapture={reorder.cancelDrag}
+                    onDragStart={(event) => event.preventDefault()}
+                    onMouseDown={(event) => { if (event.button === 2 || (event.button === 0 && event.ctrlKey)) event.preventDefault(); }}
+                    onClick={(event) => {
+                      if (reorder.consumeClick(event.detail) || event.ctrlKey) return;
+                      event.currentTarget.focus({ preventScroll: true });
+                      const pane = paneFor(tab);
+                      if (pane && pane.pane_id !== selectedPane.pane_id) onSelectPane(pane.pane_id);
+                    }}
+                    onDoubleClick={appLayout ? undefined : () => beginRename(tab)}
+                    onContextMenu={(event) => { event.preventDefault(); openPicker(event, tab); }}
+                    // the middle button closes a tab, as it does a browser's
+                    onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); requestClose(tab); } }}
+                  >
+                    {/* a tab's agents show as their friends, which move with their state; a split shows two */}
+                    {own.some((pane) => pane.agent) ? <span className={`tab-strip-faces${own.filter((pane) => pane.agent).length > 1 ? " is-split" : ""}`} aria-hidden="true">
+                      {own.filter((pane) => pane.agent).slice(0, 2).map((pane) => {
+                        const friend = friends[friendKey(machineId, pane.pane_id)];
+                        const paneState = paneStatus(pane as HerdrPane);
+                        return friend
+                          ? <AgentFriend key={pane.pane_id} friend={friend} agent={pane.agent!} status={paneState === "waiting" ? "working" : paneState === "unknown" ? undefined : paneState} />
+                          : <AgentMark key={pane.pane_id} agent={pane.agent!} size={16} />;
+                      })}
+                    </span> : (status === "working" || status === "blocked" || status === "waiting" || status === "done") && (settings.statusIndicators === "classic"
+                      ? <span className="tab-strip-dot" data-status={status} aria-hidden="true" />
+                      : <span className="tab-strip-dot tab-strip-glyph" data-status={status} aria-hidden="true">{indicatorGlyph(status, settings.statusIndicators)}</span>)}
+                    <span className="tab-strip-label">{name}</span>
+                  </button>
+                )}
+                {menuButton && active && editing?.tabId !== tab.tab_id && <button type="button" className="tab-strip-menu" aria-label={t("Actions for {tab}", { tab: name })} title={t("Actions for {tab}", { tab: name })} aria-haspopup="menu" aria-expanded={pickerOpen} onClick={(event) => openPicker(event, tab)}>
+                  <Ellipsis aria-hidden="true" />
+                </button>}
+              </div>
+            );
+          })}
+        </div>
         <button type="button" className="tab-strip-add" aria-label={t("New terminal")} title={t("New terminal")}
           onClick={() => { setError(null); void onNewTerminal().catch((reason: unknown) => setError(t("New terminal failed: {reason}", { reason: said(reason) }))); }}>
           <Plus aria-hidden="true" />
         </button>
         {error && <span className="tab-strip-error" role="alert">{error}</span>}
+        {end !== undefined && <div className="tab-strip-end">{end}</div>}
       </div>
-  );
-  return (
-    <>
-      {end === undefined ? row : <div className="tab-strip-row">{row}<div className="tab-strip-end">{end}</div></div>}
       {picker && <RowMenu key={picker.workspaces ? "workspaces" : "tab"} anchor={picker.anchor} point={picker.point} restoreFocusTo={picker.previousFocus}
         title={picker.workspaces ? t("Move {tab} to", { tab: nameOf(picker.tab) }) : nameOf(picker.tab)}
         subtitle={picker.workspaces ? undefined : place}

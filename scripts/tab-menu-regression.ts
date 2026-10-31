@@ -339,7 +339,7 @@ async function checkDesktop(browser: Browser, origin: string, first: string, sec
     await page.route("**/api/tab/move", (route) => route.fulfill({ status: 502, contentType: "application/json", body: JSON.stringify({ error: { code: "test_refusal", message: "reorder test refused" } }) }));
     await inactive.focus();
     await page.keyboard.press("Alt+Shift+ArrowLeft");
-    await strip.getByRole("alert").filter({ hasText: "reorder test refused" }).waitFor();
+    await page.locator(".tab-strip-row").getByRole("alert").filter({ hasText: "reorder test refused" }).waitFor();
     assert.deepEqual(await order(), originalOrder);
     await currentPane(page, first);
     await page.unroute("**/api/tab/move");

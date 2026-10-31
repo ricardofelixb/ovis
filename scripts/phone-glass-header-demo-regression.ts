@@ -8,9 +8,10 @@ import { buildDemoApp } from "./demo-build.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens } from "./view-menu.ts";
 
-// #1457: with the keyboard up a phone is short enough to drop a lone tab's row, and the chat then
-// puts the glass header over the pane. The pane's own menu button must start below that header,
-// never under its More button (six dots, not three), and a banner (View only) must not cover it.
+// #1457: a short phone (landscape) drops a lone tab's row, and the chat then puts the glass header
+// over the pane. The pane's own menu button must start below that header, never under its More
+// button (six dots, not three), and a banner (View only) must not cover it. The keyboard alone
+// makes no phone short: typing upright keeps the row (lib/useCramped.ts).
 type SocketsWindow = Window & { glassSockets: WebSocket[] };
 
 /** Keeps the demo's sockets, so the check can turn this connection into a view-only one. */
@@ -91,22 +92,29 @@ try {
         assert.equal(await page.locator(".pane-frame.is-single .pane-frame-menu").isVisible(), false,
           "upright, the lone tab keeps its row, whose menu carries the pane's actions");
 
-        // the report's own moment: the message box focused and the keyboard up. Android shrinks the
-        // layout viewport with it, under the 600px that drops a lone tab's row (TabStrip's cramped).
+        // the message box focused and the keyboard up: Android shrinks the layout viewport with it,
+        // under the 600px of a short phone, and the lone tab's row still stays
         await message.click();
         await page.setViewportSize({ width: 390, height: 470 });
         await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(470));
         await page.waitForFunction(() => document.documentElement.hasAttribute("data-keyboard"));
+        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+        assert.equal(await page.locator(".app-header .tab-strip").isVisible(), true, "typing upright keeps the lone tab's row");
+
+        // turned on its side the phone is short: the lone tab's row goes
+        await message.evaluate((node) => (node as HTMLElement).blur());
+        await page.setViewportSize({ width: 740, height: 390 });
+        await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(390));
         await page.locator(".tab-strip").waitFor({ state: "detached" });
         assert.notEqual(await page.locator(".app-header").evaluate((node) => getComputedStyle(node).backdropFilter), "none",
           "the chat of a lone tab with no row puts the glass header over the pane");
-        await checkMenus(page, "chat-keyboard");
+        await checkMenus(page, "chat-landscape");
 
         // a view-only connection draws its "View only" banner at the pane's top right too
         await page.evaluate(() => (window as SocketsWindow).glassSockets.at(-1)!.send(JSON.stringify({ type: "role", mode: "observe" })));
         await page.locator(".terminal-banner-observe").waitFor();
         await page.locator(".tab-strip").waitFor({ state: "detached" });
-        await checkMenus(page, "chat-keyboard-view-only");
+        await checkMenus(page, "chat-landscape-view-only");
         const banners = await page.locator(".terminal-banners > :not(.visually-hidden)").evaluateAll((nodes) => nodes.map((node) => {
           const box = node.getBoundingClientRect();
           return { x: box.x, y: box.y, width: box.width, height: box.height, text: node.textContent?.trim() ?? "" };
@@ -139,7 +147,7 @@ async function checkMenus(page: Page, label: string): Promise<void> {
   if (!pane) throw new Error(`${label}: the lone pane's menu has a box`);
   if (evidence) {
     mkdirSync(evidence, { recursive: true });
-    await page.screenshot({ path: join(evidence, `phone-glass-header-${label}.png`), clip: { x: 0, y: 0, width: 390, height: 160 } });
+    await page.screenshot({ path: join(evidence, `phone-glass-header-${label}.png`), clip: { x: 0, y: 0, width: page.viewportSize()!.width, height: 160 } });
   }
   const overlaps = pane.x < more.x + more.width && more.x < pane.x + pane.width && pane.y < more.y + more.height && more.y < pane.y + pane.height;
   assert.equal(overlaps, false, `${label}: the pane's menu ${JSON.stringify(pane)} is drawn under the header's More button ${JSON.stringify(more)}`);
