@@ -4,11 +4,9 @@
  * Register and fixed terms follow ../i18n.zh.ts; a key another feature also uses goes there.
  */
 export const SETUP_ZH: Record<string, string> = {
-  "Open terminal": "打开终端",
   "Set up {agent}": "设置 {agent}",
   "Uses the official installer, on this PC.": "用官方安装程序安装到这台电脑。",
   "This can take a few minutes. You can keep using Ovis.": "可能需要几分钟。期间可以继续使用 Ovis。",
-  "Sign in to {agent}": "登录 {agent}",
   "Installed. Sign in so it can use your plan.": "已安装。请登录以使用你的套餐。",
   "Installed. New terminal tabs will find it.": "已安装。新打开的终端标签页能找到它。",
   "Its folder is on PATH only for terminals opened after the install.": "只有安装之后打开的终端，它的文件夹才在 PATH 中。",
@@ -39,6 +37,8 @@ export const SETUP_ZH: Record<string, string> = {
   "Accounts are read on the PC Ovis runs on: they are under Other accounts.": "账号在运行 Ovis 的电脑上读取，列在“其他账号”下。",
   "Install another agent ({count})": "安装其他代理（{count}）",
   "Not signed in": "未登录",
+  "Sign-in unreadable: {command} is not installed": "无法读取登录信息：未安装 {command}",
+  "Ovis reads {agent}'s sign-in from the desktop keyring with {command}, which this PC does not have. Install it (the libsecret-tools package on Debian and Ubuntu, libsecret on Fedora and Arch), then open this page again.": "Ovis 通过 {command} 从桌面密钥环读取 {agent} 的登录信息，但此电脑上没有它。请先安装（Debian 和 Ubuntu 上是 libsecret-tools 软件包，Fedora 和 Arch 上是 libsecret），然后重新打开此页面。",
   "Other agents herdr found": "herdr 找到的其他代理",
   "Ovis cannot read {agent}'s sign-in, so it shows none here.": "Ovis 无法读取 {agent} 的登录，因此这里不显示。",
   "Session resume": "会话恢复",

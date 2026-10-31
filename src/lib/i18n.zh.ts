@@ -371,6 +371,8 @@ const BASE: Record<string, string> = {
   "Close pane {name}?": "关闭面板 {name}？",
   "The pane's running processes will stop. Closing its last pane also closes the workspace.": "面板中运行的进程将停止。关闭最后一个面板也会关闭工作区。",
   "Close pane": "关闭面板",
+  "Open terminal": "打开终端",
+  "Sign in to {agent}": "登录 {agent}",
 };
 
 /** The parts ZH is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */

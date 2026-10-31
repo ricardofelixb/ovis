@@ -1,6 +1,6 @@
 /**
  * Japanese for the keys only the settings files use:
- * components/SettingsDialog.tsx (with THEME_NAMES), components/KeyBarSettings.tsx,
+ * components/SettingsDialog.tsx (with THEME_NAMES), components/SignOutRow.tsx, components/KeyBarSettings.tsx,
  * components/SettingsControls.tsx, components/TelemetryControls.tsx, lib/paletteSettings.ts.
  * Register and fixed terms follow ../i18n.ja.ts; a key another feature also uses goes there.
  */
@@ -73,6 +73,10 @@ export const SETTINGS_JA: Record<string, string> = {
   "Open work while the agent runs": "作業中は作業を開く",
   "Off, a running turn shows only its Working… row until tapped": "オフにすると、実行中のターンはタップするまで「作業中…」の行だけを表示します",
   "Include the agent's reasoning blocks": "エージェントの推論ブロックも表示します",
+  "Expand thinking": "思考を展開",
+  "Reasoning starts open instead of folded. One you open or fold stays that way for its message": "推論を折りたたまずに開いた状態で表示します。自分で開いたり折りたたんだりした推論は、そのメッセージではそのまま保たれます",
+  "Collapse work": "作業を折りたたむ",
+  "A turn's work starts folded to one line, also while the agent works, unless it needs you. One you open or fold stays that way for its message": "ターンの作業を 1 行に折りたたんで表示します。エージェントの作業中も折りたたみ、応答が必要なときだけ開きます。自分で開いたり折りたたんだりした作業は、そのメッセージではそのまま保たれます",
   "Chat width": "チャットの幅",
   "How wide the conversation and the message box run on a large screen": "大きな画面で会話と入力欄が広がる幅",
   "Narrow": "狭い",
@@ -111,6 +115,9 @@ export const SETTINGS_JA: Record<string, string> = {
   "Sign out of this browser?": "このブラウザーからサインアウトしますか？",
   "Getting back in takes the access token, or a pairing code from the PC: Settings → Phone & devices there, or the pair command in its terminal.": "再び入るにはアクセストークンか、PC のペアリングコードが必要です。コードは PC の設定 → Phone & devices か、PC のターミナルの pair コマンドで表示されます。",
   "Forget this browser's sign-in. Getting back in takes the access token or a pairing code.": "このブラウザーのサインインを消去します。再び入るにはアクセストークンかペアリングコードが必要です。",
+  "Forget this browser's sign-in. Getting back in means signing in through Portal again.": "このブラウザーのサインインを消去します。再び入るには Portal で再度サインインする必要があります。",
+  "Getting back in means signing in through Portal again.": "再び入るには Portal で再度サインインする必要があります。",
+  "Getting back in means signing in through Portal again. While this browser is still signed in to Google or your company's login, that sign-in lets it straight back in: sign out there too.": "再び入るには Portal で再度サインインする必要があります。このブラウザーが Google や会社のログインにまだサインインしていると、そのサインインですぐにまた入れてしまいます。そちらでもサインアウトしてください。",
   "Sidebar rows": "サイドバーの行",
   "One line": "1 行",
   "Two lines": "2 行",
@@ -140,6 +147,7 @@ export const SETTINGS_JA: Record<string, string> = {
   "Keys, order and custom combinations for the terminal.": "ターミナルのキー、並び順、キーの組み合わせを設定します。",
   "Choose the keys and their order under the terminal. The keyboard mode button stays first.": "ターミナルの下に表示するキーと順序を選びます。キーボードモードのボタンは先頭に固定されます。",
   "Key bar keys": "キーバーのキー",
+  "Drag to reorder": "ドラッグして並べ替え",
   "Held modifier": "固定する修飾キー",
   "Saved combination": "保存した組み合わせ",
   "Remove {name}": "{name} を削除",
@@ -230,6 +238,7 @@ export const SETTINGS_JA: Record<string, string> = {
   "In a popup": "ポップアップで",
   "Web links": "Web リンク",
   "Only a page this PC serves, such as a dev server on localhost, opens beside the pane. Shift-click opens it the other way.": "localhost の開発サーバーなど、この PC が配信するページだけがペインの横に開きます。Shift キーを押しながらクリックすると、もう一方で開きます。",
+  "Pages this PC serves, such as Tailscale reports, can open in the app. Shift-click opens the other way.": "Tailscale レポートなど、この PC が配信するページはアプリ内で開けます。Shift キーを押しながらクリックすると、もう一方で開きます。",
   "Beside the pane": "ペインの横",
   "In a new tab": "新しいタブ",
   "A phone shows one column either way.": "スマートフォンではどちらでも1列で表示します。",

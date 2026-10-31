@@ -41,7 +41,9 @@ it.skipIf(process.platform === "win32")("neither follows nor writes a symlinked 
   const root = mkdtempSync(join(tmpdir(), "herdr-request-symlink-"));
   roots.push(root);
   const target = join(root, "untouched.txt");
-  writeFileSync(target, "unchanged", { mode: 0o640 });
+  writeFileSync(target, "unchanged");
+  // set apart from the umask, which a create's mode passes through
+  chmodSync(target, 0o640);
   symlinkSync(target, join(root, "http-requests.jsonl"));
   // When
   const writer = new RequestLog(root);

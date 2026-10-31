@@ -1,10 +1,11 @@
 /** Native Codex rollouts contain both display events and model context. Only
  * conversation records belong in chat; developer prompts and terminal chrome do not. */
-import { Database } from "bun:sqlite";
-import { closeSync, openSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, statSync } from "node:fs";
+import { constants as sqliteConstants, Database } from "bun:sqlite";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readlinkSync, readSync, realpathSync, statSync } from "node:fs";
 import { open, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import nodePath, { isAbsolute, join, type PlatformPath } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { ConversationPart, ConversationTurn, HerdrPane } from "../shared/protocol.ts";
 import { patchFiles, patchText } from "../shared/patch.ts";
 import { processStartedAt, processStartLowerBound, processStartUpperBound } from "./process-start.ts";
@@ -13,8 +14,10 @@ import { codexReadCall, codexReadSkills, selectedSkill } from "./skill-activity.
 import { trimOutput } from "./tool-output.ts";
 import type { TranscriptParser } from "./transcript-records.ts";
 import type { AgentInfo } from "../shared/herdr-api.generated.ts";
-import { agentGet, paneProcessInfo, paneRead, sessionSnapshot } from "./herdr/client.ts";
+import { agentGet, HerdrError, paneGet, paneProcessInfo, paneRead, sessionSnapshot } from "./herdr/client.ts";
+import { kiroCodexProcess, kiroNested, kiroWrapper } from "./kiro-terminal.ts";
 import { resolveAgent } from "./pane-context.ts";
+import { FOOTER } from "./codex-steering.ts";
 import { codexStartScreenUnused } from "./start-screen.ts";
 
 type RecordValue = Record<string, unknown>;
@@ -359,6 +362,59 @@ export function parseCodexTranscript(text: string, maxTurns = 100): Conversation
   return parser.snapshot().slice(-maxTurns);
 }
 
+/** Codex's store changed while it was read immutable (openCodexStore): what was read is not used. */
+export class CodexStoreChanged extends Error {}
+
+/**
+ * Codex's store (state_5.sqlite), read-only and never written. With a side file beside it (-wal, -shm or
+ * -journal) a Codex holds it, and it opens read-only as before. Without one, a WAL-mode store may not open
+ * read-only at all (macOS's SQLite will not make the -shm it asks for, #2444), but every row is in the file
+ * then: it opens immutable, so SQLite reads it without side files or locks. Such a read holds only while no
+ * Codex writes: `settled`, called after the last query and before anything read is used, throws
+ * CodexStoreChanged when the file changed (its identity, size, modification or change time) or a side file
+ * appeared, and the caller falls back. Coarse timestamps can hide a same-size rewrite within one tick: the
+ * limit, as for the session stores (server/session-history.ts).
+ */
+export function openCodexStore(home: string): { db: Database; immutable: boolean; settled: () => void } {
+  const named = join(home, "state_5.sqlite");
+  // the store itself, links resolved: its side files lie beside it, not beside a link to it, and it is
+  // opened by that path. One that will not resolve is opened read-only by its name, as before (never immutable)
+  let store: string;
+  try { store = realpathSync(named); } catch { return { db: new Database(named, { readonly: true, create: false }), immutable: false, settled: () => {} }; }
+  const before = statSync(store, { bigint: true });
+  // still the store read: a link re-pointed since it was resolved names another store now
+  const same = () => {
+    let now: string;
+    try { now = realpathSync(named); } catch { return false; }
+    const stat = statSync(now, { bigint: true, throwIfNoEntry: false });
+    return now === store && stat !== undefined && stat.dev === before.dev && stat.ino === before.ino;
+  };
+  const held = () => ["-wal", "-shm", "-journal"].some((suffix) => existsSync(store + suffix));
+  if (held()) {
+    return {
+      db: new Database(store, { readonly: true, create: false }),
+      immutable: false,
+      settled: () => { if (!same()) throw new CodexStoreChanged("Codex's store was moved while it was read"); },
+    };
+  }
+  const db = new Database(`${pathToFileURL(store).href}?immutable=1`, sqliteConstants.SQLITE_OPEN_READONLY | sqliteConstants.SQLITE_OPEN_URI);
+  return {
+    db,
+    immutable: true,
+    settled: () => {
+      const now = statSync(store, { bigint: true, throwIfNoEntry: false });
+      if (now === undefined || !same() || held() || now.size !== before.size
+        || now.mtimeNs !== before.mtimeNs || now.ctimeNs !== before.ctimeNs) throw new CodexStoreChanged("Codex's store changed while it was read");
+    },
+  };
+}
+
+/** Whether a store read that failed may be taken as failed, not torn: a Codex wrote no immutable read under it. */
+const storeUnchanged = (opened: ReturnType<typeof openCodexStore> | undefined): boolean => {
+  if (opened?.immutable !== true) return true;
+  try { opened.settled(); return true; } catch { return false; }
+};
+
 export const defaultCodexHome = (): string => process.env["CODEX_HOME"] || join(homedir(), ".codex");
 
 /** What processCodexHome found, by pid and argv, and when (PROCESS_HOME_TTL_MS). */
@@ -468,14 +524,23 @@ export function codexHomeInPsLine(text: string): string | null {
  * an explicit `configured` store wins, then the pane's Codex process's own, then the default.
  */
 export async function paneCodexHome(paneId: string, configured?: string): Promise<string> {
-  if (configured) return configured;
+  return (await paneCodexHomePlaced(paneId, configured)).home;
+}
+
+/**
+ * paneCodexHome, and whether it was `placed`: configured, or told by a Codex process of the pane. One not
+ * placed is the default store only because no Codex process was seen (a probe failed or raced): a reader
+ * that finds a conversation there asks again, as a Codex proven since may keep its store elsewhere.
+ */
+export async function paneCodexHomePlaced(paneId: string, configured?: string): Promise<{ home: string; placed: boolean }> {
+  if (configured) return { home: configured, placed: true };
   try {
     // the first Codex listed decides, with or without a home of its own: a child or wrapper it
     // started with another CODEX_HOME writes to a store that is not this pane's conversation
     const [first] = (await codexProcessesOf(paneId)).list;
-    if (first !== undefined) return (await processCodexHome(first.pid, first.argv)) ?? defaultCodexHome();
+    if (first !== undefined) return { home: (await processCodexHome(first.pid, first.argv)) ?? defaultCodexHome(), placed: true };
   } catch { /* herdr busy: the default store */ }
-  return defaultCodexHome();
+  return { home: defaultCodexHome(), placed: false };
 }
 
 /**
@@ -920,19 +985,34 @@ const normalizeDisplay = (text: string): string => text.normalize("NFKC").replac
 const promptKey = (text: string): string => text.normalize("NFKC").replace(/^\s*\u203a/, "").replace(/\s+/g, "");
 
 /**
- * A Codex screen cut at what was typed: each prompt (a line Codex starts with "›", a prompt sent or
- * the input box, or an indented "↳", a message queued to be sent; with the indented and blank lines
- * it wraps onto) and the stretches between them. A prompt is no evidence of the conversation shown:
- * it may quote any conversation's answer.
+ * A text exactly as written, but for the spaces and line breaks a screen wraps it at: an answer counts
+ * on screen only shown character for character, so `base + 1` is not `base - 1`. One whose markdown
+ * Codex renders its own way (code, emphasis, links) is not found that way, and the terminal stands in
+ * rather than a guess at how it rendered.
  */
-function codexScreenParts(screen: string): { prompt: boolean; text: string }[] {
-  const parts: { prompt: boolean; text: string }[] = [];
+const markedDisplay = (text: string): string => text.normalize("NFKC").replace(/\s+/g, "");
+
+/**
+ * A Codex screen cut at what was typed and what tools did: each prompt (a line Codex starts with
+ * "›", a prompt sent or the input box, or an indented "↳", a message queued to be sent), each tool
+ * call Codex shows (a "•" line it starts with what it did or does: "Ran", "You ran", "Called",
+ * "Explored", "Searched", "Waited", "Running" and so on) and each tool's output (an indented "└"), with
+ * the indented and blank lines each wraps onto, and the stretches between them. Neither a prompt nor a
+ * tool's call or output is evidence of the conversation shown: any may quote any conversation's answer.
+ */
+function codexScreenParts(screen: string): { prompt: boolean; tool?: true; text: string }[] {
+  const parts: { prompt: boolean; tool?: true; text: string }[] = [];
   for (const line of screen.split("\n")) {
     const last = parts.at(-1);
-    const begins = /^(?:\u203a|\s*\u21b3(?:\s|$))/.test(line);
-    const prompt = begins || (last?.prompt === true && /^(?:\s|$)/.test(line));
-    if (last !== undefined && last.prompt === prompt && !begins) last.text += `\n${line}`;
-    else parts.push({ prompt, text: line });
+    const prompt = /^(?:\u203a|\s*\u21b3(?:\s|$))/.test(line);
+    // "You ran": a shell command the user ran from the composer, as Codex 0.163 titles it. An answer that
+    // starts with one of these words is taken for a call too: telling them apart could show another's chat
+    const tool = !prompt && (/^\s+\u2514(?:\s|$)/.test(line)
+      || /^\u2022 (?:Ran|You ran|Called|Explored|Searched|Waited|Running|Calling|Exploring|Searching|Waiting)(?:\s|$)/.test(line));
+    if (prompt || tool) parts.push({ prompt, ...(tool ? { tool } : {}), text: line });
+    else if (last !== undefined && (last.prompt || last.tool) && /^(?:\s|$)/.test(line)) last.text += `\n${line}`;
+    else if (last !== undefined && !last.prompt && !last.tool) last.text += `\n${line}`;
+    else parts.push({ prompt: false, text: line });
   }
   return parts;
 }
@@ -945,15 +1025,133 @@ function codexScreenParts(screen: string): { prompt: boolean; text: string }[] {
  * it is made of, for what another conversation's screen may show of it (mayShowWords).
  */
 function answerAnchor(text: string): Anchor | null {
-  const pieces = cutAtLinkTargets(text).map((piece) => piece.text);
+  // a link shows as its label, then its target its own way: the label's opening "[" is markdown, not text
+  const pieces = cutAtLinkTargets(text).map((piece) => {
+    const open = piece.target === "" ? -1 : piece.text.lastIndexOf("[");
+    return open < 0 ? piece.text : piece.text.slice(0, open) + piece.text.slice(open + 1);
+  });
   for (let index = pieces.length - 1; index >= 0; index--) {
     const anchor = normalizeDisplay(pieces[index]!).slice(-160);
-    if (anchor.length >= 64 && new Set(anchor).size >= 12) return { anchor, words: wordsEnding(pieces[index]!, anchor.length) };
+    if (anchor.length >= 64 && new Set(anchor).size >= 12) {
+      // the whole answer, both ends: each piece exactly, a link's target in the parentheses Codex shows it in
+      const whole = new RegExp(`^${pieces.map((piece) => markedDisplay(piece).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\(.*\\)")}$`, "u");
+      return { anchor, words: wordsEnding(pieces[index]!, anchor.length), marked: markedEnding(pieces[index]!, anchor.length), whole };
+    }
   }
   return null;
 }
 
-interface Anchor { anchor: string; words: string[] }
+/** A time of day as Codex writes one in that footer: "7:05 PM" (%-I:%M %p) or "19:05" (%H:%M), never an impossible one. */
+const FOOTER_CLOCK = "(?:(?:1[0-2]|[1-9]):[0-5]\\d [AP]M|(?:[01]\\d|2[0-3]):[0-5]\\d)";
+/**
+ * The footer Codex draws below a finished turn, a line of its own: "Worked for 4s \u2022 7:05 PM", indented; for a
+ * turn of another day the clock follows its date ("Oct 29 at 7:05 PM", "Oct 29, 2025 at 7:05 PM", Codex 0.166).
+ */
+const CODEX_TURN_FOOTER = new RegExp(`^[ \\t]*Worked for <?\\d+(?:ms|s|m|h)(?: \\d+(?:ms|s|m|h))*(?: \\u2022 (?:[A-Z][a-z]{2} \\d{1,2}(?:, \\d{4})? at )?${FOOTER_CLOCK})?[ \\t]*\\r?$`);
+
+/** Whether a text's last line is shaped like that footer: an answer may end in one of its own. */
+const endsInTurnFooter = (text: string): boolean => CODEX_TURN_FOOTER.test(text.trimEnd().split("\n").at(-1) ?? "");
+
+/** A text's letters and digits alone, as Unicode folds them: how the footer path tells which turns may be the one shown. */
+const alnum = (text: string): string => text.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+
+/** A text with each run of whitespace one space, every other character as written (no Unicode folding): how the footer path compares. */
+const collapsed = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+/**
+ * The answer a screen shows Codex finished last, with the prompt of its turn, both whitespace-collapsed: an
+ * answer block (its "\u2022" line and the indented lines it wraps onto) with Codex's completed-turn footer
+ * (CODEX_TURN_FOOTER) directly under it, one blank line between, then only blank lines down to Codex's
+ * composer idle and empty ("\u203a" alone or with its placeholder) with nothing below it but Codex's own
+ * status rows (FOOTER, at most four). Its prompt is the last "\u203a" line above it, with the indented lines
+ * it wraps onto. Null when the screen shows no such turn: one still under way, a message sent since, a read
+ * cut before the composer, or a screen without its prompts (shownAnswers), whose answers fall back as before.
+ */
+function footedAnswer(screen: string): { text: string; prompt: string } | null {
+  const lines = screen.split("\n").map((line) => line.replace(/\r$/, ""));
+  const rows = lines.map((line, at) => ({ line, at })).filter(({ line }) => line.trim() !== "");
+  const composer = rows.length - 1 - [...rows].reverse().findIndex(({ line }) => line.startsWith("\u203a"));
+  if (composer >= rows.length || !/^\u203a(?:\s+Ask Codex to do anything)?$/.test(rows[composer]!.line.trim())) return null;
+  const status = rows.slice(composer + 1);
+  if (status.length === 0 || status.length > 4 || !status.every(({ line }) => FOOTER.test(line.trim()))) return null;
+  const footer = rows[composer - 1];
+  if (footer === undefined || !CODEX_TURN_FOOTER.test(footer.line)) return null;
+  const index = footer.at;
+  if (index < 2 || lines[index - 1]!.trim() !== "" || lines[index - 2]!.trim() === "") return null;
+  let start = index - 2;
+  while (start > 0 && /^(?:\s|$)/.test(lines[start]!)) start--;
+  if (!lines[start]!.startsWith("\u2022 ")) return null;
+  let prompt = start - 1;
+  while (prompt >= 0 && !lines[prompt]!.startsWith("\u203a")) prompt--;
+  if (prompt < 0) return null;
+  let end = prompt + 1;
+  while (end < start && /^\s+\S/.test(lines[end]!)) end++;
+  return { text: collapsed(lines.slice(start, index - 1).join("\n").slice(2)), prompt: collapsed(lines.slice(prompt, end).join("\n").slice(1)) };
+}
+
+/** The answers a conversation's rollout records its turns finished on (task_complete), as written. */
+function finishedAnswerTexts(rollout: string): string[] {
+  return rollout.split("\n").flatMap((line) => {
+    if (!line.includes('"task_complete"')) return [];
+    try {
+      const payload = (JSON.parse(line) as { payload?: Record<string, unknown> }).payload ?? {};
+      return payload["type"] === "task_complete" && typeof payload["last_agent_message"] === "string" ? [payload["last_agent_message"]] : [];
+    } catch { return []; }
+  });
+}
+
+/**
+ * The last turn a conversation's rollout records finished (task_complete), with what that turn, by its id,
+ * was asked (null when the read holds no message of it: cut by the tail read, or an older Codex). Null when
+ * it records no finished turn.
+ */
+function lastFinishedTurn(rollout: string): { asked: string | null; answer: string } | null {
+  const asked = new Map<string, string>();
+  let last: { asked: string | null; answer: string } | null = null;
+  for (const line of rollout.split("\n")) {
+    if (!line.includes('"item_completed"') && !line.includes('"task_complete"')) continue;
+    try {
+      const payload = (JSON.parse(line) as { payload?: Record<string, unknown> }).payload ?? {};
+      const turn = payload["turn_id"];
+      if (typeof turn !== "string") continue;
+      const item = payload["item"] as { type?: unknown; content?: unknown } | undefined;
+      if (payload["type"] === "item_completed" && item?.type === "UserMessage" && Array.isArray(item.content)) {
+        asked.set(turn, (asked.get(turn) ?? "") + item.content.map((part: { text?: unknown }) => typeof part?.text === "string" ? part.text : "").join(""));
+      } else if (payload["type"] === "task_complete") {
+        last = typeof payload["last_agent_message"] === "string" ? { asked: asked.get(turn) ?? null, answer: payload["last_agent_message"] } : null;
+      }
+    } catch { /* a record cut by the tail read */ }
+  }
+  return last;
+}
+
+/**
+ * A screen's answers, each as it would be compared whole: a line at the start of the screen's line (a "\u2022"
+ * or "\u25e6" one, without its bullet) with the indented and blank lines below it, up to the next such line or
+ * a "\u2500" rule Codex draws below a finished turn. An answer counts only as one such block.
+ */
+function shownBlocks(text: string): string[] {
+  const blocks: string[] = [];
+  let open = false;
+  for (const line of text.split("\n")) {
+    // Codex indents what an answer wraps onto: a line at the start of the screen's line begins another
+    if (/^\u2500/.test(line)) open = false;
+    else if (open && /^(?:\s|$)/.test(line)) blocks[blocks.length - 1] += `\n${line}`;
+    else if (line.trim() !== "") { blocks.push(line.replace(/^[\u2022\u25e6]\s?/, "")); open = true; }
+  }
+  return blocks.map(markedDisplay);
+}
+
+/** `marked`: the anchor as markedDisplay reads it, symbols included, for a screen to show as well. */
+interface Anchor { anchor: string; words: string[]; marked: string; whole: RegExp }
+
+/** The end of a text as markedDisplay reads it that holds its last `letters` letters and digits. */
+function markedEnding(text: string, letters: number): string {
+  const marked = markedDisplay(text);
+  let at = marked.length;
+  for (let counted = 0; at > 0 && counted < letters;) if (/[\p{L}\p{N}]/u.test(marked[--at]!)) counted++;
+  return marked.slice(at);
+}
 
 /** The words a text ends with (runs of letters and digits), as many as make up its last `length` of them, the first cut to fit. */
 function wordsEnding(text: string, length: number): string[] {
@@ -977,13 +1175,38 @@ function wordsEnding(text: string, length: number): string[] {
  * (loadedConversation), in place of their answers. `blocks`: the screen is shownAnswers', and an
  * answer counts only inside one of its blocks: Codex shows one answer as one block, so text that
  * runs across blocks is answers side by side, another conversation's. */
-export function matchCodexTranscript(screen: string, candidates: { path: string; text: string }[], scrutinized: ReadonlySet<string> = new Set(), said: ReadonlyMap<string, Said> = new Map(), blocks = false): string | null {
-  const lastHeader = screen.lastIndexOf("OpenAI Codex (v");
-  const displays = blocks ? screen.split(/\n(?=\u2022)/).map(normalizeDisplay)
-    : [normalizeDisplay(codexScreenParts(lastHeader >= 0 ? screen.slice(lastHeader) : screen).filter((part) => !part.prompt).map((part) => part.text).join("\n"))];
+export function matchCodexTranscript(screen: string, candidates: { path: string; text: string }[], scrutinized: ReadonlySet<string> = new Set(), said: ReadonlyMap<string, Said> = new Map(), blocks = false, footerOwners: ReadonlySet<string> | null = null): string | null {
+  const partsOf = (text: string) => {
+    const lastHeader = text.lastIndexOf("OpenAI Codex (v");
+    return blocks ? text.split(/\n(?=\u2022)/)
+      : codexScreenParts(lastHeader >= 0 ? text.slice(lastHeader) : text).filter((part) => !part.prompt && !part.tool).map((part) => part.text);
+  };
+  const answerParts = partsOf(screen);
+  const texts = blocks ? answerParts : [answerParts.join("\n")];
+  const displays = texts.map(normalizeDisplay);
+  // an answer counts only shown whole, both ends, in one block: one more character either side is another answer
+  const wholeBlocks = answerParts.flatMap(shownBlocks);
   const answersOf = (turns: ConversationTurn[]) => turns.filter((turn) => turn.role === "assistant")
     .flatMap((turn) => turn.parts).filter((part) => part.kind === "text").map((part) => part.text);
   const parsed = candidates.map((candidate) => parseCodexTranscript(candidate.text, Infinity));
+  // The answer Codex finished last with its footer below (footedAnswer) counts for one conversation only:
+  // the one candidate whose last finished turn was asked the prompt shown and ended on exactly that answer.
+  // None does while a candidate's answer ends in a footer-shaped line of its own, as nothing tells that line
+  // from Codex's: the terminal stands in, as it does whenever the pane's own conversation is not a candidate
+  const footed = blocks ? null : footedAnswer(screen.slice(Math.max(0, screen.lastIndexOf("OpenAI Codex (v"))));
+  // A candidate whose last finished turn may be the one shown, read loosely (its prompt unread, or ending in
+  // the one shown, and its answer's letters and digits those shown: one Codex rendered its own way, a turn
+  // steered with more messages) counts too, so the one strict match is the only one that may be, or none is.
+  const maybe = footed === null || parsed.some((turns) => answersOf(turns).some(endsInTurnFooter))
+    || candidates.some(({ text }) => finishedAnswerTexts(text).some(endsInTurnFooter)) ? null : candidates.filter(({ text }) => {
+    const last = lastFinishedTurn(text);
+    return last !== null && alnum(last.answer) === alnum(footed.text) && (last.asked === null || alnum(last.asked).endsWith(alnum(footed.prompt)));
+  });
+  // only a conversation of this folder (footerOwners: the store's rows for it) may own the footer; another
+  // candidate (one herdr reported, or a title named, of another folder) can only keep it from owning one
+  const owner = maybe?.length === 1 && (footerOwners === null || footerOwners.has(maybe[0]!.path)) ? maybe[0]! : null;
+  const ownerLast = owner === null ? null : lastFinishedTurn(owner.text);
+  const footedOwner = owner !== null && ownerLast?.asked != null && collapsed(ownerLast.asked) === footed!.prompt && collapsed(ownerLast.answer) === footed!.text ? owner.path : null;
   // every answer each candidate gave, as answerAnchor reads one (cut at link targets), read once
   let shown: Said[] | undefined;
   const givenElsewhere = (index: number, { anchor, words }: Anchor) => (shown ??= parsed.map((turns, at) =>
@@ -992,8 +1215,12 @@ export function matchCodexTranscript(screen: string, candidates: { path: string;
   const matching = new Set<string>();
   let open = false;
   for (const [index, candidate] of candidates.entries()) {
-    const anchors = answersOf(parsed[index]!.slice(-100)).slice(-8).map(answerAnchor)
-      .filter((found): found is Anchor => found !== null && displays.some((display) => display.includes(found.anchor)));
+    const anchors = answersOf(parsed[index]!.slice(-100)).slice(-8).flatMap((text) => {
+      const found = answerAnchor(text);
+      return found !== null && displays.some((display) => display.includes(found.anchor))
+        && (wholeBlocks.some((block) => found.whole.test(block))
+          || (candidate.path === footedOwner && collapsed(text) === footed!.text)) ? [found] : [];
+    });
     if (anchors.length === 0) continue;
     if (!scrutinized.has(candidate.path) || anchors.some((anchor) => !givenElsewhere(index, anchor))) matching.add(candidate.path);
     else open = true;
@@ -1197,7 +1424,7 @@ export function matchShortCodexAnswers(screen: string, candidates: { path: strin
   for (const part of codexScreenParts(lastHeader >= 0 ? screen.slice(lastHeader) : screen)) {
     // only one typed and sent is what an answer below it answered; a queued one is not sent yet
     if (part.prompt && part.text.startsWith("\u203a")) prompts.push({ at: display.length, text: promptKey(part.text) });
-    display += part.prompt ? "\0" : normalizeDisplay(part.text);
+    display += part.prompt || part.tool ? "\0" : normalizeDisplay(part.text);
   }
   // every turn of what was read, not the newest 100: an answer said long ago is said; with the prompt it answered
   const exchanges = candidates.map((candidate) => {
@@ -1471,7 +1698,8 @@ export async function codexFreshSession(paneId: string, cwds: readonly string[],
   try {
     // a store Codex has not made yet holds no thread
     if (statSync(store, { throwIfNoEntry: false }) !== undefined) {
-      db = new Database(store, { readonly: true, create: false });
+      const opened = openCodexStore(home);
+      db = opened.db;
       // each folder the pane names (its shell's, its foreground process's), as given and as it
       // resolves: Codex may have stored any of them
       const named = cwds.filter((cwd) => cwd.length > 0);
@@ -1483,6 +1711,7 @@ export async function codexFreshSession(paneId: string, cwds: readonly string[],
       const begun = db.query<unknown, (string | number)[]>(
         `SELECT 1 FROM threads WHERE (${folders.map((folder) => folder.where).join(" OR ")}) AND archived = 0 AND agent_role IS NULL${interactive(db)}${said} AND max(COALESCE(created_at, 0), COALESCE(updated_at, 0)) >= ? LIMIT 1`,
       ).get(...folders.flatMap((folder) => folder.params), since);
+      opened.settled();
       if (begun !== null) return null;
     }
   } catch { return null; }
@@ -1660,11 +1889,13 @@ async function loadedRollouts(home: string): Promise<Map<string, LoadedThread> |
   if (ids.size === 0) return loaded;
   let db: Database | undefined;
   try {
-    db = new Database(join(home, "state_5.sqlite"), { readonly: true, create: false });
+    const opened = openCodexStore(home);
+    db = opened.db;
     const list = [...ids.keys()];
     const rows = db.query<{ id: string; rollout_path: string; offered: number }, string[]>(
       `SELECT id, rollout_path, (archived = 0 AND agent_role IS NULL${interactive(db)}) AS offered FROM threads WHERE lower(id) IN (${list.map(() => "?").join(", ")})`,
     ).all(...list);
+    opened.settled();
     if (new Set(rows.map((row) => row.id.toLowerCase())).size !== ids.size) return null;
     for (const row of rows) {
       const path = storeRolloutPath(row.rollout_path, home);
@@ -2101,7 +2332,8 @@ async function codexProcessesOf(paneId: string): Promise<{ list: { pid: number; 
     })
     .filter(({ argv = [] }) => {
       const executable = argv[0] ?? "";
-      const codex = /(?:^|[\\/])codex(?:\.js|\.exe|\.opencodex-real)?$/;
+      // also a release binary named for its target, and any letter case of Windows' file names
+      const codex = /(?:^|[\\/])codex(?:-(?:x86_64|aarch64)-[a-z0-9_-]+)?(?:\.js|\.exe|\.opencodex-real)?$/i;
       if (codex.test(executable)) return true;
       // `node codex.js` and shell shebangs name the script after the interpreter and its
       // `--flag` options (`node --no-warnings codex.js`). Only options known to take no
@@ -2119,7 +2351,31 @@ async function codexProcessesOf(paneId: string): Promise<{ list: { pid: number; 
       }
       return codex.test(argv[script] ?? "");
     });
+  if (list.length === 0) {
+    const nested = await kiroCodexProcess(processInfo);
+    // A PID can be reused between reads: the verified births identify the whole nested chain.
+    if (nested !== null) return { list: [nested], key: `kiro:${nested.identity}` };
+  }
   return { list, key: list.map((process) => process.pid).sort((left, right) => left - right).join(",") };
+}
+
+/** A missing label is expected for Kiro's outer PTY, but only its proven live Codex can use this fallback. */
+async function codexAgentInfo(paneId: string): Promise<Pick<AgentInfo, "agent_session" | "terminal_title" | "terminal_title_stripped" | "cwd" | "foreground_cwd"> & { nestedTerminal?: true }> {
+  try {
+    const agent = await agentGet(paneId);
+    const info = await paneProcessInfo(paneId).catch(() => undefined);
+    // herdr's own report that the outer PTY is Kiro's wrapper keeps the guard, whether or not one more
+    // process-table probe proves its Codex: a failed or racing probe must not make this a plain pane
+    return kiroNested(info, agent.agent === "codex") ? { ...agent, nestedTerminal: true } : agent;
+  }
+  catch (error) {
+    // herdr's wrapper fact, as above: the process lookup that follows proves the Codex or finds none
+    if (!(error instanceof HerdrError) || error.code !== "agent_not_found"
+      || !kiroWrapper(await paneProcessInfo(paneId).catch(() => undefined))) throw error;
+    const pane = await paneGet(paneId);
+    // Never revive an earlier occupant's session report through a shell wrapper.
+    return { ...pane, agent_session: undefined, nestedTerminal: true };
+  }
 }
 
 /** When each pane last looked at the other Codex panes for a set of threads, and which panes those were. */
@@ -2358,7 +2614,8 @@ async function shortThreadFromProcess(
     const peers = panes ?? (await sessionSnapshot()).panes;
     if (peers.some((pane) => pane.pane_id !== paneId
       && resolveAgent(pane).agent === "codex" && pane.cwd == null)) return null;
-    db = new Database(join(home, "state_5.sqlite"), { readonly: true, create: false });
+    const opened = openCodexStore(home);
+    db = opened.db;
     const columns = new Set(db.query<{ name: string }, []>("SELECT name FROM pragma_table_info('threads')").all().map((column) => column.name));
     if (!columns.has("first_user_message") || !columns.has("source")) return null;
     // a time in whole seconds as the last millisecond of that second: compared with the start's
@@ -2370,6 +2627,7 @@ async function shortThreadFromProcess(
       `SELECT rollout_path AS rolloutPath, first_user_message AS firstUserMessage, ${created} AS createdAtMs
        FROM threads WHERE ${where} AND archived = 0 AND agent_role IS NULL${interactive(db)} LIMIT 33`,
     ).all(...params);
+    opened.settled();
     if (rows.length > SHORT_THREAD_LIMIT || rows.some((row) => !Number.isFinite(row.createdAtMs))) return null;
     // Only a thread created after this process's start bound may be its new first exchange, and
     // not one another pane holds by stronger evidence: after A's /new, B's one word still tells
@@ -2420,8 +2678,10 @@ function reportedRollout(session: AgentInfo["agent_session"], home: string): str
   if (!UUID.test(session.value)) return null;
   let db: Database | undefined;
   try {
-    db = new Database(join(home, "state_5.sqlite"), { readonly: true, create: false });
+    const opened = openCodexStore(home);
+    db = opened.db;
     const row = db.query<{ rollout_path: string }, [string]>("SELECT rollout_path FROM threads WHERE id = ?").get(session.value);
+    opened.settled();
     return row ? codexRolloutPath(row.rollout_path, home) : null;
   } catch { return null; }
   finally { db?.close(); }
@@ -2453,7 +2713,8 @@ async function freshReportedThread(
   if (theirs([reported], paneId).length !== 1) return false;
   let db: Database | undefined;
   try {
-    db = new Database(join(home, "state_5.sqlite"), { readonly: true, create: false });
+    const opened = openCodexStore(home);
+    db = opened.db;
     const columns = new Set(db.query<{ name: string }, []>("SELECT name FROM pragma_table_info('threads')").all().map((column) => column.name));
     // a time in whole seconds as its first millisecond to be begun since this pane's start for certain,
     // and as its last to be begun before another pane's start for certain
@@ -2464,6 +2725,7 @@ async function freshReportedThread(
     const rows = db.query<{ id: string; rolloutPath: string; createdAtMs: number; createdLatestMs: number }, string[]>(
       `SELECT id, rollout_path AS rolloutPath, ${earliest} AS createdAtMs, ${latest} AS createdLatestMs FROM threads WHERE ${where} AND archived = 0 AND agent_role IS NULL${interactive(db)}`,
     ).all(...params);
+    opened.settled();
     const row = rows.find((candidate) => (codexRolloutPath(candidate.rolloutPath, home) ?? candidate.rolloutPath) === reported);
     if (row === undefined || !Number.isFinite(row.createdAtMs) || row.createdAtMs < notBefore) return false;
     // another thread of the cwd begun since (a /new) may be what the pane shows now
@@ -2530,20 +2792,29 @@ async function openRollouts(paneId: string, home: string): Promise<{ codexProces
  * taken only as the pane's fresh conversation (freshReportedThread).
  */
 export async function codexOpenRollout(paneId: string, cwd: string | null | undefined, home = defaultCodexHome()): Promise<string | null> {
-  const agent = await agentGet(paneId);
+  const agent = await codexAgentInfo(paneId);
   const { codexProcesses, processes, open } = await openRollouts(paneId, home);
   if (open.size === 1) return [...open][0]!;
   const reported = cwd ? reportedRollout(agent.agent_session, home) : null;
-  if (reported !== null && resumedThread(codexProcesses.map((process) => process.argv ?? [])) === null
+  // a nested pane's peers may carry no label either, so freshReportedThread cannot rule them out
+  if (reported !== null && !agent.nestedTerminal && resumedThread(codexProcesses.map((process) => process.argv ?? [])) === null
     && await freshReportedThread(paneId, cwd!, home, reported, codexProcesses)) return reported;
   const bound = boundRollouts.get(paneId);
   if (bound === undefined || bound.processes !== processes || processes === "" || !cwd || codexRolloutPath(bound.path, home) === null) return null;
   let db: Database | undefined;
+  let opened: ReturnType<typeof openCodexStore> | undefined;
   try {
-    db = new Database(join(home, "state_5.sqlite"), { readonly: true, create: false });
-    if (bound.titled === true && titledCandidate(agent, codexProcesses, db, home) !== bound.path) return null;
-    return newerThreads(db, cwd, Math.floor(bound.at / 1000), null, paneId, home).length === 0 ? bound.path : null;
-  } catch {
+    opened = openCodexStore(home);
+    db = opened.db;
+    const titledAway = bound.titled === true && titledCandidate(agent, codexProcesses, db, home) !== bound.path;
+    const newer = titledAway ? [] : newerThreads(db, cwd, Math.floor(bound.at / 1000), null, paneId, home);
+    opened.settled();
+    if (titledAway) return null;
+    return newer.length === 0 ? bound.path : null;
+  } catch (error) {
+    // a store that changed while it was read tells nothing, and keeps no binding. An immutable read that
+    // failed on a store that did not change failed as any read would (an older store's tables)
+    if (error instanceof CodexStoreChanged || !storeUnchanged(opened)) return null;
     // no store to ask, as codexTranscriptPath then keeps its binding too; one the title made cannot be checked
     return bound.titled === true ? null : bound.path;
   } finally { db?.close(); }
@@ -2567,15 +2838,22 @@ export async function codexOpenRollout(paneId: string, cwd: string | null | unde
  * conversation a TUI shows: when nothing of this folder tells, the screen is matched against
  * all of them (loadedConversation).
  */
-export async function codexTranscriptPath(paneId: string, cwd: string, home = defaultCodexHome(), panes?: HerdrPane[]): Promise<string | null> {
+export async function codexTranscriptPath(paneId: string, cwd: string, home = defaultCodexHome(), panes?: HerdrPane[], homeUnplaced = false): Promise<string | null> {
   if (panes !== undefined) {
     const open = new Set(panes.map((pane) => pane.pane_id));
     for (const pane of [...boundRollouts.keys()]) if (!open.has(pane)) boundRollouts.delete(pane);
   }
-  const agent = await agentGet(paneId);
+  const agent = await codexAgentInfo(paneId);
   const session = agent.agent_session;
 
   const { codexProcesses, processes, open } = await openRollouts(paneId, home);
+  // no Codex process of the pane proven now: what its screen still shows (an earlier occupant's, or
+  // a Codex gone since) ties it to no conversation, and the terminal stands in
+  if (codexProcesses.length === 0) return null;
+  // `home` was chosen while no Codex process of the pane was seen (paneCodexHomePlaced): one seen now
+  // must be known to write there (its environment says so), or what this store holds is not proof
+  const first = codexProcesses[0];
+  if (homeUnplaced && first !== undefined && await processCodexHome(first.pid, first.argv) !== home) return null;
   if (open.size === 1) return [...open][0]!;
   const resumed = resumedThread(codexProcesses.map((process) => process.argv ?? []));
 
@@ -2594,8 +2872,12 @@ export async function codexTranscriptPath(paneId: string, cwd: string, home = de
   let listed = false;
   /** the conversation only the title offers (titledCandidate), from another folder */
   let titledElsewhere: string | null = null;
+  /** this folder's conversations, as the store lists them: the only ones a footer on screen may belong to */
+  let folderRollouts = new Set<string>();
+  let opened: ReturnType<typeof openCodexStore> | undefined;
   try {
-    db = new Database(join(home, "state_5.sqlite"), { readonly: true, create: false });
+    opened = openCodexStore(home);
+    db = opened.db;
     if (resumed !== null) {
       const row = db.query<{ rollout_path: string }, [string]>("SELECT rollout_path FROM threads WHERE id = ?").get(resumed);
       // After /new the command line still names the resumed thread. Trust it only while
@@ -2621,12 +2903,20 @@ export async function codexTranscriptPath(paneId: string, cwd: string, home = de
     const rollouts = rows.slice(0, 32).map((row) => codexRolloutPath(row.rollout_path, home));
     // a thread whose rollout is gone or outside the store is still a conversation of this cwd
     listed = rows.length <= 32 && !rollouts.includes(null);
+    folderRollouts = new Set(rollouts.filter((path): path is string => path !== null));
     // since Codex 0.157 the shared app-server daemon, not the TUI, holds the rollout open, and a resume
     // through the picker leaves no id on the command line: the title may name a thread of another folder
     paths = [...new Set([...paths, ...(reported !== null ? [reported] : []), ...rollouts.filter((path): path is string => path !== null)])];
     const titled = titledCandidate(agent, codexProcesses, db, home);
     if (titled !== null && !paths.includes(titled)) { titledElsewhere = titled; paths.push(titled); }
-  } catch { /* Older installations can still resolve their open descriptors. */ }
+    opened.settled();
+  } catch (error) {
+    // a store that changed while it was read tells nothing, and what was read of it is dropped: the terminal
+    // stands in until the next read. An immutable read that failed on a store that did not change failed as
+    // any read would (an older store's tables), and the open descriptors still tell below
+    if (error instanceof CodexStoreChanged || !storeUnchanged(opened)) return null;
+    /* Older installations can still resolve their open descriptors. */
+  }
   finally { db?.close(); }
   if (reported !== null && !paths.includes(reported)) paths.push(reported);
   // a binding the title made holds only while the title still names that thread
@@ -2639,7 +2929,7 @@ export async function codexTranscriptPath(paneId: string, cwd: string, home = de
   const candidates = paths.flatMap((path) => {
     try { return [{ path, text: codexHistoryTail(path, 1024 * 1024, home) }]; } catch { return []; }
   });
-  const matched = screen ? matchCodexTranscript(screen.text, candidates, new Set(titledElsewhere === null ? [] : [titledElsewhere])) : null;
+  const matched = screen ? matchCodexTranscript(screen.text, candidates, new Set(titledElsewhere === null ? [] : [titledElsewhere]), new Map(), false, folderRollouts) : null;
   if (matched !== null) {
     boundRollouts.delete(paneId);
     boundRollouts.set(paneId, { processes, path: matched, at: Date.now(), ...(matched === titledElsewhere ? { titled: true } : {}) });
@@ -2665,8 +2955,13 @@ export async function codexTranscriptPath(paneId: string, cwd: string, home = de
     boundRollouts.set(paneId, boundHere);
     return boundHere.path;
   }
-  if (resumed === null && reported !== null && await freshReportedThread(paneId, cwd, home, reported, codexProcesses, panes)) return reported;
+  // a nested pane's peers may carry no label either, so freshReportedThread cannot rule them out
+  if (resumed === null && reported !== null && !agent.nestedTerminal
+    && await freshReportedThread(paneId, cwd, home, reported, codexProcesses, panes)) return reported;
   if (resumed !== null) return resumedNewer.length === 0 ? resumedPath : null;
+  // Other nested terminals may have no agent labels either, so the weaker exchange/peer
+  // heuristics cannot establish ownership. Only a substantial screen match (or its binding) can.
+  if (agent.nestedTerminal) return null;
   // Nothing ties this pane to a rollout at all: no resume, no match by a long answer for this
   // process, and so no /new to be unsure about (a session herdr names is only a candidate). Short
   // answers on screen may tell (#283). Never remembered as a binding: what it shows is read again
