@@ -73,7 +73,8 @@ export const expect = async ({ page, width, scheme, box, menu, scenario, clear, 
   });
 
   await scenario(`Enter sends then opens a peek at ${tag}`, `terminal-${tag}.png`, async (capture) => {
-    await box.press("Enter");
+    // Return breaks the line on a touch screen, where a keyboard's Ctrl+Enter sends
+    await box.press(await page.evaluate(() => matchMedia("(pointer: coarse)").matches) ? "Control+Enter" : "Enter");
     await hint.waitFor();
     assert.equal(await chat.count(), 0);
     assert.equal(await peek.count(), 1, "the terminal shows over the chat, which stays mounted");
