@@ -5,8 +5,11 @@ export interface PendingMessageView extends PendingMessage { serverOwned: boolea
 type StoragePort = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type Removal = PendingRemoval;
 const PREFIX = "ovis:pending:";
-const piReceipt = (message: PendingMessage): boolean => message.id.startsWith("pi:")
-  && (message.error?.code === "pi_transcript_pending" || message.error?.code === "transcript_unconfirmed");
+/**
+ * A bridge's Pi receipt (`pi:` id) is a message Enter already put in Pi. The transcript shows it once
+ * Pi takes it, and matching it there misses often enough to strand rows, so the browser keeps none.
+ */
+const sentToPi = (message: PendingMessage): boolean => message.id.startsWith("pi:");
 
 /** A row's error for a message an older bridge took with no receipt (SubmitResult `unconfirmed`). */
 export const UNCONFIRMED_SEND = { code: "submit_unconfirmed", message: "This PC sent no receipt, so nothing confirmed the pane took this message" };
@@ -16,7 +19,7 @@ export class PendingMessageStore {
   private rows = new Map<string, PendingMessageView[]>();
   private scopes = new Map<string, Map<string, string>>();
   private removed = new Map<string, Map<string, Set<string>>>();
-  /** ids an exact resumed receipt settled (a consumed Pi id, or a resumed sent/discarded one): no saved copy brings them back */
+  /** ids an exact resumed sent/discarded receipt settled: no saved copy brings them back */
   private settledResumed = new Map<string, Set<string>>();
   private receiptOrder: Array<{ owner: string; id: string; scope: string }> = [];
   private saved = new Map<string, string | null>();
@@ -48,16 +51,14 @@ export class PendingMessageStore {
       return data.messages.flatMap((item: unknown) => {
         if (!item || typeof item !== "object") return [];
         const message = item as PendingMessage & { resendInFlight?: unknown; resendGeneration?: unknown };
-        if (typeof message.id !== "string" || !message.id || ids.has(message.id) || typeof message.text !== "string" || typeof message.created_at !== "string"
+        if (typeof message.id !== "string" || !message.id || ids.has(message.id) || sentToPi(message) || typeof message.text !== "string" || typeof message.created_at !== "string"
           || !Number.isSafeInteger(message.request_id) || !["queued", "sending", "held", "uncertain"].includes(message.state)) return [];
         ids.add(message.id);
         const error = message.error && typeof message.error.code === "string" && typeof message.error.message === "string" ? message.error : undefined;
-        const restoredError = error?.code === "pi_transcript_pending"
-          ? { code: "transcript_unconfirmed", message: "The bridge connection ended before Pi's transcript append was confirmed" } : error;
         return [{ id: message.id, request_id: message.request_id, text: message.text, created_at: message.created_at,
           state: message.state === "held" && message.resendInFlight !== true ? "held" as const : "uncertain" as const,
           ...(typeof message.resendGeneration === "number" && Number.isSafeInteger(message.resendGeneration) && message.resendGeneration >= 0 ? { resendGeneration: message.resendGeneration } : {}),
-          ...(message.resendInFlight === true ? { resendInFlight: true as const } : {}), ...(restoredError ? { error: restoredError } : {}),
+          ...(message.resendInFlight === true ? { resendInFlight: true as const } : {}), ...(error ? { error } : {}),
           ...(message.agent_only === true ? { agent_only: true as const } : {}), serverOwned: false }];
       });
     } catch { return []; }
@@ -124,6 +125,7 @@ export class PendingMessageStore {
     }
   }
   accept(owner: string, message: PendingMessage, scope: string | null): void {
+    if (sentToPi(message)) return;
     const seen = this.removed.get(owner)?.get(message.id);
     if (this.settledResumed.get(owner)?.has(message.id) || (scope === null ? (seen?.size ?? 0) > 0 : seen?.has(scope))) return;
     this.refresh(owner);
@@ -150,19 +152,16 @@ export class PendingMessageStore {
     // a dropped connection (suspend), which no connection proves any more
     this.refresh(owner);
     const unproved = new Set(this.read(owner).filter((message) => message.request_id < 0 && !message.serverOwned && proofs?.get(message.id) === undefined).map((message) => message.id));
-    // A consumed Pi ID is an exact server-attested receipt, replayed only to the same
-    // browser/device on attach. It can settle a saved non-authoritative copy across
-    // connection epochs; text, request IDs, and empty snapshots never can. A `resumed` sent or discarded
-    // receipt is the same for any follow-up's saved copy (#2421).
+    // A `resumed` sent or discarded receipt is exact and replayed only to the same browser/device on
+    // attach: it can settle a follow-up's saved copy across connection epochs (#2421); text, request
+    // IDs, and empty snapshots never can.
     const saved = (message: PendingMessage & { serverOwned: boolean }): boolean => !message.serverOwned && proofs?.get(message.id) === undefined;
-    const resumed = new Set(this.read(owner).filter((message) => piReceipt(message) && saved(message)).map((message) => message.id));
     const copies = new Set(this.read(owner).filter(saved).map((message) => message.id));
     const deleted = new Set(removed.filter((item) => proofs?.get(item.id) === scope || unproved.has(item.id)
-      || item.outcome === "consumed" && resumed.has(item.id) || item.resumed === true && copies.has(item.id)).map((item) => item.id));
+      || item.resumed === true && copies.has(item.id)).map((item) => item.id));
     // A resumed receipt is remembered even before its copy is saved (another tab may save it later), but
     // never for a row a live connection here proves under another scope.
-    for (const item of removed) if (item.outcome === "consumed" && deleted.has(item.id) && item.id.startsWith("pi:")
-      || item.resumed === true && (proofs?.get(item.id) === undefined || proofs.get(item.id) === scope)) {
+    for (const item of removed) if (item.resumed === true && (proofs?.get(item.id) === undefined || proofs.get(item.id) === scope)) {
       const settled = this.settledResumed.get(owner) ?? new Set<string>();
       settled.add(item.id);
       if (settled.size > 1024) settled.delete(settled.values().next().value!);
@@ -201,9 +200,7 @@ export class PendingMessageStore {
       if (proofs?.get(message.id) !== scope) return message;
       proofs.delete(message.id);
       changed = true;
-      return message.error?.code === "pi_transcript_pending"
-        ? { ...message, serverOwned: false, state: "uncertain" as const, error: { code: "transcript_unconfirmed", message: "The connection ended before Pi's transcript append was confirmed" } }
-        : { ...message, serverOwned: false, state: message.state === "held" && !message.resendInFlight ? "held" as const : "uncertain" as const };
+      return { ...message, serverOwned: false, state: message.state === "held" && !message.resendInFlight ? "held" as const : "uncertain" as const };
     });
     if (proofs?.size === 0) this.scopes.delete(owner);
     if (changed) this.write(owner, next);
