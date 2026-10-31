@@ -10,7 +10,8 @@ import { KeyBar } from "./KeyBar.tsx";
 import { SettingsRow, Segmented, Toggle } from "./SettingsControls.tsx";
 import "./ComputerView.css";
 
-type Screen = { path: string } | { error: string } | null;
+// src: the viewer's address, on this server or the PC's own (server/screen.ts), which then is another origin
+type Screen = { src: string; origin: string } | { error: string } | null;
 
 // The keyboard field always holds these, so Gboard's ⌫ has something to delete when nothing is typed yet.
 const PAD = "        ";
@@ -32,6 +33,9 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
   const [tuning, setTuning] = useState(false);
   // whether the PC's desktop follows the view's size, as the viewer says once it has loaded
   const [resizes, setResizes] = useState(false);
+  // the round trip to the PC, in ms, as a viewer served by the PC itself measures it
+  const [rtt, setRtt] = useState<number | null>(null);
+  const originRef = useRef(location.origin);
   const [computer, setComputer] = useComputerSettings(machineId);
   const computerRef = useRef(computer);
   computerRef.current = computer;
@@ -53,19 +57,28 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
   useEffect(() => {
     let live = true;
     setScreen(null);
+    setRtt(null);
     void fetch("/api/screen", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ machine_id: machineId }), credentials: "same-origin" })
       .then(async (response) => {
-        const body = await response.json().catch(() => null) as { path?: string; error?: { message?: string } } | null;
+        const body = await response.json().catch(() => null) as { path?: string; url?: string; error?: { message?: string } } | null;
         if (!live) return;
-        // the settings as they are now go in the address; a change after goes to the loaded page (below)
-        const options = encodeURIComponent(JSON.stringify(viewerOptions(computerRef.current)));
-        setScreen(response.ok && body?.path ? { path: `${body.path}#${options}` } : { error: body?.error?.message ?? t("This PC's desktop can't be shown.") });
+        // the settings as they are now go in the address, with this page's origin, which only may talk to the viewer;
+        // a change after goes to the loaded page (below)
+        const options = encodeURIComponent(JSON.stringify({ ...viewerOptions(computerRef.current), parent: location.origin }));
+        const address = response.ok ? body?.url ?? body?.path : undefined;
+        if (!address) {
+          setScreen({ error: body?.error?.message ?? t("This PC's desktop can't be shown.") });
+          return;
+        }
+        const origin = new URL(address, location.href).origin;
+        originRef.current = origin;
+        setScreen({ src: `${address}#${options}`, origin });
       })
       .catch(() => { if (live) setScreen({ error: t("This PC's desktop can't be shown.") }); });
     return () => { live = false; };
   }, [machineId]);
 
-  const post = useCallback((message: object) => frameRef.current?.contentWindow?.postMessage(message, location.origin), []);
+  const post = useCallback((message: object) => frameRef.current?.contentWindow?.postMessage(message, originRef.current), []);
   /** One key to the desktop, with the held modifiers, which a key without its own chord then lets go of. */
   const send = useCallback((key: string, own?: StickyModifiers) => {
     post({ screen: "key", key, modifiers: own ?? modifiersRef.current });
@@ -82,8 +95,10 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
 
   useEffect(() => post({ screen: "options", options: viewerOptions(computer) }), [computer, post]);
   useEffect(() => {
-    const ready = ({ source, data }: MessageEvent): void => {
-      if (source !== frameRef.current?.contentWindow || data?.screen !== "ready") return;
+    const ready = ({ source, origin, data }: MessageEvent): void => {
+      if (source !== frameRef.current?.contentWindow || origin !== originRef.current) return;
+      if (data?.screen === "rtt" && typeof data.ms === "number") setRtt(data.ms);
+      if (data?.screen !== "ready") return;
       setResizes(data.resizes === true);
       // the frame's load comes before the viewer listens: it hears whether it is hidden, and stays quiet, only now
       post({ screen: "shown", shown: !hiddenRef.current });
@@ -144,7 +159,7 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
   return (
     <div ref={viewRef} className={`computer-view${full ? " is-full" : ""}${hidden ? " is-hidden" : ""}`}>
       <div className="computer-view-desktop">
-        <iframe ref={frameRef} src={screen.path} title={t("{name}'s desktop", { name: machineName })} allow="autoplay; clipboard-read; clipboard-write"
+        <iframe ref={frameRef} src={screen.src} title={t("{name}'s desktop", { name: machineName })} allow="autoplay; clipboard-read; clipboard-write"
           onLoad={() => post({ screen: "shown", shown: !hidden })} />
         <div ref={tuningRef} className="computer-view-corner" onKeyDown={(event) => { if (event.key === "Escape" && tuning) { event.stopPropagation(); setTuning(false); } }}>
           <button type="button" className="computer-view-button" aria-label={t("View settings")} title={t("View settings")} aria-expanded={tuning}
@@ -155,7 +170,7 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
             onClick={() => setFull((value) => !value)}>
             {full ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}
           </button>
-          {tuning && <ViewSettings settings={computer} onChange={setComputer} resizes={resizes} touch={coarse} />}
+          {tuning && <ViewSettings settings={computer} onChange={setComputer} resizes={resizes} touch={coarse} rtt={rtt} />}
         </div>
       </div>
       {coarse && <>
@@ -181,7 +196,7 @@ export function ComputerView({ machineId, machineName, hidden }: { machineId: st
 }
 
 /** The Computer view's settings for this PC, on this device. */
-function ViewSettings({ settings, onChange, resizes, touch }: { settings: ComputerSettings; onChange: (patch: Partial<ComputerSettings>) => void; resizes: boolean; touch: boolean }) {
+function ViewSettings({ settings, onChange, resizes, touch, rtt }: { settings: ComputerSettings; onChange: (patch: Partial<ComputerSettings>) => void; resizes: boolean; touch: boolean; rtt: number | null }) {
   return (
     <div className="computer-view-settings" role="dialog" aria-label={t("View settings")}>
       <header className="computer-view-settings-head">{t("View on this device")}</header>
@@ -217,6 +232,9 @@ function ViewSettings({ settings, onChange, resizes, touch }: { settings: Comput
         <SettingsRow label={t("Sound")}>
           <Toggle label={t("Sound")} checked={settings.sound} onChange={(sound) => onChange({ sound })} />
         </SettingsRow>
+        {rtt !== null && <SettingsRow label={t("Round trip")} description={t("From this device to the PC")}>
+          <span className="computer-view-rtt">{t("{ms} ms", { ms: rtt })}</span>
+        </SettingsRow>}
       </div>
     </div>
   );

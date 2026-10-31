@@ -62,9 +62,9 @@ describe("OVIS_APP_NAME", () => {
     expect(renamed.replace("content=\"laptop\"", "content=\"Ovis\"")).toBe(shell);
   });
 
-  it("frames the other ports of the request's own host and no other host", () => {
+  it("frames the other ports of the request's own host, and at a tailnet name that tailnet's https names", () => {
     expect(contentSecurityPolicy("http://100.123.228.51:7317")).toContain("frame-src 'self' http://100.123.228.51:* https://100.123.228.51:*;");
-    expect(contentSecurityPolicy("https://pc.tailnet.ts.net")).toContain("frame-src 'self' http://pc.tailnet.ts.net:* https://pc.tailnet.ts.net:*;");
+    expect(contentSecurityPolicy("https://pc.tailnet.ts.net")).toContain("frame-src 'self' http://pc.tailnet.ts.net:* https://pc.tailnet.ts.net:* https://*.tailnet.ts.net:*;");
     expect(contentSecurityPolicy("http://[::1]:7317")).toContain("frame-src 'self' http://[::1]:* https://[::1]:*;");
     expect(contentSecurityPolicy("http://100.123.228.51:7317").replace(/ http:\/\/\S+ https:\/\/\S+;/, ";")).toBe(CONTENT_SECURITY_POLICY);
   });
