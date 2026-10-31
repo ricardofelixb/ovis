@@ -7,3 +7,6 @@
 - Agents under a workspace in the sidebar are indented without tree lines; only worktrees keep
   them.
 - The context circle leads the model pill, in place of the model maker's logo.
+
+### Fixed
+- The + no longer shows the empty PC page for a moment before the new tab opens.

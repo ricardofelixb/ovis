@@ -390,14 +390,18 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     const paneItems = touch && tab.tab_id === selectedPane.tab_id
       ? (paneActions?.(selectedPane.pane_id) ?? []).filter((item) => !soloPanes
         || (item.id === "zoom" ? layout?.zoomed : item.id !== "split-right" && item.id !== "split-down")) : [];
+    // a one-pane tab whose name is its pane's says Rename and Close once: Close tab, and Rename pane,
+    // which the unnamed tab's label follows
+    const place = tabs.findIndex((entry) => entry.tab_id === tab.tab_id) + 1;
+    const lone = paneItems.length > 0 && panesOf(tab).length === 1 && customTabLabel(tab, place) === null;
     const groups: RowMenuItem[][] = [
       own.length < 2 ? [] : own.map((pane): RowMenuItem => ({
         id: `pane:${pane.pane_id}`, label: displayPaneTitle(pane), icon: Terminal,
         glyph: pane.agent ? <AgentMark agent={pane.agent} size={16} /> : undefined,
         current: pane.pane_id === selectedPane.pane_id, run: () => onSelectPane(pane.pane_id),
       })),
-      paneItems,
-      tabActions(tab),
+      paneItems.filter((item) => !lone || item.id !== "close"),
+      tabActions(tab).filter((item) => !lone || item.id !== "rename-tab"),
     ].filter((group) => group.length > 0);
     return groups.flatMap((group, at) => at === 0 ? group : group.map((item, index) => index === 0 ? { ...item, divider: true } : item));
   };

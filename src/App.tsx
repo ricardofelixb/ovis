@@ -463,7 +463,8 @@ export function App() {
         if (!found) return;
         const asked = selectionRef.current;
         const created = await createTab({ workspace_id: found.workspace.workspace_id, cwd: found.cwd, label: null, agent: null }, found.machineId);
-        void load();
+        // the new pane is selected once the roster holds it, so the header never draws an empty PC between
+        await load();
         // what the user went to while herdr answered is theirs to keep
         if (selectionStill(asked, selectionRef.current)) selectTargetRef.current(found.machineId, created.pane_id);
       },
