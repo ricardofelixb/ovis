@@ -2021,7 +2021,8 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     const heldInPlace = scrollingUp && !byReader && (shrankUnderView || distanceFromBottom <= LAYOUT_ALLOWANCE_PX);
     const leftEnd = scrollingUp && !heldInPlace;
     // Reaching the rounded endpoint clears reading intent unless still paging upward.
-    if ((!pagingAway.current || scrollingDown) && distanceFromBottom <= 1) pagingAway.current = false;
+    // After the reader opened a row, the list settling back onto the end is not them going back.
+    if ((!pagingAway.current || (scrollingDown && (byReader || !openedAway.current))) && distanceFromBottom <= 1) pagingAway.current = false;
     if (leftEnd && distanceFromBottom > allowance && stickToBottom.current) {
       pagingAway.current = true;
       dropPendingListScroll(timeline.current);
