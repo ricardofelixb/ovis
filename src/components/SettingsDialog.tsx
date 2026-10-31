@@ -657,18 +657,18 @@ function VoicePage() {
 
       <SettingsGroup title={t("Read aloud")} section="read-aloud">
         <SettingsRow label={t("Voice")} description={t("The speaker button under a reply reads it on this device. Kokoro speaks on the server, free and offline; the first time it takes a few minutes to set up.")} htmlFor="settings-speech-voice">
-          <select id="settings-speech-voice" className="select settings-select" value={settings.speechVoice} onChange={(event) => update({ speechVoice: event.target.value as SpeechVoice })}>
+          <SettingsSelect id="settings-speech-voice" value={settings.speechVoice} onChange={(event) => update({ speechVoice: event.target.value as SpeechVoice })}>
             {SPEECH_VOICES.map((voice) => <option key={voice} value={voice}>{`${voice.charAt(3).toUpperCase()}${voice.slice(4)} · ${voice.startsWith("a") ? t("American") : t("British")}`}</option>)}
-          </select>
+          </SettingsSelect>
         </SettingsRow>
       </SettingsGroup>
 
       <SettingsGroup title={t("Live voice")} section="live-voice">
         <SettingsRow label={t("Voice")} description={t("The voice of a live call with a Pi pane, from the next call on. Same as Pi uses the voice set in Pi's /openai-settings.")} htmlFor="settings-live-voice">
-          <select id="settings-live-voice" className="select settings-select" value={settings.liveVoice} onChange={(event) => update({ liveVoice: isPiVoice(event.target.value) ? event.target.value : "pi" })}>
+          <SettingsSelect id="settings-live-voice" value={settings.liveVoice} onChange={(event) => update({ liveVoice: isPiVoice(event.target.value) ? event.target.value : "pi" })}>
             <option value="pi">{t("Same as Pi")}</option>
             {PI_VOICES.map((voice) => <option key={voice} value={voice}>{`${voice.charAt(0).toUpperCase()}${voice.slice(1)}`}</option>)}
-          </select>
+          </SettingsSelect>
         </SettingsRow>
       </SettingsGroup>
 
