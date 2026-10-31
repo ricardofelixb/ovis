@@ -2014,6 +2014,10 @@ button {
   min-width: 0;
 }
 
+/* a PC's desktop over the pane area hides the tabs: the header names that PC instead */
+.header-tabs[hidden] { display: none; }
+.machine-context-name.header-screen-name { flex: 1 1 auto; min-width: 0; max-width: none; }
+
 .header-tabs .tab-strip {
   flex: 1 1 auto;
   min-width: 0;
@@ -2029,34 +2033,32 @@ button {
   }
 }
 
-/* the open pane's lens: its icon and a chevron, the other two in its menu (ViewMenu) */
-.view-menu-button {
+/* the open pane's lens: both icons in one button, the shown one lit (ViewToggle) */
+.view-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-1);
   flex: 0 0 auto;
   height: var(--control-h);
-  padding: 0 var(--space-1) 0 var(--space-2);
+  padding: 0 var(--space-2);
   border: var(--hairline) solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--accent-tint);
-  color: var(--accent);
+  background: transparent;
+  color: var(--text-dim);
   cursor: pointer;
 }
 
-.view-menu-button svg {
+.view-toggle svg {
   width: 16px;
   height: 16px;
 }
 
-.view-menu-button .view-menu-chevron {
-  width: 12px;
-  height: 12px;
-  color: var(--text-dim);
-}
+.view-toggle svg.is-shown { color: var(--accent); }
 
-.view-menu-button:hover,
-.view-menu-button:focus-visible {
+.view-toggle[aria-disabled="true"] { cursor: default; }
+
+.view-toggle:hover,
+.view-toggle:focus-visible {
   border-color: var(--border-strong);
 }
 
@@ -2966,13 +2968,13 @@ button {
   }
 
   /* drawn at the bar's control height, tapped at the full target through an invisible expander */
-  .view-menu-button {
+  .view-toggle {
     position: relative;
     min-width: var(--touch-target-header);
     justify-content: center;
   }
 
-  .view-menu-button::before {
+  .view-toggle::before {
     content: "";
     position: absolute;
     inset: calc((var(--control-h) - var(--touch-target-header)) / 2) 0;

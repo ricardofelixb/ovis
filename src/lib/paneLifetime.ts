@@ -27,8 +27,6 @@ const KINDS: readonly (readonly [string, UnsentKind])[] = [
 ];
 const LEASE_PREFIX = "ovis:composer-sending:";
 const VIEW_PREFIX = "ovis:view:";
-/** a pane shown as its PC's desktop (lib/computerSettings.ts), a lens like the one above */
-export const COMPUTER_PREFIX = "ovis:computer:";
 /** comments on a pane's replies (lib/replyComments.ts): no text of the user's own to recover, they go with the herdr whose replies they quote */
 export const REPLY_COMMENTS_PREFIX = "ovis:reply-comments:";
 /** a message box's agent-only mark (lib/composerDraft.ts), which goes with its draft */
@@ -45,7 +43,7 @@ export function paneStateKey(key: string): { machineId: string; paneId: string; 
   const lease = key.startsWith(LEASE_PREFIX);
   const rest = lease ? key.slice(LEASE_PREFIX.length) : key;
   const draft = KINDS.find(([prefix]) => rest.startsWith(prefix));
-  const prefix = draft?.[0] ?? (lease ? null : [VIEW_PREFIX, COMPUTER_PREFIX, REPLY_COMMENTS_PREFIX, AGENT_ONLY_PREFIX].find((other) => rest.startsWith(other)) ?? null);
+  const prefix = draft?.[0] ?? (lease ? null : [VIEW_PREFIX, REPLY_COMMENTS_PREFIX, AGENT_ONLY_PREFIX].find((other) => rest.startsWith(other)) ?? null);
   if (prefix === null) return null;
   const owner = rest.slice(prefix.length);
   const kind = lease || !draft ? null : draft[1];
@@ -220,7 +218,7 @@ export class PaneLifetimes {
     for (const key of keys) {
       const pane = paneStateKey(key);
       if (pane?.machineId !== machineId) continue;
-      if (keepLenses && (key.startsWith(VIEW_PREFIX) || key.startsWith(COMPUTER_PREFIX))) continue;
+      if (keepLenses && key.startsWith(VIEW_PREFIX)) continue;
       const mark = agentOnlyMark(key);
       if (pane.kind !== null) this.archive(storage, pane.machineId, pane.paneId, pane.kind, texts(pane.kind, storage.getItem(key), this.now(), mark !== null && keys.includes(mark)), titles);
       storage.removeItem(key);

@@ -46,7 +46,6 @@ const BASE: Record<string, string> = {
   // ---- settings ----
   "Settings": "设置",
   "Chat": "聊天",
-  "View": "视图",
   "Agent default": "代理默认",
   "Phone & devices": "手机和设备",
   "Access token": "访问 Token",
@@ -87,10 +86,7 @@ const BASE: Record<string, string> = {
   "Chat transcript (⌘⇧J)": "聊天记录 (⌘⇧J)",
   "Live terminal (⌘⇧J)": "实时终端 (⌘⇧J)",
   "Live terminal: coming to Windows PCs once herdr can attach there": "实时终端：待 herdr 支持在 Windows 上附加终端后开放",
-  "soon": "即将",
   "Terminal": "终端",
-  "Computer": "电脑",
-  "The PC's desktop": "PC 的桌面",
   "This PC's desktop can't be shown.": "无法显示这台 PC 的桌面。",
   "Full screen": "全屏",
   "Exit full screen": "退出全屏",

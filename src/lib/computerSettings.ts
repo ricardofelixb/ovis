@@ -1,6 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { paneStorageId } from "../../shared/machines.ts";
-import { COMPUTER_PREFIX, paneLifetimes } from "./paneLifetime.ts";
+import { useCallback, useEffect, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
 
 /**
  * The Computer view's settings for one PC, kept in this browser only: a phone and a desktop want their own
@@ -86,37 +84,21 @@ export function viewerOptions(settings: ComputerSettings): Record<string, unknow
 }
 
 /**
- * Whether the selected pane is shown as its PC's desktop, a lens each pane remembers in this browser as it
- * does Chat or Terminal (lib/usePaneLens.ts), and whether the view is kept connected out of sight: for
- * the minutes its settings give after it closes (2 by default), so coming back within them, from this
- * pane or another on Computer, needs no new connection.
+ * Which PC's desktop is shown over the pane area, opened from that PC's sidebar header (null: none), and
+ * which one is kept connected out of sight: for the minutes its settings give after it closes (2 by
+ * default), so coming back within them needs no new connection.
  */
-export function useComputerView(machineId: string, paneId: string | null): [open: boolean, setOpen: (open: boolean) => void, kept: boolean] {
-  const key = paneId === null ? null : `${COMPUTER_PREFIX}${paneStorageId(machineId, paneId)}`;
-  // a pick this page made stands even where storage cannot be written
-  const [picks, setPicks] = useState<ReadonlyMap<string, boolean>>(() => new Map());
-  const stored = (pane: string): boolean => {
-    try { return paneLifetimes.paneStorage.getItem(pane) === "1"; } catch { return false; }
-  };
-  const open = key !== null && (picks.get(key) ?? stored(key));
-  const setOpen = useCallback((next: boolean) => {
-    if (key === null) return;
-    setPicks((current) => current.get(key) === next ? current : new Map(current).set(key, next));
-    try {
-      if (next) paneLifetimes.paneStorage.setItem(key, "1"); else paneLifetimes.paneStorage.removeItem(key);
-    } catch {
-      /* private mode */
-    }
-  }, [key]);
-  // the PC whose view is kept: a pane of another PC opens no hidden view of its own desktop
+export function useComputerView(): [shown: string | null, show: Dispatch<SetStateAction<string | null>>, kept: string | null] {
+  const [shown, setShown] = useState<string | null>(null);
   const [kept, setKept] = useState<string | null>(null);
   useEffect(() => {
-    if (open) {
-      setKept(machineId);
+    if (shown !== null) {
+      setKept(shown);
       return;
     }
-    const timer = setTimeout(() => setKept(null), Number(readComputerSettings(machineId).keep) * 60_000);
+    if (kept === null) return;
+    const timer = setTimeout(() => setKept(null), Number(readComputerSettings(kept).keep) * 60_000);
     return () => clearTimeout(timer);
-  }, [open, machineId]);
-  return [open, setOpen, kept === machineId];
+  }, [shown, kept]);
+  return [shown, setShown, kept];
 }

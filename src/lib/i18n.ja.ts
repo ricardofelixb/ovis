@@ -44,7 +44,6 @@ const BASE: Record<string, string> = {
   // ---- settings ----
   "Settings": "設定",
   "Chat": "チャット",
-  "View": "表示",
   "Agent default": "エージェントの既定",
   "Phone & devices": "スマートフォンとデバイス",
   "Access token": "アクセストークン",
@@ -85,10 +84,7 @@ const BASE: Record<string, string> = {
   "Chat transcript (⌘⇧J)": "チャット履歴 (⌘⇧J)",
   "Live terminal (⌘⇧J)": "ライブターミナル (⌘⇧J)",
   "Live terminal: coming to Windows PCs once herdr can attach there": "ライブターミナル: herdr が Windows でアタッチに対応したら使えます",
-  "soon": "近日",
   "Terminal": "ターミナル",
-  "Computer": "コンピューター",
-  "The PC's desktop": "PCのデスクトップ",
   "This PC's desktop can't be shown.": "このPCのデスクトップを表示できません。",
   "Full screen": "全画面表示",
   "Exit full screen": "全画面表示を終了",

@@ -122,6 +122,14 @@
   animation: pulse var(--dur-pulse) var(--ease-pulse) infinite;
 }
 
+/* the PC whose desktop is open is marked as a picked row is, and its screen button is lit */
+.machine-group.is-screen > .machine-header { background: var(--side-selected); }
+.machine-screen[aria-pressed="true"] { color: var(--accent); }
+
+@media (forced-colors: active) {
+  .machine-group.is-screen > .machine-header { outline: var(--hairline) solid Highlight; outline-offset: calc(-1 * var(--hairline)); }
+}
+
 /* the + fills the rows' status cell */
 .machine-new { width: var(--side-box); }
 
