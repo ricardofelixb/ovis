@@ -48,6 +48,25 @@ export function panelUrl(uri: string, app: AppLocation): string | null {
   return url.href;
 }
 
+/**
+ * `uri` on the SSH host of the remote PC whose pane named it, when it names a loopback address:
+ * a dev server there prints `localhost:3000`, which from the browser's device would be its own.
+ * Null when it names another host, or the PC has no SSH host.
+ */
+export function remotePcUrl(uri: string, destination: string | undefined): string | null {
+  const host = destination?.trim().replace(/^[^@]*@/, "");
+  if (!host || !/^https?:\/\//i.test(uri)) return null;
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return null;
+  }
+  if (!LOOPBACK.test(url.hostname)) return null;
+  url.hostname = host.includes(":") ? `[${host}]` : host;
+  return url.href;
+}
+
 export function wantsPanel(target: WebLinkTarget, shiftKey: boolean): boolean {
   return (target === "panel") !== shiftKey;
 }
