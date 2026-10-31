@@ -61,7 +61,7 @@ export async function checkTabOverflow(browser: Browser, origin: string): Promis
         await page.waitForFunction(() => {
           const node = document.querySelector(".tab-strip");
           const last = [...(node?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])].find((tab) => tab.textContent === "last-tab");
-          const add = node?.querySelector(".tab-strip-add");
+          const add = node?.parentElement?.querySelector(".tab-strip-add");
           if (!node || !last || !add) return false;
           const strip = node.getBoundingClientRect();
           const item = last.getBoundingClientRect();

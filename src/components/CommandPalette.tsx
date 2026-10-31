@@ -25,7 +25,8 @@ import { useT } from "../lib/i18n.ts";
 import { useFocusTrap } from "../lib/useFocusTrap.ts";
 import { useSheetSwipe } from "../lib/sheets.ts";
 import { usePhoneSheetBack } from "../lib/sheetHistory.ts";
-import { CRAMPED_QUERY, loneTabHidden } from "../lib/paneCanvas.ts";
+import { loneTabHidden } from "../lib/paneCanvas.ts";
+import { useCramped } from "../lib/useCramped.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { useWorktreeBranches } from "../lib/useWorktreeBranches.ts";
 import { worktreeLabel } from "../lib/worktreeName.ts";
@@ -156,7 +157,7 @@ export function CommandPalette({ open, initialQuery = "", onClose, machines, onS
   const machineId = useMachineId();
   const api = useMachineApi();
   const touch = useMediaQuery("(pointer: coarse)");
-  const cramped = useMediaQuery(CRAMPED_QUERY);
+  const cramped = useCramped();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<PaletteStatusFilter>("all");
   const [selection, setSelection] = useState<PaletteSelection>(NO_SELECTION);

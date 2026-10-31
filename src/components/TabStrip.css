@@ -3,13 +3,10 @@
   display: flex;
   align-items: stretch;
   gap: var(--space-1);
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   min-height: var(--control-h);
-  padding: 0 var(--space-3);
-  /* the strip's surface, which the + that covers the scrolling tabs paints too */
-  --strip-bg: var(--bg-panel);
-  background: var(--strip-bg);
-  border-bottom: var(--hairline) solid var(--border);
+  padding-left: var(--space-3);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -19,22 +16,15 @@
   display: none;
 }
 
-/* a split view half's row: its tabs scroll, as wide as they are, and the end (App's grip and
-   close) takes the rest of the row */
+/* the row: its tabs scroll, as wide as they are, the + follows them, and a split view half's end
+   (App's grip and close) takes the rest of the row, all on the row's one surface */
 .tab-strip-row {
   display: flex;
   flex: 0 0 auto;
   min-width: 0;
-  /* the strip's own surface (below), so the end around the close is no band of another colour */
   --strip-bg: var(--bg-panel);
   background: var(--strip-bg);
   border-bottom: var(--hairline) solid var(--border);
-}
-
-.tab-strip-row > .tab-strip {
-  flex: 0 1 auto;
-  min-width: 0;
-  border-bottom: 0;
 }
 
 .tab-strip-end {
@@ -153,20 +143,9 @@
   white-space: nowrap;
 }
 
-/* the + stays at the strip's end while the tabs scroll under it: more tabs than fit must not
-   take it off the screen */
+/* the + after the scrolling tabs: more tabs than fit never take it off the screen */
 .tab-strip-add {
-  position: sticky;
-  right: 0;
-  background: var(--strip-bg);
-  /* the strip's own end padding, in the strip's colour: no tab shows past the + */
-  box-shadow: var(--space-3) 0 0 var(--strip-bg);
-}
-
-/* over the shared hover below: the hover tint sits on the strip's colour, never on a tab */
-.tab-strip .tab-strip-add:hover,
-.tab-strip .tab-strip-add:focus-visible {
-  background: linear-gradient(var(--bg-hover), var(--bg-hover)) var(--strip-bg);
+  margin: 0 var(--space-3) 0 var(--space-1);
 }
 
 .tab-strip-menu:hover,
@@ -239,14 +218,11 @@
    or the chat's, where the header has no rule and the strip's hairline is the one line over the
    transcript. Below that the header is the panel's bar and the strip stays with it. */
 @media (min-width: 769px) {
-  .tab-strip,
   .tab-strip-row {
     --strip-bg: var(--term-bg);
   }
 
-  .pane-column.is-chat .tab-strip,
   .pane-column.is-chat .tab-strip-row,
-  .pane-slot.is-chat .tab-strip,
   .pane-slot.is-chat .tab-strip-row {
     --strip-bg: var(--bg);
   }
@@ -269,7 +245,7 @@
 
 /* in the header the strip shares a phone's width with the bar's buttons: a long name (an unnamed tab's
    agent title) is cut, so the open tab and the + after it both fit */
-.header-tabs .tab-strip-item { max-width: calc(100% - var(--touch-target)); }
+.header-tabs .tab-strip-item { max-width: 100%; }
 .header-tabs .tab-strip-tab { overflow: hidden; }
 .header-tabs .tab-strip-label {
   min-width: 0;

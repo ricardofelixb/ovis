@@ -2018,19 +2018,28 @@ button {
 .header-tabs[hidden] { display: none; }
 .machine-context-name.header-screen-name { flex: 1 1 auto; min-width: 0; max-width: none; }
 
-.header-tabs .tab-strip {
+.header-tabs .tab-strip-row {
   flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  padding: 0;
   border-bottom: 0;
   --strip-bg: var(--bg-panel);
 }
 
+.header-tabs .tab-strip {
+  min-height: 0;
+  padding: 0;
+}
+
+.header-tabs .tab-strip-add { margin-right: 0; }
+
 @media (min-width: 769px) {
-  .app-header.is-zoned.is-chat .header-tabs .tab-strip {
+  .app-header.is-zoned.is-chat .header-tabs .tab-strip-row {
     --strip-bg: var(--bg);
   }
+}
+
+/* a phone's tabs sit on the bar itself, glass over the chat included: no band of another colour */
+@media (max-width: 768px) {
+  .header-tabs .tab-strip-row { --strip-bg: transparent; }
 }
 
 /* the open pane's lens: its icon and a chevron, both lenses in its menu (ViewMenu) */

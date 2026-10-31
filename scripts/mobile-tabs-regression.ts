@@ -30,7 +30,7 @@ async function assertShell(page: Page, label: string, stripRoom = 60): Promise<v
   assert.equal(await page.locator(".app-header .header-more-button").isVisible(), true, `${label}: the header keeps its More menu`);
   assert.equal(await page.locator(".app-header .context-title-text").count(), 0, `${label}: the header shows the tabs, not the pane's title`);
   const header = await box(page, ".app-header");
-  const strip = await box(page, ".app-header .tab-strip");
+  const strip = await box(page, ".app-header .tab-strip-row");
   assert.ok(strip.top >= header.top - 1 && strip.bottom <= header.bottom + 1, `${label}: the strip sits in the header (${JSON.stringify({ header, strip })})`);
   assert.ok(strip.width >= stripRoom, `${label}: the strip keeps its room in the header (${strip.width}px)`);
   assert.ok(strip.height >= 40, `${label}: the strip is a touch target tall (${strip.height}px)`);
@@ -40,14 +40,14 @@ async function assertShell(page: Page, label: string, stripRoom = 60): Promise<v
 /** The open tab and the + are both inside the strip's visible part, and the + is not over the tab. */
 async function activeTabInView(page: Page, label: string): Promise<void> {
   await page.waitForFunction(() => {
-    const strip = document.querySelector(".tab-strip")?.getBoundingClientRect();
+    const strip = document.querySelector(".tab-strip-row")?.getBoundingClientRect();
     const active = document.querySelector(".tab-strip-item.is-active")?.getBoundingClientRect();
     const add = document.querySelector(".tab-strip-add")?.getBoundingClientRect();
     if (!strip || !active || !add) return false;
     return active.left >= strip.left - 1 && active.right <= add.left + 1 && add.right <= strip.right + 1;
   }, null, { timeout: 5_000 }).catch(async (cause) => {
     throw new Error(`${label}: expected the open tab and the + in view; observed ${JSON.stringify({
-      strip: await box(page, ".tab-strip"), active: await box(page, ".tab-strip-item.is-active"), add: await box(page, ".tab-strip-add"),
+      strip: await box(page, ".tab-strip-row"), active: await box(page, ".tab-strip-item.is-active"), add: await box(page, ".tab-strip-add"),
     })}`, { cause });
   });
 }
@@ -200,7 +200,7 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
         const strip = late.locator(".tab-strip");
         const openInView = (): Promise<boolean> => strip.evaluate((node) => {
           const item = node.querySelector(".tab-strip-item.is-active")!.getBoundingClientRect();
-          return item.left >= node.getBoundingClientRect().left - 1 && item.right <= node.querySelector(".tab-strip-add")!.getBoundingClientRect().left + 1;
+          return item.left >= node.getBoundingClientRect().left - 1 && item.right <= node.parentElement!.querySelector(".tab-strip-add")!.getBoundingClientRect().left + 1;
         });
         try {
           await late.goto(`${origin}/?pane=${encodeURIComponent(last)}`);
