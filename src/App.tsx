@@ -9,6 +9,7 @@ import { PaneCanvas } from "./components/PaneCanvas.tsx";
 import { MachineSessionsProvider } from "./lib/machineSessionContext.tsx";
 import { PaneTerminal } from "./components/PaneTerminal.tsx";
 import { paneCovered, paneContentKey, paneContentPresented } from "./lib/panePresentation.ts";
+import { programReadsDrags } from "./lib/programDrags.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
 import { useAgentFriends } from "./lib/friends.ts";
@@ -898,6 +899,7 @@ export function App() {
                         mirrored={herdr ? herdr.terminal_attach === false || herdr.terminal_mirror === true : null}
                         restoreError={item?.restore_error ?? null}
                         agent={item?.agent ?? null}
+                        readsDrags={item ? programReadsDrags(item) : false}
                         agentStatus={item?.agent_status}
                         backgroundTasks={item?.background_tasks ?? 0}
                         // an offline PC's cached plan cannot be read
