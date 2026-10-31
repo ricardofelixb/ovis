@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { panelUrl, shouldOpenWebPage, wantsPanel } from "./webPanel.ts";
+import { panelUrl, remotePcUrl, shouldOpenWebPage, wantsPanel } from "./webPanel.ts";
 
 const lan = { protocol: "http:", hostname: "100.123.228.51", origin: "http://100.123.228.51:7317" };
 const local = { protocol: "http:", hostname: "localhost", origin: "http://localhost:7317" };
@@ -64,5 +64,20 @@ describe("shouldOpenWebPage", () => {
       ["https://pc.tail.ts.net:9000/report", false, "local"],
       ["https://pc.tail.ts.net:9000/report", true, "local"],
     ]);
+  });
+});
+
+describe("remotePcUrl", () => {
+  it("names a remote PC's loopback dev server under its SSH host", () => {
+    expect(remotePcUrl("http://localhost:3001/app?x=1", "ricardo@omarchy")).toBe("http://omarchy:3001/app?x=1");
+    expect(remotePcUrl("http://0.0.0.0:8765/", "omarchy.tail.ts.net")).toBe("http://omarchy.tail.ts.net:8765/");
+    expect(remotePcUrl("http://127.0.0.1:5173/", "100.64.0.2")).toBe("http://100.64.0.2:5173/");
+  });
+
+  it("leaves other hosts, other schemes and PCs without an SSH host alone", () => {
+    expect(remotePcUrl("https://example.com/", "omarchy")).toBeNull();
+    expect(remotePcUrl("file:///tmp/x", "omarchy")).toBeNull();
+    expect(remotePcUrl("http://localhost:3000/", undefined)).toBeNull();
+    expect(remotePcUrl("http://localhost:3000/", " ")).toBeNull();
   });
 });
