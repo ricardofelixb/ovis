@@ -36,7 +36,7 @@ mkdirSync(evidence, { recursive: true });
 interface Recorded { url: string; body: Record<string, unknown> }
 interface QaWindow { qaRequests: Recorded[]; qaHold: boolean; qaRelease: () => void; qaSubmits: string[]; qaDrop: () => void; qaOldBridge: boolean; qaSkillsBusy: Record<string, number>; qaSkillsBusyServed: number }
 
-const settled = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))).then(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())))));
+const settled = (page: Page) => page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity).map((animation) => animation.finished.catch(() => undefined))).then(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())))));
 const recorded = (page: Page) => page.evaluate(() => (window as unknown as QaWindow).qaRequests);
 const submits = (page: Page) => page.evaluate(() => (window as unknown as QaWindow).qaSubmits);
 
