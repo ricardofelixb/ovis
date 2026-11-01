@@ -1,6 +1,12 @@
 /**
- * Puts this checkout on Ricardo's own Ovis: the server on orgo-desktop that
+ * Puts Ricardo's own Ovis on the latest main: the server on orgo-desktop that
  * https://orgo-desktop.tailb4e5ae.ts.net:8443 fronts (this fork only, see AGENTS.md "This fork").
+ *
+ * On any other machine it runs itself on orgo-desktop over SSH (a login shell, which has mise's
+ * shims): it pulls origin/main there, fast-forward only, and runs this script with the same
+ * arguments, streaming its output and exiting with its exit code. So it deploys origin/main, not
+ * this checkout: commits that are not pushed to origin/main (and uncommitted changes) are not
+ * deployed, and it warns when HEAD is not on origin/main. On orgo-desktop itself it does:
  *
  * 1. builds the client (`bun run build`);
  * 2. restarts the running `bun server/managed.ts` of this checkout with the environment it ran with,
@@ -11,10 +17,11 @@
  *
  * Exits non-zero at the first step that fails, saying which; only a clean exit means deployed.
  * `bun scripts/deploy-orgo.ts [--no-build]`. Overrides: OVIS_DEPLOY_URL, OVIS_DEPLOY_CHECK_HOST,
- * OVIS_DEPLOY_ADB_SERIAL.
+ * OVIS_DEPLOY_ADB_SERIAL, OVIS_DEPLOY_SSH (where to run it from another machine). Every OVIS_DEPLOY_*
+ * set here goes along to the run on orgo-desktop, except OVIS_DEPLOY_SSH.
  */
 import { existsSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 
 const repo = join(import.meta.dir, "..");
@@ -22,15 +29,18 @@ const publicUrl = process.env.OVIS_DEPLOY_URL ?? "https://orgo-desktop.tailb4e5a
 const checkHost = process.env.OVIS_DEPLOY_CHECK_HOST ?? "omarchy";
 const adbSerial = process.env.OVIS_DEPLOY_ADB_SERIAL ?? "127.0.0.1:15421";
 const androidApp = "sh.ovis.app";
+const orgoHostname = "orgo-desktop";
+const orgoSsh = process.env.OVIS_DEPLOY_SSH ?? `ssh://root@${orgoHostname}:2222`;
+const orgoRepo = "/root/Projects/forks/ovis";
 
 function fail(message: string): never {
   console.error(`deploy-orgo: ${message}`);
   process.exit(1);
 }
 
-function run(cmd: string[], options: { env?: Record<string, string>; quiet?: boolean } = {}): { ok: boolean; out: string } {
+function run(cmd: string[], options: { env?: Record<string, string>; quiet?: boolean } = {}): { ok: boolean; code: number; out: string } {
   const result = Bun.spawnSync(cmd, { cwd: repo, env: options.env ?? process.env, stdout: options.quiet === false ? "inherit" : "pipe", stderr: options.quiet === false ? "inherit" : "pipe" });
-  return { ok: result.exitCode === 0, out: `${result.stdout?.toString() ?? ""}${result.stderr?.toString() ?? ""}`.trim() };
+  return { ok: result.exitCode === 0, code: result.exitCode ?? 1, out: `${result.stdout?.toString() ?? ""}${result.stderr?.toString() ?? ""}`.trim() };
 }
 
 async function waitFor(what: string, ms: number, done: () => boolean | Promise<boolean>): Promise<void> {
@@ -68,6 +78,20 @@ function environOf(pid: number): Record<string, string> {
 }
 
 const bundleOf = (html: string) => html.match(/assets\/index-[^"]+\.js/)?.[0] ?? null;
+
+const shellQuote = (arg: string) => `'${arg.replaceAll("'", "'\\''")}'`;
+
+if (hostname() !== orgoHostname) {
+  run(["git", "fetch", "--quiet", "origin", "main"]);
+  if (!run(["git", "merge-base", "--is-ancestor", "HEAD", "origin/main"]).ok) {
+    console.warn("deploy-orgo: warning: HEAD is not on origin/main, and only origin/main is deployed; push or merge it first if it should go out");
+  }
+  console.log(`deploy-orgo: deploying origin/main through ${orgoSsh}, not this checkout`);
+  const overrides = Object.entries(process.env).filter(([name]) => name.startsWith("OVIS_DEPLOY_") && name !== "OVIS_DEPLOY_SSH").map(([name, value]) => `${name}=${shellQuote(value ?? "")} `).join("");
+  const steps = [`cd ${orgoRepo}`, "git pull --ff-only origin main", ". scripts/bun-path.sh", `${overrides}bun scripts/deploy-orgo.ts ${process.argv.slice(2).map(shellQuote).join(" ")}`];
+  const remote = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", orgoSsh, `bash -lc ${shellQuote(steps.join(" && "))}`], { quiet: false });
+  process.exit(remote.code);
+}
 
 const head = run(["git", "rev-parse", "HEAD"]).out;
 

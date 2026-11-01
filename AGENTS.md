@@ -118,3 +118,6 @@ to change. Also read [server/AGENTS.md](server/AGENTS.md) and [src/AGENTS.md](sr
   run `bun scripts/deploy-orgo.ts`. It builds, restarts the server, checks the new bundle from
   omarchy and restarts the Xiaomi app. Say it's deployed only once it exits 0; when it stops at the
   Xiaomi, ask Ricardo to swipe Ovis away and reopen it.
+- It works from any machine: elsewhere it runs itself on orgo-desktop over SSH (`OVIS_DEPLOY_SSH`),
+  after `git pull --ff-only origin main` there, so it deploys origin/main, not your checkout. Push or
+  merge first; it warns when HEAD is not on origin/main.
