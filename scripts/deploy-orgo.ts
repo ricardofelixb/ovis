@@ -114,7 +114,7 @@ if (env.HERDR_PLUGIN_CONFIG_DIR) {
   const settings = join(env.HERDR_PLUGIN_CONFIG_DIR, "env");
   const before = existsSync(settings) ? readFileSync(settings, "utf8") : "";
   const after = withSetting(before, "OVIS_AUTO_UPDATE", "1");
-  if (after !== before) { writeFileSync(settings, after); console.log(`deploy-orgo: set OVIS_AUTO_UPDATE=1 in ${settings}`); }
+  if (after !== before) { writeFileSync(settings, after, { mode: 0o600 }); console.log(`deploy-orgo: set OVIS_AUTO_UPDATE=1 in ${settings}`); }
 } else console.warn("deploy-orgo: warning: the server has no HERDR_PLUGIN_CONFIG_DIR, so a later start (a reboot) will not install releases by itself");
 const port = env.PORT ?? "7317";
 let log = "/dev/null";
