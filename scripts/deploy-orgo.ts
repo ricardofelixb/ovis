@@ -17,7 +17,8 @@
  *
  * Exits non-zero at the first step that fails, saying which; only a clean exit means deployed.
  * `bun scripts/deploy-orgo.ts [--no-build]`. Overrides: OVIS_DEPLOY_URL, OVIS_DEPLOY_CHECK_HOST,
- * OVIS_DEPLOY_ADB_SERIAL, OVIS_DEPLOY_SSH (where to run it from another machine).
+ * OVIS_DEPLOY_ADB_SERIAL, OVIS_DEPLOY_SSH (where to run it from another machine). Every OVIS_DEPLOY_*
+ * set here goes along to the run on orgo-desktop, except OVIS_DEPLOY_SSH.
  */
 import { existsSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
 import { homedir, hostname } from "node:os";
@@ -86,7 +87,8 @@ if (hostname() !== orgoHostname) {
     console.warn("deploy-orgo: warning: HEAD is not on origin/main, and only origin/main is deployed; push or merge it first if it should go out");
   }
   console.log(`deploy-orgo: deploying origin/main through ${orgoSsh}, not this checkout`);
-  const steps = [`cd ${orgoRepo}`, "git pull --ff-only origin main", ". scripts/bun-path.sh", `bun scripts/deploy-orgo.ts ${process.argv.slice(2).map(shellQuote).join(" ")}`];
+  const overrides = Object.entries(process.env).filter(([name]) => name.startsWith("OVIS_DEPLOY_") && name !== "OVIS_DEPLOY_SSH").map(([name, value]) => `${name}=${shellQuote(value ?? "")} `).join("");
+  const steps = [`cd ${orgoRepo}`, "git pull --ff-only origin main", ". scripts/bun-path.sh", `${overrides}bun scripts/deploy-orgo.ts ${process.argv.slice(2).map(shellQuote).join(" ")}`];
   const remote = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", orgoSsh, `bash -lc ${shellQuote(steps.join(" && "))}`], { quiet: false });
   process.exit(remote.code);
 }
