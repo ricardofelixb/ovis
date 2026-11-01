@@ -3,10 +3,12 @@ import { networkInterfaces } from "node:os";
 
 import type { DevicePairedEvent, Machine, MachineEvent, MachineRoster, OpenRequest, ReadFinish, SetupAction, SetupRequest } from "../shared/machines.ts";
 import type { AgentRowTokens } from "../shared/pane-tokens.ts";
+import { MAX_OMARCHY_THEME_BYTES, omarchyTheme } from "../shared/omarchy-theme.ts";
 import type { SharedPreferences } from "../shared/preferences.ts";
 import type { PanePromptResponse, SessionSnapshot } from "../shared/protocol.ts";
 import type { SeenFinish } from "../shared/seen.ts";
 import { MachineManager } from "./machines.ts";
+import type { OmarchyThemeStore } from "./omarchy-themes.ts";
 import { canSendSecret, sameOrigin } from "./machine-security.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
 import { crossSiteFileRead } from "./file-view.ts";
@@ -136,7 +138,9 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
   seen?: { list(): SeenFinish[]; subscribe(listener: (finish: SeenFinish) => void): () => void },
   /** durable device enrollments (server/devices.ts), already without the ones this stream's own device made */
   pairings?: { subscribe(listener: (event: DevicePairedEvent) => void): () => void },
-  relayBudget?: EventStreamBudget): Promise<Response> {
+  relayBudget?: EventStreamBudget,
+  /** the device-keyed Omarchy themes; left out over a relay, whose peer has no address to key by */
+  omarchyThemes?: Pick<OmarchyThemeStore, "get" | "set" | "subscribe">): Promise<Response> {
   const url = new URL(request.url);
   // A PC's file opens as this PC's /api/fs/file does, from any navigation: reading it changes
   // nothing, and Chrome on Android shows a PDF in the viewer's frame as an "Open" button whose
@@ -176,6 +180,7 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       let stopSeen: (() => void) | undefined;
       let stopOpen: (() => void) | undefined;
       let stopPairings: (() => void) | undefined;
+      let stopOmarchy: (() => void) | undefined;
       let unwatchDevice: (() => void) | undefined;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
       let close = () => {};
@@ -186,7 +191,7 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       // the browser went away: what still waits for it is dropped, not kept for a reader that is gone
       const aborted = () => drop();
       const cleanup = () => {
-        stop?.(); stopPreferences?.(); stopSidebar?.(); stopSeen?.(); stopPairings?.(); stopOpen?.(); unwatchDevice?.(); clearInterval(heartbeat);
+        stop?.(); stopPreferences?.(); stopSidebar?.(); stopSeen?.(); stopPairings?.(); stopOpen?.(); stopOmarchy?.(); unwatchDevice?.(); clearInterval(heartbeat);
         request.signal.removeEventListener("abort", aborted);
         if (queue) forgetQueue(queue);
         relayBudget?.release(charged);
@@ -307,6 +312,12 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
           stopOpen = () => { openListeners.delete(listener); };
           // a device paired after this stream opened: the one event, as it happens (nothing is replayed on reconnect)
           stopPairings = pairings?.subscribe((event) => send(`data: ${JSON.stringify(event satisfies MachineEvent)}\n\n`));
+          // the Omarchy theme of the device this browser runs on, when that device's hook sent one; none over a relay
+          if (omarchyThemes) {
+            const sendTheme = (theme: ReturnType<OmarchyThemeStore["get"]>) => send(`data: ${JSON.stringify({ type: "omarchy-theme", theme } satisfies MachineEvent)}\n\n`);
+            stopOmarchy = omarchyThemes.subscribe(listener.device, sendTheme);
+            sendTheme(omarchyThemes.get(listener.device));
+          }
           if (closed) { cleanup(); return; }
           heartbeat = machineEventsClock.heartbeat(() => send(": heartbeat\n\n"));
           request.signal.addEventListener("abort", aborted, { once: true });
@@ -329,6 +340,19 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       let windows = 0;
       for (const listener of openListeners) if (listener.device === device) { listener.send(event); windows++; }
       return windows ? jsonResponse({ windows }) : fail("no_window", "No window of this app is open on that device", 404);
+    }
+    // a device's theme-set hook: its colors.toml as the body, its theme's name in `name`
+    if (parts[0] === "omarchy-theme" && parts.length === 1 && request.method === "PUT") {
+      setRequestRoute("/api/machines/omarchy-theme");
+      if (!omarchyThemes) return fail("unsupported", "This server keeps no Omarchy theme for a relayed device", 404);
+      const text = await request.text();
+      if (text.length > MAX_OMARCHY_THEME_BYTES) return fail("too_large", "colors.toml is at most 16 KB", 413);
+      let parsed: unknown;
+      try { parsed = Bun.TOML.parse(text); } catch { return fail("invalid_body", "Expected an Omarchy colors.toml", 400); }
+      const theme = omarchyTheme(parsed, url.searchParams.get("name"));
+      if (!theme) return fail("invalid_body", "colors.toml needs every Omarchy color as #rrggbb", 400);
+      omarchyThemes.set(deviceOf(request), theme);
+      return jsonResponse({ device: deviceOf(request) || "local", name: theme.name });
     }
     if (parts[0] === "read" && parts.length === 1 && request.method === "GET") {
       setRequestRoute("/api/machines/read");

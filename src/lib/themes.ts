@@ -14,6 +14,19 @@ export type ThemeEntry = (typeof SUPPORTED_ENTRIES)[number];
 export type TerminalColors = { readonly background: string; readonly foreground: string; readonly cursor: string; readonly selectionBackground: string }
   & Readonly<Partial<Record<keyof typeof LIGHT_ANSI_ROLES, string>>>;
 
+/**
+ * A row as the page draws it: a table row, or one derived from a device's Omarchy theme
+ * (lib/omarchyTheme.ts) over the default theme's row of its mode, with `tokens` set inline over it.
+ */
+export interface DrawnTheme {
+  readonly id: ThemeId;
+  readonly mode: Mode;
+  readonly bgPanel: string;
+  readonly bg: string;
+  readonly terminal: TerminalColors;
+  readonly tokens?: Readonly<Record<string, string>>;
+}
+
 export function isThemeId(value: unknown): value is ThemeId {
   return typeof value === "string" && (THEME_IDS as readonly string[]).includes(value);
 }

@@ -1,4 +1,5 @@
 import type { AgentRowTokens } from "./pane-tokens.ts";
+import type { OmarchyTheme } from "./omarchy-theme.ts";
 import type { SharedPreferences } from "./preferences.ts";
 import type { HealthAuth, SecuritySummary, ServerMessage, SessionSnapshot } from "./protocol.ts";
 import type { SeenFinish } from "./seen.ts";
@@ -164,7 +165,9 @@ export type MachineEvent = { type: "machines"; machines: Machine[] } | { type: "
   | { type: "seen"; finishes: SeenFinish[] }
   | DevicePairedEvent
   /** POST /api/machines/open from the device this browser runs on (a Touch Bar, a script): show that pane */
-  | { type: "open"; machine_id: string; pane_id: string };
+  | { type: "open"; machine_id: string; pane_id: string }
+  /** the Omarchy theme the device this browser runs on last sent (PUT /api/machines/omarchy-theme): when the stream opens, then each change */
+  | { type: "omarchy-theme"; theme: OmarchyTheme | null };
 /**
  * POST /api/machines/open: `hosts` are names for the PC, any of which may match: its SSH destination
  * or hostname (as the window title gives it), or an address of this server's own PC

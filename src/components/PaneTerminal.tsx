@@ -45,7 +45,8 @@ import { PendingMessages } from "./PendingMessages.tsx";
 import type { AgentStatus, ClientRole, ConversationTurn, PlanSummary, ServerMessage } from "../../shared/protocol.ts";
 import type { PaneControls, PaneView } from "../lib/actions.ts";
 import { usePaneLane } from "../lib/chatLane.ts";
-import { useSettings, type Palette, type ResolvedTheme } from "../lib/settings.ts";
+import { useSettings } from "../lib/settings.ts";
+import type { TerminalColors } from "../lib/themes.ts";
 import { useT } from "../lib/i18n.ts";
 import { isAppShortcut } from "../lib/shortcuts.ts";
 import { plainPageDirection } from "../lib/pageScroll.ts";
@@ -133,10 +134,8 @@ export interface PaneTerminalProps {
   terminalWheelSpeed: number;
   /** fonts tried before the built-in stack (settings); "" keeps the built-in one */
   terminalFontFamily: string;
-  /** the resolved UI theme: the xterm theme object mirrors it */
-  theme: ResolvedTheme;
-  /** the chrome palette (settings.ts): the terminal cursor and selection follow it */
-  palette: Palette;
+  /** the drawn row's xterm colors (settings.ts resolvedEntry): a table row's, or this device's Omarchy theme's */
+  terminalColors: TerminalColors;
   /** The connection's desired role; changes are sent to the server, acks come back via onRoleAck. */
   role?: ClientRole;
   /** Fires with the server-confirmed role (the header toggle shows it). */
@@ -178,8 +177,7 @@ export function PaneTerminal({
   split = false,
   terminalWheelSpeed,
   terminalFontFamily,
-  theme,
-  palette,
+  terminalColors,
   role = "interact",
   onOpenTerminal,
   peek: peekProp = null,
@@ -638,9 +636,9 @@ export function PaneTerminal({
     }, 2500);
   }, []);
 
-  useTerminalMount({ activeRef, barKeyRef, baseFontRef, pinchingRef, cachedRef, watchedRef, cachedReleaseRef, cancelLeaveRef, cancelTouchRef, chatMountedRef, chatOutputRef, chatViewRef, clearModifiers, clipboardTimerRef, coarseRef, commitPendingText, composingRef, compositionCommitPendingRef, deferAttachRef, draftHeldForRef, draftPaneRef, endedRef, findOpenRef, fitRef, fittedRef, fixedGridRef, followCursorRef, followRef, frameGateRef, heldRef, hostRef, hyperlinksRef, keyboardHoldsRef, keyboardToggleFocusRef, leaveRef, lineScroll, machineId, machineSessions, mirroredRef, mirrorWrapRef, modifiersRef, modifyOtherKeysRef, narrowFontRef, noteClipboard, observeRef, onChatSuggestion, onInputRowFrameRef, onRoleAckRef, onServerMessageRef, openFileRef, openWebRef, osc52AllowedRef, outputTargetRef, palette, paneRef, pendingEpochRef, pendingScopeRef, pendingSubmissionsRef, pinchBadgeRef, pinchStatusRef, presentationRef, presentedRef, readsDragsRef, reassertIfStaleRef, reattachRef, redrawGreeting, releaseAwayRef, idleReleaseRef, setIdleView, releaseRef, releasedRef, retireOutputRef, secretRef, sessionRef, setChatInvalidation, setChatLive, setChatRefresh, setChatSent, setComposing, setConnected, setConnectedBefore, setConversationPushes, setDraft, setEnded, setHeld, setInputError, setInputReady, setObserving, setOutputError, setOutputReady, setParsedTarget, setReleased, setSecret, setSelectionQuote, setTerminal, setUnsupported, setWatching, sharedGridRef, shortcutSettings, shownRef, sizesPty, socketRef, stackRef, stalledRef, stopKeyRef, submitRetention, t, tRef, termRef, terminalFontSize, theme, updateSettings, uploadFileRef, watchingRef, wheelStateRef });
+  useTerminalMount({ activeRef, barKeyRef, baseFontRef, pinchingRef, cachedRef, watchedRef, cachedReleaseRef, cancelLeaveRef, cancelTouchRef, chatMountedRef, chatOutputRef, chatViewRef, clearModifiers, clipboardTimerRef, coarseRef, commitPendingText, composingRef, compositionCommitPendingRef, deferAttachRef, draftHeldForRef, draftPaneRef, endedRef, findOpenRef, fitRef, fittedRef, fixedGridRef, followCursorRef, followRef, frameGateRef, heldRef, hostRef, hyperlinksRef, keyboardHoldsRef, keyboardToggleFocusRef, leaveRef, lineScroll, machineId, machineSessions, mirroredRef, mirrorWrapRef, modifiersRef, modifyOtherKeysRef, narrowFontRef, noteClipboard, observeRef, onChatSuggestion, onInputRowFrameRef, onRoleAckRef, onServerMessageRef, openFileRef, openWebRef, osc52AllowedRef, outputTargetRef, paneRef, pendingEpochRef, pendingScopeRef, pendingSubmissionsRef, pinchBadgeRef, pinchStatusRef, presentationRef, presentedRef, readsDragsRef, reassertIfStaleRef, reattachRef, redrawGreeting, releaseAwayRef, idleReleaseRef, setIdleView, releaseRef, releasedRef, retireOutputRef, secretRef, sessionRef, setChatInvalidation, setChatLive, setChatRefresh, setChatSent, setComposing, setConnected, setConnectedBefore, setConversationPushes, setDraft, setEnded, setHeld, setInputError, setInputReady, setObserving, setOutputError, setOutputReady, setParsedTarget, setReleased, setSecret, setSelectionQuote, setTerminal, setUnsupported, setWatching, sharedGridRef, shortcutSettings, shownRef, sizesPty, socketRef, stackRef, stalledRef, stopKeyRef, submitRetention, t, tRef, termRef, terminalColors, terminalFontSize, updateSettings, uploadFileRef, watchingRef, wheelStateRef });
 
-  useTerminalRefits({ activeRef, autoSelected, baseFontRef, pinchingRef, fontSettledRef, chatView, chatViewRef, coarseRef, findOpenRef, fitRef, fittedRef, fixedGridRef, follow, followCursorRef, keyboardHoldsRef, narrowFont, narrowFontFitted, observeRef, palette, paneRef, peekRef, sharedGridRef, shown, sizesPty, socketRef, termRef, terminalFontFamily, terminalFontSize, theme });
+  useTerminalRefits({ activeRef, autoSelected, baseFontRef, pinchingRef, fontSettledRef, chatView, chatViewRef, coarseRef, findOpenRef, fitRef, fittedRef, fixedGridRef, follow, followCursorRef, keyboardHoldsRef, narrowFont, narrowFontFitted, observeRef, paneRef, peekRef, sharedGridRef, shown, sizesPty, socketRef, termRef, terminalColors, terminalFontFamily, terminalFontSize });
 
   usePaneAttach({ activeRef, autoSelected, cached, watched, coarseRef, deferAttachRef, fontSettledRef, draftPaneRef, findOpenRef, fitRef, fittedRef, fixedGridRef, frameGateRef, hyperlinksRef, hostRef, machineId, mirrored, modifyOtherKeysRef, observeRef, paneId, pending, presented, presentationRef, releaseRef, releasedRef, retireOutputRef, secretRef, setDraft, setComposing, setEnded, setHeld, setInputError, setInputReady, setOutputError, setOutputReady, setReleased, setSecret, setUnsupported, setWatching, sharedGridRef, socketRef, stalledRef, terminalId, termRef, chatViewRef, cancelLeaveRef, cachedRef, watchingRef, keyboardHoldsRef, followRef, followCursorRef, leaveRef, shownRef });
 

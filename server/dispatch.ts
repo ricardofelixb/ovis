@@ -14,6 +14,7 @@ import { DEFAULT_PORT } from "../shared/protocol.ts";
 import { authClient, deviceCookieValue, bearerMatches, handleAuthRequest, isAuthenticated, isSecureRequest, parseCookies, presentedToken, presentedTokenHeld, recordPresentedTokenFailure, requiresAuth, unauthorizedJson } from "./auth.ts";
 import { bindScope, cameThroughProxy, decideAccess, forwardingHeaders, isLoopbackAddress, isServeOwnerRequest, lanExposed, observedIngress } from "./access.ts";
 import { type DeviceStore, handleDeviceRequest, newStreamKey, sameBrowser, streamCookie, streamKeys, type DeviceMatch } from "./devices.ts";
+import type { OmarchyThemeStore } from "./omarchy-themes.ts";
 import { handlePreferencesRequest, type PreferenceStore } from "./preferences.ts";
 import { handleSeenRequest, type SeenStore } from "./seen.ts";
 import { type FriendStore, handleFriendsRequest } from "./friends.ts";
@@ -72,6 +73,7 @@ export interface RequestServices {
   readonly bootId: string;
   readonly devices: DeviceStore;
   readonly preferences: PreferenceStore;
+  readonly omarchyThemes: OmarchyThemeStore;
   readonly herdrSidebar: HerdrSidebarConfig;
   readonly identityOf: (grantPath: boolean, host: string | null) => Promise<TailnetIdentity>;
   readonly serveOnly: boolean;
@@ -113,7 +115,7 @@ export interface ServerContext {
 }
 
 export async function handleRequest(request: Request, ctx: ServerContext): Promise<Response | undefined> {
-  const { options, hostname, token, bridgeToken, bootId, devices, preferences, herdrSidebar, identityOf, serveOnly, portalGuards, shellAgents, agentDetector, agentOffered, agentInstaller, openCodeState, cliProxyRoutes, usageLogin, usage, voice, speech, friends, piVoice, browserSnapshot, core, seen, piReader, orderSequence, clientConnectionLog, requestLog, portalStartupResult, portalStartup } = ctx.services;
+  const { options, hostname, token, bridgeToken, bootId, devices, preferences, omarchyThemes, herdrSidebar, identityOf, serveOnly, portalGuards, shellAgents, agentDetector, agentOffered, agentInstaller, openCodeState, cliProxyRoutes, usageLogin, usage, voice, speech, friends, piVoice, browserSnapshot, core, seen, piReader, orderSequence, clientConnectionLog, requestLog, portalStartupResult, portalStartup } = ctx.services;
   const { sidecar, serialize, push, logPushError, omo, claudeAgents, opencodeAgents, plans, clientSnapshot, machines, broadcastAll, collector, queueFirstMessage } = core;
   return requestLog.handle(request, async (headers) => {
   const startup = portalStartupResult ?? await portalStartup;
@@ -301,7 +303,7 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
       // that closed the gate, so whoever holds it has no access left by the time there is news
       const openAccess = access.level === "full" && access.via === "open";
       const pairings = { subscribe: (listener: (event: DevicePairedEvent) => void) => devices.onPaired((event, origin) => { if (!openAccess && event.device_id !== deviceId && !sameBrowser(origin, keys)) listener(event); }) };
-      const response = await handleMachineRequest(request, machines, deviceId ? (close) => devices.onRevoke(deviceId, close) : portalRecheckMs !== undefined ? (close) => { const timer = setTimeout(close, portalRecheckMs); return () => clearTimeout(timer); } : undefined, preferences, readOnly, herdrSidebar, seen, pairings, ctx.relayBodyBudget);
+      const response = await handleMachineRequest(request, machines, deviceId ? (close) => devices.onRevoke(deviceId, close) : portalRecheckMs !== undefined ? (close) => { const timer = setTimeout(close, portalRecheckMs); return () => clearTimeout(timer); } : undefined, preferences, readOnly, herdrSidebar, seen, pairings, ctx.relayBodyBudget, ctx.peer.kind === "relay" ? undefined : omarchyThemes);
       response.headers.set("cache-control", "no-store");
       if (issuedKey !== null && response.ok) response.headers.append("set-cookie", streamCookie(issuedKey, isSecureRequest(request)));
       return response;

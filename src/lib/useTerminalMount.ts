@@ -15,7 +15,8 @@ import { matchHerdrWidths } from "./terminalWidths.ts";
 import { paneStorageId } from "../../shared/machines.ts";
 import { secretPrompt } from "../../shared/secret-prompt.ts";
 import type { ClientRole, ConversationTurn, ServerMessage } from "../../shared/protocol.ts";
-import { terminalTheme, type Palette, type ResolvedTheme, type Settings } from "./settings.ts";
+import type { Settings } from "./settings.ts";
+import type { TerminalColors } from "./themes.ts";
 import { measurableFontStack, openingFontStack, TERMINAL_FONT_STACK } from "./fontFamily.ts";
 import type { Translate } from "./i18n.ts";
 import { isAppShortcut, isMacPlatform } from "./shortcuts.ts";
@@ -105,7 +106,6 @@ export interface TerminalMountDeps {
   openWebRef: RefObject<(uri: string, shiftKey: boolean) => boolean>;
   osc52AllowedRef: RefObject<boolean>;
   outputTargetRef: RefObject<string>;
-  palette: Palette;
   paneRef: RefObject<string | null>;
   pendingEpochRef: RefObject<number>;
   pendingScopeRef: RefObject<string | null>;
@@ -164,7 +164,7 @@ export interface TerminalMountDeps {
   tRef: RefObject<Translate>;
   termRef: RefObject<Terminal | null>;
   terminalFontSize: number;
-  theme: ResolvedTheme;
+  terminalColors: TerminalColors;
   updateSettings: (patch: Partial<Settings>) => void;
   uploadFileRef: RefObject<(pane: string, image: Blob) => Promise<string>>;
   watchingRef: RefObject<boolean>;
@@ -172,7 +172,7 @@ export interface TerminalMountDeps {
 }
 
 export function useTerminalMount(deps: TerminalMountDeps): void {
-  const { activeRef, barKeyRef, baseFontRef, pinchingRef, cachedRef, watchedRef, cachedReleaseRef, cancelLeaveRef, cancelTouchRef, chatMountedRef, chatOutputRef, chatViewRef, clearModifiers, clipboardTimerRef, coarseRef, commitPendingText, composingRef, compositionCommitPendingRef, deferAttachRef, draftHeldForRef, draftPaneRef, endedRef, findOpenRef, fitRef, fittedRef, fixedGridRef, followCursorRef, followRef, frameGateRef, heldRef, hostRef, hyperlinksRef, keyboardHoldsRef, keyboardToggleFocusRef, leaveRef, lineScroll, machineId, machineSessions, mirroredRef, mirrorWrapRef, modifiersRef, modifyOtherKeysRef, narrowFontRef, noteClipboard, observeRef, onChatSuggestion, onInputRowFrameRef, onRoleAckRef, onServerMessageRef, openFileRef, openWebRef, osc52AllowedRef, outputTargetRef, palette, paneRef, pendingEpochRef, pendingScopeRef, pendingSubmissionsRef, pinchBadgeRef, pinchStatusRef, presentationRef, presentedRef, readsDragsRef, reassertIfStaleRef, reattachRef, redrawGreeting, releaseAwayRef, idleReleaseRef, setIdleView, releaseRef, releasedRef, retireOutputRef, secretRef, sessionRef, setChatInvalidation, setChatLive, setChatRefresh, setChatSent, setComposing, setConnected, setConnectedBefore, setConversationPushes, setDraft, setEnded, setHeld, setInputError, setInputReady, setObserving, setOutputError, setOutputReady, setParsedTarget, setReleased, setSecret, setSelectionQuote, setTerminal, setUnsupported, setWatching, sharedGridRef, shortcutSettings, shownRef, sizesPty, socketRef, stackRef, stalledRef, stopKeyRef, submitRetention, t, tRef, termRef, terminalFontSize, theme, updateSettings, uploadFileRef, watchingRef, wheelStateRef } = deps;
+  const { activeRef, barKeyRef, baseFontRef, pinchingRef, cachedRef, watchedRef, cachedReleaseRef, cancelLeaveRef, cancelTouchRef, chatMountedRef, chatOutputRef, chatViewRef, clearModifiers, clipboardTimerRef, coarseRef, commitPendingText, composingRef, compositionCommitPendingRef, deferAttachRef, draftHeldForRef, draftPaneRef, endedRef, findOpenRef, fitRef, fittedRef, fixedGridRef, followCursorRef, followRef, frameGateRef, heldRef, hostRef, hyperlinksRef, keyboardHoldsRef, keyboardToggleFocusRef, leaveRef, lineScroll, machineId, machineSessions, mirroredRef, mirrorWrapRef, modifiersRef, modifyOtherKeysRef, narrowFontRef, noteClipboard, observeRef, onChatSuggestion, onInputRowFrameRef, onRoleAckRef, onServerMessageRef, openFileRef, openWebRef, osc52AllowedRef, outputTargetRef, paneRef, pendingEpochRef, pendingScopeRef, pendingSubmissionsRef, pinchBadgeRef, pinchStatusRef, presentationRef, presentedRef, readsDragsRef, reassertIfStaleRef, reattachRef, redrawGreeting, releaseAwayRef, idleReleaseRef, setIdleView, releaseRef, releasedRef, retireOutputRef, secretRef, sessionRef, setChatInvalidation, setChatLive, setChatRefresh, setChatSent, setComposing, setConnected, setConnectedBefore, setConversationPushes, setDraft, setEnded, setHeld, setInputError, setInputReady, setObserving, setOutputError, setOutputReady, setParsedTarget, setReleased, setSecret, setSelectionQuote, setTerminal, setUnsupported, setWatching, sharedGridRef, shortcutSettings, shownRef, sizesPty, socketRef, stackRef, stalledRef, stopKeyRef, submitRetention, t, tRef, termRef, terminalColors, terminalFontSize, updateSettings, uploadFileRef, watchingRef, wheelStateRef } = deps;
 
     // Where this terminal is: its pane, and whether it is active, presented, shown and not the chat view.
     // Counted on every commit that changes it: an explicit copy still waiting for herdr's text is
@@ -217,7 +217,7 @@ export function useTerminalMount(deps: TerminalMountDeps): void {
         fontSize: terminalFontSize,
         // a chosen family, and the bundled Latin face, follow in the font effect once their faces have loaded
         fontFamily: measurableFontStack(openingFontStack(TERMINAL_FONT_STACK)),
-        theme: terminalTheme(theme, palette),
+        theme: { ...terminalColors },
         // a program's own colors suit one background (Claude Code's question titles are #ffffff, near
         // 1:1 on a light palette): xterm moves a foreground under 4.5:1 toward black or white. Dim text
         // needs half that, and box, block and powerline glyphs keep their color.

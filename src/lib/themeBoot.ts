@@ -3,7 +3,8 @@
  * page's boot script (src/theme-bootstrap.ts, run before the first paint) and loadSettings use, so
  * the theme the page is first drawn in is the one the app goes on drawing.
  */
-import { DEFAULT_THEME, isThemeId, type ThemeEntry, type ThemeId } from "./themes.ts";
+import { cachedOmarchyTheme, drawnOmarchyTheme } from "./omarchyTheme.ts";
+import { DEFAULT_THEME, isThemeId, type DrawnTheme, type ThemeId } from "./themes.ts";
 import { themeFor } from "./themeFor.ts";
 
 export type ThemeSetting = "dark" | "light" | "system";
@@ -78,17 +79,33 @@ export function resolveTheme(setting: ThemeSetting): ResolvedTheme {
   return typeof window !== "undefined" && window.matchMedia?.(DARK_QUERY).matches === false ? "light" : "dark";
 }
 
-/** The row the saved appearance draws now. */
-export function savedThemeEntry(storage: () => Pick<Storage, "getItem">): ThemeEntry {
-  const appearance = storedAppearance(readStoredAppearance(storage));
+/** Whether the main record follows this device's Omarchy theme (Settings → Appearance). */
+export function followsOmarchy(stored: StoredAppearance): boolean {
+  const record = stored.main?.value;
+  return typeof record === "object" && record !== null && (record as Record<string, unknown>)["followOmarchy"] === true;
+}
+
+/** The row the saved appearance draws now: the device's last Omarchy theme when it follows one. */
+export function savedThemeEntry(storage: () => Pick<Storage, "getItem">): DrawnTheme {
+  const stored = readStoredAppearance(storage);
+  const omarchy = followsOmarchy(stored) ? cachedOmarchyTheme(storage) : null;
+  if (omarchy !== null) return drawnOmarchyTheme(omarchy);
+  const appearance = storedAppearance(stored);
   return themeFor(appearance, resolveTheme(appearance.theme));
 }
 
-/** Puts a row on the document: the attributes src/styles.css keys its tokens on, and the browser's own colors. */
-export function applyThemeEntry(root: HTMLElement, entry: ThemeEntry): void {
+/** The tokens the last drawn row set inline, taken off before the next row's. */
+let inlineTokens: readonly string[] = [];
+
+/** Puts a row on the document: the attributes src/styles.css keys its tokens on, its own tokens, and the browser's own colors. */
+export function applyThemeEntry(root: HTMLElement, entry: DrawnTheme): void {
   root.dataset["theme"] = entry.mode;
   root.dataset["palette"] = entry.id;
   root.style.colorScheme = entry.mode;
+  for (const name of inlineTokens) root.style.removeProperty(name);
+  const tokens = Object.entries(entry.tokens ?? {});
+  for (const [name, value] of tokens) root.style.setProperty(name, value);
+  inlineTokens = tokens.map(([name]) => name);
   // `<meta name="theme-color">` follows the panel surface so the PWA title bar matches
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", entry.bgPanel);
 }

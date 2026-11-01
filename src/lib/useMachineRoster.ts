@@ -20,6 +20,7 @@ import { paneLifetimes } from "./paneLifetime.ts";
 import { displayPaneTitle } from "../components/Sidebar.tsx";
 import type { usePreferencesSync } from "./preferencesSync.ts";
 import type { useAlertSignals } from "./useAlertSignals.ts";
+import { receiveOmarchyTheme } from "./omarchyTheme.ts";
 
 const POLL_MS = 5000;
 
@@ -191,6 +192,8 @@ export function useRosterEvents({ locked, receivePreferencesRef, snapshotRequest
       let payload: MachineEvent;
       try { payload = JSON.parse(event.data); } catch { return; }
       if (payload.type === "preferences") { receivePreferencesRef.current(payload.preferences); return; }
+      // the Omarchy theme of the device this browser runs on (lib/omarchyTheme.ts), or none
+      if (payload.type === "omarchy-theme") { receiveOmarchyTheme(payload.theme); return; }
       if (payload.type === "herdr-sidebar") { setAgentRowTokens(payload.agents); return; }
       if (payload.type === "seen") { receiveSeen(payload.finishes); return; }
       // a device paired with this server: told once per enrollment, kept until read, the oldest giving way

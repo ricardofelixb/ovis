@@ -13,6 +13,7 @@ import type { PendingMessage, SessionSnapshot } from "../shared/protocol.ts";
 import { DEFAULT_PORT } from "../shared/protocol.ts";
 import { isLoopbackBind, lanExposed } from "./access.ts";
 import { DeviceStore } from "./devices.ts";
+import { OmarchyThemeStore } from "./omarchy-themes.ts";
 import { PreferenceStore } from "./preferences.ts";
 import { FriendStore } from "./friends.ts";
 import { SeenStore } from "./seen.ts";
@@ -222,6 +223,7 @@ export function createServer(
   const merge = options.siblingStateDir ? mergeSiblingState(stateDir, options.siblingStateDir) : null;
   const devices = new DeviceStore(stateDir, merge?.devicesBlocked ?? null);
   const preferences = new PreferenceStore(stateDir);
+  const omarchyThemes = new OmarchyThemeStore(stateDir);
   const friends = new FriendStore(stateDir);
   // Chat's own rewind (#1500, never released) kept its rewinds here; nothing reads them since #1577
   try {
@@ -323,7 +325,7 @@ export function createServer(
 
   const requestLog = new RequestLog(stateDir);
   const services: RequestServices = {
-    options, hostname, token, bridgeToken, bootId, devices, preferences, herdrSidebar, identityOf, serveOnly, portalGuards, shellAgents, agentDetector, agentOffered, agentInstaller, openCodeState, cliProxyRoutes, usageLogin, usage, voice, speech, friends, piVoice, browserSnapshot, core, seen, piReader, orderSequence, clientConnectionLog, requestLog, portalStartup,
+    options, hostname, token, bridgeToken, bootId, devices, preferences, omarchyThemes, herdrSidebar, identityOf, serveOnly, portalGuards, shellAgents, agentDetector, agentOffered, agentInstaller, openCodeState, cliProxyRoutes, usageLogin, usage, voice, speech, friends, piVoice, browserSnapshot, core, seen, piReader, orderSequence, clientConnectionLog, requestLog, portalStartup,
     get portalStartupResult() { return portalStartupResult; },
   };
 

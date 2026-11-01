@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { MachineEvent } from "../shared/machines.ts";
 import { handleMachineRequest, machineEventsClock, machineEventsQueuedBytes } from "./machine-api.ts";
 import type { MachineManager } from "./machines.ts";
+import { OmarchyThemeStore } from "./omarchy-themes.ts";
 
 // The agreed policy, written out rather than read from the code: raising either must fail here.
 const STREAM_BYTES = 4 * 1024 * 1024;
@@ -334,6 +338,50 @@ describe("the machine events stream", () => {
       expect(listening()).toBe(8);
     } finally {
       await Promise.all(next.map((stream) => stream.close()));
+    }
+  });
+});
+
+describe("a device's Omarchy theme", () => {
+  const colorsToml = `mode = "light"\n${["background", "dark_background", "foreground", "bright_foreground", "accent", "selection", "muted", "red", "yellow", "green", "cyan", "blue", "magenta", "bright_red", "bright_yellow", "bright_green", "bright_cyan", "bright_blue", "bright_magenta"].map((key) => `${key} = "#A1B2C3"`).join("\n")}\n`;
+  const from = (device: string, path: string, init: RequestInit = {}) => new Request(`http://127.0.0.1:7317/api/machines/${path}`, { ...init, headers: { "x-forwarded-for": device, "x-herdr-machine": "1", ...init.headers } });
+
+  it("reaches only the browsers of the device that sent it, and outlives a restart", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "ovis-omarchy-"));
+    const { manager } = managerStandIn();
+    const themes = new OmarchyThemeStore(stateDir);
+    const streams: { events: MachineEvent[]; reader: ReadableStreamDefaultReader<Uint8Array>; abort: AbortController }[] = [];
+    const open = async (device: string) => {
+      const abort = new AbortController();
+      const response = await handleMachineRequest(from(device, "events", { signal: abort.signal }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, themes);
+      const stream = { events: [] as MachineEvent[], reader: response.body!.getReader(), abort };
+      streams.push(stream);
+      return stream;
+    };
+    const next = async (stream: Awaited<ReturnType<typeof open>>): Promise<MachineEvent> => {
+      const { value } = await stream.reader.read();
+      return JSON.parse(new TextDecoder().decode(value).trim().slice("data: ".length)) as MachineEvent;
+    };
+    try {
+      const laptop = await open("100.96.150.40");
+      const phone = await open("100.101.250.35");
+      expect(await next(laptop)).toEqual({ type: "omarchy-theme", theme: null });
+      expect(await next(phone)).toEqual({ type: "omarchy-theme", theme: null });
+
+      const sent = await handleMachineRequest(from("100.96.150.40", "omarchy-theme?name=catppuccin-latte", { method: "PUT", body: colorsToml }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, themes);
+      expect(sent.status).toBe(200);
+      const told = await next(laptop);
+      expect(told).toMatchObject({ type: "omarchy-theme", theme: { name: "catppuccin-latte", mode: "light", colors: { accent: "#a1b2c3" } } });
+      // nothing more on the phone's stream: its next read waits
+      expect(await Promise.race([phone.reader.read().then(() => "told"), Bun.sleep(50).then(() => "quiet")])).toBe("quiet");
+
+      const refused = await handleMachineRequest(from("100.96.150.40", "omarchy-theme", { method: "PUT", body: 'mode = "dark"\n' }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, themes);
+      expect(refused.status).toBe(400);
+      expect(new OmarchyThemeStore(stateDir).get("100.96.150.40")).toEqual((told as Extract<MachineEvent, { type: "omarchy-theme" }>).theme);
+      expect(new OmarchyThemeStore(stateDir).get("100.101.250.35")).toBeNull();
+    } finally {
+      for (const stream of streams) { stream.abort.abort(); await stream.reader.cancel().catch(() => undefined); }
+      rmSync(stateDir, { recursive: true, force: true });
     }
   });
 });

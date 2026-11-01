@@ -9,8 +9,10 @@ import type { TelemetrySettings } from "../../shared/telemetry.ts";
 import { SPEECH_DEFAULT_VOICE, SPEECH_VOICES, type SpeechVoice } from "../../shared/speech.ts";
 import { isPiVoice, type PiVoice } from "../../shared/pi-voice.ts";
 import { mirrorPalette, SHARED_SETTING_KEYS, type SharedSettingKey } from "../../shared/preferences.ts";
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { DEFAULT_THEME, terminalColors, themeColor as themeTableColor, type ThemeId, type ThemeEntry } from "./themes.ts";
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { DEFAULT_THEME, terminalColors, themeColor as themeTableColor, type DrawnTheme, type ThemeId } from "./themes.ts";
+import { currentOmarchyTheme, drawnOmarchyTheme, subscribeOmarchyTheme } from "./omarchyTheme.ts";
+import type { OmarchyTheme } from "../../shared/omarchy-theme.ts";
 import { LANGUAGE_SETTINGS, LOCALE_TAGS, resolveLanguage, setCurrentLanguage, type Language, type LanguageSetting } from "./i18n.ts";
 import type { AlertPrefs, DoneAlerts } from "../../shared/notify-policy.ts";
 import { chatFontStack, sanitizeFontFamily } from "./fontFamily.ts";
@@ -99,6 +101,8 @@ export interface Settings {
   paletteDark: Palette;
   darkTheme: ThemeId;
   lightTheme: ThemeId;
+  /** draw this device in its own Omarchy theme, when its theme-set hook sends one (lib/omarchyTheme.ts), over the chosen theme */
+  followOmarchy: boolean;
   /** xterm font size in px */
   terminalFontSize: number;
   /** mouse reports sent to herdr per wheel event in the terminal: 1 is what xterm sends by itself */
@@ -224,14 +228,14 @@ export type DiffStyle = (typeof DIFF_STYLES)[number];
 
 /** Raw custom text, key combinations and account keys are never copied. Requiring every other
  * Settings field in the projection makes a new field require an explicit collection decision.
- * fileOpen, webLinks, the launch modes, followHerdrFocus, composerNewTabButton, contextCircle, composerArtifacts, terminalMirrorWrap, sidebarFilter, the
+ * fileOpen, webLinks, the launch modes, followHerdrFocus, followOmarchy, composerNewTabButton, contextCircle, composerArtifacts, terminalMirrorWrap, sidebarFilter, the
  * interface font, the chat's history page size and the folds its blocks start in are not collected: the telemetry schema
  * (shared/telemetry.ts) does not carry them. */
 type TelemetrySourceSettings = Omit<Settings,
   "keyBarExtras" | "keyBarItems" | "shortcutOverrides" | "terminalFontFamily" | "chatFontFamily" | "uiFontFamily"
   | "quickReplies" | "usageOrder" | "usageHidden" | "fileOpen" | "webLinks" | "claudeLaunchMode" | "codexLaunchMode"
   | "followHerdrFocus" | "composerNewTabButton" | "composerArtifacts" | "terminalMirrorWrap" | "sidebarFilter" | "historyPrompts"
-  | "expandThinking" | "foldWork" | "contextCircle" | "speechVoice" | "liveVoice" | "enterKey" | "openLiveWork">;
+  | "expandThinking" | "foldWork" | "followOmarchy" | "contextCircle" | "speechVoice" | "liveVoice" | "enterKey" | "openLiveWork">;
 
 /** Compare structured custom settings by content against this app's built-in defaults. */
 function differsFromDefault(value: unknown, defaultValue: unknown): boolean {
@@ -315,6 +319,8 @@ export const SETTING_SCOPE = {
   chatFontSize: "device", chatFontFamily: "device", historyPrompts: "device", uiFontSize: "device", uiFontFamily: "device", chatWidth: "device", enterKey: "device",
   // the chat's starting folds are this screen's, as its width: a phone may fold the work a desk keeps open
   expandThinking: "device", foldWork: "device",
+  // the theme of the machine this browser runs on: a phone never has one
+  followOmarchy: "device",
   // a desk's composer button: a phone never shows it
   composerNewTabButton: "device",
   // the composer's row is this screen's: a phone may keep it bare while a desk shows the chip
@@ -376,6 +382,7 @@ export const DEFAULT_SETTINGS: Settings = {
   openLiveWork: true,
   expandThinking: false,
   foldWork: false,
+  followOmarchy: false,
   keepScreenOn: false,
   language: "system",
   alertsOn: true,
@@ -568,6 +575,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     openLiveWork: typeof record["openLiveWork"] === "boolean" ? record["openLiveWork"] : DEFAULT_SETTINGS.openLiveWork,
     expandThinking: typeof record["expandThinking"] === "boolean" ? record["expandThinking"] : DEFAULT_SETTINGS.expandThinking,
     foldWork: typeof record["foldWork"] === "boolean" ? record["foldWork"] : DEFAULT_SETTINGS.foldWork,
+    followOmarchy: record["followOmarchy"] === true,
     keepScreenOn: typeof record["keepScreenOn"] === "boolean" ? record["keepScreenOn"] : DEFAULT_SETTINGS.keepScreenOn,
     language: LANGUAGE_SETTINGS.includes(record["language"] as LanguageSetting) ? record["language"] as LanguageSetting : DEFAULT_SETTINGS.language,
     alertsOn: typeof record["alertsOn"] === "boolean" ? record["alertsOn"] : DEFAULT_SETTINGS.alertsOn,
@@ -727,7 +735,7 @@ export function themeColor(theme: ResolvedTheme, palette: Palette = "amber"): st
   return themeTableColor(palette, theme);
 }
 
-export function applyToDocument(settings: Settings, entry: ThemeEntry, language: Language): void {
+export function applyToDocument(settings: Settings, entry: DrawnTheme, language: Language): void {
   const root = document.documentElement;
   root.lang = LOCALE_TAGS[language];
   applyThemeEntry(root, entry);
@@ -759,8 +767,10 @@ interface SettingsContextValue {
   settings: Settings;
   /** the theme after resolving `system` against the OS preference */
   resolvedTheme: ResolvedTheme;
-  /** The actual rendered row, whose mode may differ from the selected side. */
-  resolvedEntry: ThemeEntry;
+  /** The actual rendered row, whose mode may differ from the selected side: this device's Omarchy theme's when it follows one. */
+  resolvedEntry: DrawnTheme;
+  /** the Omarchy theme the server says this device is in, followed or not; null on a device that sent none */
+  omarchyTheme: OmarchyTheme | null;
   /** the language after resolving `system` against the browser's */
   resolvedLanguage: Language;
   update: (patch: Partial<Settings>) => void;
@@ -795,7 +805,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const resolvedTheme: ResolvedTheme = settings.theme === "system" ? (systemDark ? "dark" : "light") : settings.theme;
 
-  const resolvedEntry = themeFor(settings, resolvedTheme);
+  const omarchyTheme = useSyncExternalStore(subscribeOmarchyTheme, currentOmarchyTheme, () => null);
+  const tableEntry = themeFor(settings, resolvedTheme);
+  const resolvedEntry = useMemo(() => settings.followOmarchy && omarchyTheme !== null ? drawnOmarchyTheme(omarchyTheme) : tableEntry, [settings.followOmarchy, omarchyTheme, tableEntry]);
 
   const [browserLanguages, setBrowserLanguages] = useState<readonly string[]>(() => (typeof navigator !== "undefined" ? navigator.languages : []));
   useEffect(() => {
@@ -822,7 +834,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const value = useMemo(() => ({ settings, resolvedTheme, resolvedEntry, resolvedLanguage, update }), [settings, resolvedTheme, resolvedEntry, resolvedLanguage, update]);
+  const value = useMemo(() => ({ settings, resolvedTheme, resolvedEntry, omarchyTheme, resolvedLanguage, update }), [settings, resolvedTheme, resolvedEntry, omarchyTheme, resolvedLanguage, update]);
   return createElement(SettingsContext.Provider, { value }, children);
 }
 
