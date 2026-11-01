@@ -16,9 +16,9 @@
  * 4. restarts the Ovis app on the Xiaomi over adb, since the Android app ignores a reload.
  *
  * It also sets OVIS_AUTO_UPDATE=1 for the server it starts and in the plugin's `env` file, which a later
- * start (herdr's, after a reboot) reads: from then on Orgo installs by itself every release
- * .github/workflows/fork-release.yml tags, the commits of main that passed CI (scripts/fork-release.ts),
- * and this script is only for putting a change there before CI is done with it.
+ * start (herdr's, after a reboot) reads: from then on Orgo's updater installs by itself every newer plain
+ * `vX.Y.Z` tag its origin gets, such as the fork's calendar tags (`v2026.1101.1`, pushed by the
+ * orchestrator's weekly job), and this script is only for putting a change there before it is tagged.
  *
  * Exits non-zero at the first step that fails, saying which; only a clean exit means deployed.
  * `bun scripts/deploy-orgo.ts [--no-build]`. Overrides: OVIS_DEPLOY_URL, OVIS_DEPLOY_CHECK_HOST,

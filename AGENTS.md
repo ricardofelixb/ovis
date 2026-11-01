@@ -121,3 +121,8 @@ to change. Also read [server/AGENTS.md](server/AGENTS.md) and [src/AGENTS.md](sr
 - It works from any machine: elsewhere it runs itself on orgo-desktop over SSH (`OVIS_DEPLOY_SSH`),
   after `git pull --ff-only origin main` there, so it deploys origin/main, not your checkout. Push or
   merge first; it warns when HEAD is not on origin/main.
+- `deploy-orgo` also sets `OVIS_AUTO_UPDATE=1` for the server it restarts and in the plugin's `env` file
+  (`$HERDR_PLUGIN_CONFIG_DIR/env`, read on every later start). From then on Orgo's updater installs by
+  itself each newer plain `vX.Y.Z` tag of its origin, such as the fork's calendar tags
+  (`v2026.1101.1`, pushed by the orchestrator's weekly job; upstream's are `v0.x.y`). The Xiaomi app is
+  not restarted by that: swipe Ovis away and reopen it.
