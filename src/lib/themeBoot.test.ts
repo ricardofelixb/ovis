@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { DEFAULT_SETTINGS, loadSettings, resolveTheme, sanitizeSettings } from "./settings.ts";
 import { DEFAULT_APPEARANCE, readStoredAppearance, savedThemeEntry, SETTINGS_STORAGE_KEY, storedAppearance, THEMES_STORAGE_KEY } from "./themeBoot.ts";
 import { themeFor } from "./themeFor.ts";
-import { rowFor, SUPPORTED_ENTRIES, THEME_IDS, type ThemeEntry } from "./themes.ts";
+import { rowFor, SUPPORTED_ENTRIES, THEME_IDS, type DrawnTheme, type ThemeEntry } from "./themes.ts";
 
 // The page's boot script and the app read the same two records; whatever they hold, both must draw
 // the same row, or the first frame is not the one the app goes on showing.
@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 /** The row the page's boot script draws. */
-const boot = (): ThemeEntry => savedThemeEntry(() => window.localStorage);
+const boot = (): DrawnTheme => savedThemeEntry(() => window.localStorage);
 /** The row the app draws on its first render (SettingsProvider). */
 const app = (): ThemeEntry => {
   const settings = loadSettings();

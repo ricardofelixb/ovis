@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { terminalTheme, type Palette, type ResolvedTheme } from "./settings.ts";
+import type { TerminalColors } from "./themes.ts";
 import { type FontSettled, loadFontStack, measurableFontStack, monoFaceArrived, openingFontStack, terminalFontStack } from "./fontFamily.ts";
 import { modalOpen } from "./focus.ts";
 import { inUse } from "./paneTerminalShared.ts";
@@ -28,7 +28,6 @@ export interface TerminalRefitsDeps {
   narrowFont: boolean;
   narrowFontFitted: RefObject<boolean>;
   observeRef: RefObject<boolean>;
-  palette: Palette;
   paneRef: RefObject<string | null>;
   peekRef: RefObject<TerminalPeek | null>;
   sharedGridRef: RefObject<{ cols: number; rows: number } | null>;
@@ -38,17 +37,17 @@ export interface TerminalRefitsDeps {
   termRef: RefObject<Terminal | null>;
   terminalFontFamily: string;
   terminalFontSize: number;
-  theme: ResolvedTheme;
+  terminalColors: TerminalColors;
 }
 
 export function useTerminalRefits(deps: TerminalRefitsDeps): void {
-  const { activeRef, autoSelected, baseFontRef, pinchingRef, fontSettledRef, chatView, chatViewRef, coarseRef, findOpenRef, fitRef, fittedRef, fixedGridRef, follow, followCursorRef, keyboardHoldsRef, narrowFont, narrowFontFitted, observeRef, palette, paneRef, peekRef, sharedGridRef, shown, sizesPty, socketRef, termRef, terminalFontFamily, terminalFontSize, theme } = deps;
+  const { activeRef, autoSelected, baseFontRef, pinchingRef, fontSettledRef, chatView, chatViewRef, coarseRef, findOpenRef, fitRef, fittedRef, fixedGridRef, follow, followCursorRef, keyboardHoldsRef, narrowFont, narrowFontFitted, observeRef, paneRef, peekRef, sharedGridRef, shown, sizesPty, socketRef, termRef, terminalColors, terminalFontFamily, terminalFontSize } = deps;
   // the theme follows the settings without a remount
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    term.options.theme = terminalTheme(theme, palette);
-  }, [theme, palette]);
+    term.options.theme = { ...terminalColors };
+  }, [terminalColors]);
 
   // the font follows too, and a font change moves the grid. xterm measures the cell (and the DOM
   // renderer its glyph widths) when fontFamily or fontSize changes, and setting the same value

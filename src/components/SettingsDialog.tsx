@@ -345,6 +345,26 @@ function InterfaceFontRows() {
   );
 }
 
+/**
+ * Settings → Appearance → Follow Omarchy: offered on a device whose theme-set hook sent its Omarchy
+ * theme (lib/omarchyTheme.ts), and kept while it is on, so it can be turned off again.
+ */
+function OmarchyRow() {
+  const { settings, omarchyTheme, update } = useSettings();
+  const t = useT();
+  if (omarchyTheme === null && !settings.followOmarchy) return null;
+  // as `omarchy theme current` names it: "catppuccin-latte" is Catppuccin Latte
+  const name = omarchyTheme?.name.replace(/(^|-)([a-z])/g, (_, dash: string, letter: string) => `${dash}${letter.toUpperCase()}`).replace(/-/g, " ") ?? "";
+  const description = omarchyTheme === null
+    ? t("This device has not sent its Omarchy theme. Its theme-set hook (scripts/omarchy-theme-hook.sh) sends it whenever the theme changes.")
+    : t("Draws this device in its Omarchy theme, {name}, and changes with it. Only on this device: the themes above stay for the others.", { name });
+  return (
+    <SettingsRow label={t("Follow Omarchy")} description={description}>
+      <Toggle label={t("Follow Omarchy")} checked={settings.followOmarchy} onChange={(followOmarchy) => update({ followOmarchy })} />
+    </SettingsRow>
+  );
+}
+
 function AppearancePage() {
   const { settings, update } = useSettings();
   const t = useT();
@@ -360,6 +380,7 @@ function AppearancePage() {
       <SettingsRow label={t("Light theme")} description={t("Shown in light mode")} htmlFor="settings-theme-light" wide>
         <ThemeSelect side="light" />
       </SettingsRow>
+      <OmarchyRow />
       <SettingsRow label={t("Density")}>
         <Segmented label={t("Density")} value={settings.density} onChange={(density) => update({ density })} options={[{ value: "comfortable", label: t("Comfortable") }, { value: "compact", label: t("Compact") }]} />
       </SettingsRow>
