@@ -15,14 +15,20 @@
  *    new bundle;
  * 4. restarts the Ovis app on the Xiaomi over adb, since the Android app ignores a reload.
  *
+ * It also sets OVIS_AUTO_UPDATE=1 for the server it starts and in the plugin's `env` file, which a later
+ * start (herdr's, after a reboot) reads: from then on Orgo's updater installs by itself every newer plain
+ * `vX.Y.Z` tag its origin gets, such as the fork's calendar tags (`v2026.1101.1`, pushed by the
+ * orchestrator's weekly job), and this script is only for putting a change there before it is tagged.
+ *
  * Exits non-zero at the first step that fails, saying which; only a clean exit means deployed.
  * `bun scripts/deploy-orgo.ts [--no-build]`. Overrides: OVIS_DEPLOY_URL, OVIS_DEPLOY_CHECK_HOST,
  * OVIS_DEPLOY_ADB_SERIAL, OVIS_DEPLOY_SSH (where to run it from another machine). Every OVIS_DEPLOY_*
  * set here goes along to the run on orgo-desktop, except OVIS_DEPLOY_SSH.
  */
-import { existsSync, readFileSync, readlinkSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readlinkSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
+import { withSetting } from "./orgo-settings.ts";
 
 const repo = join(import.meta.dir, "..");
 const publicUrl = process.env.OVIS_DEPLOY_URL ?? "https://orgo-desktop.tailb4e5ae.ts.net:8443/";
@@ -103,6 +109,13 @@ if (!process.argv.includes("--no-build")) {
 const old = managedServer();
 if (old === null) fail(`no \`bun server/managed.ts\` runs in ${repo}; start it once by hand, then rerun`);
 const env = environOf(old);
+env.OVIS_AUTO_UPDATE = "1";
+if (env.HERDR_PLUGIN_CONFIG_DIR) {
+  const settings = join(env.HERDR_PLUGIN_CONFIG_DIR, "env");
+  const before = existsSync(settings) ? readFileSync(settings, "utf8") : "";
+  const after = withSetting(before, "OVIS_AUTO_UPDATE", "1");
+  if (after !== before) { writeFileSync(settings, after, { mode: 0o600 }); console.log(`deploy-orgo: set OVIS_AUTO_UPDATE=1 in ${settings}`); }
+} else console.warn("deploy-orgo: warning: the server has no HERDR_PLUGIN_CONFIG_DIR, so a later start (a reboot) will not install releases by itself");
 const port = env.PORT ?? "7317";
 let log = "/dev/null";
 try { log = readlinkSync(`/proc/${old}/fd/1`); } catch { /* keep /dev/null */ }
