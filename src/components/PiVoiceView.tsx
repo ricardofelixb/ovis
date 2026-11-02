@@ -11,8 +11,8 @@ import "./PiVoiceView.css";
  * The live voice call with a Pi pane: a small orb that floats over the app, after Android's chat
  * bubbles and Messenger's chat heads. A drag carries it anywhere and it snaps to the nearer side,
  * where this device keeps it; a tap slides out Mute and End, which tuck away again on their own.
- * The call follows the selected agent (piVoiceSession.ts), and with none there the orb dims and
- * says why for a moment.
+ * The call stays on the pane it started in whatever is selected (piVoiceSession.ts); once it has
+ * stopped, the orb dims and says why for a moment.
  * Mounted once in App.
  */
 export function PiVoiceView() {
@@ -60,17 +60,17 @@ function PiVoiceFloat({ voice, leaving = false }: { voice: PiVoiceState; leaving
   const orb = useRef<HTMLButtonElement>(null);
   useOrbPlacement(orb, surface, setPlace);
   useControlsTuck(open, surface, setOpen);
-  const away = voice.status === "away";
+  const ended = voice.status === "ended";
   // the controls open away from the nearer edge, so neither they nor the orb leave the screen
   const classes = ["pi-voice-float", `is-${place.side}`, place.y > 0.5 ? "opens-up" : "opens-down", open && "is-open",
-    away && "is-away", voice.muted && "is-muted", !leaving && "is-entering", leaving && "is-leaving"].filter(Boolean).join(" ");
+    ended && "is-ended", voice.muted && "is-muted", !leaving && "is-entering", leaving && "is-leaving"].filter(Boolean).join(" ");
   return (
     <div className={classes} ref={surface} role="group" aria-label={t("Live voice")} aria-hidden={leaving || undefined}
       style={{ "--pi-voice-y": place.y } as CSSProperties}>
-      <span className="visually-hidden" aria-live="polite">{away ? "" : phaseText(voice, t)}</span>
+      <span className="visually-hidden" aria-live="polite">{ended ? "" : phaseText(voice, t)}</span>
       <button type="button" className={`pi-voice-float-orb is-${voice.phase}`} ref={orb} aria-label={t("Call controls")}
         title={t("Call controls")} aria-expanded={open} aria-controls={controlsId} onClick={() => setOpen((now) => !now)}>
-        <VoiceOrb phase={away ? "ended" : voice.phase} levels={piVoiceLevels} />
+        <VoiceOrb phase={ended ? "ended" : voice.phase} levels={piVoiceLevels} />
         {voice.muted && <span className="pi-voice-float-badge" aria-hidden="true"><MicOff /></span>}
       </button>
       <div className="pi-voice-float-controls" id={controlsId} inert={!open}>
@@ -83,9 +83,7 @@ function PiVoiceFloat({ voice, leaving = false }: { voice: PiVoiceState; leaving
         </button>
       </div>
       {/* keyed by what it says, so a new reason shows again before it fades */}
-      {away && (voice.end
-        ? <p key={endText(voice.end, t)} className="pi-voice-float-note" role="alert">{endText(voice.end, t)}</p>
-        : <p key="none" className="pi-voice-float-note" role="status">{t("No voice here")}</p>)}
+      {ended && voice.end && <p key={endText(voice.end, t)} className="pi-voice-float-note" role="alert">{endText(voice.end, t)}</p>}
     </div>
   );
 }

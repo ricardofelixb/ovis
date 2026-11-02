@@ -152,7 +152,6 @@ export const COMPOSER_ZH: Record<string, string> = {
   "Speaking": "正在说话",
   "Muted": "已静音",
   "End call": "结束通话",
-  "No voice here": "此处无语音",
   "Call controls": "通话控制",
   "Microphone access was denied.": "麦克风权限被拒绝。",
   "This browser cannot make a voice call.": "此浏览器无法进行语音通话。",

@@ -106,12 +106,12 @@
   translate: -50% 0;
 }
 
-/* no call on the selected agent: the orb rests, dimmed, and says why beside it */
-.pi-voice-float.is-away .pi-voice-float-orb {
+/* the call has stopped: the orb rests, dimmed, and says why beside it before it goes */
+.pi-voice-float.is-ended .pi-voice-float-orb {
   opacity: 0.5;
 }
 
-/* why there is no call, for a moment: it fades on its own, the dimmed orb staying to say it */
+/* why the call stopped, for a moment: it fades on its own, ahead of the orb going */
 .pi-voice-float-note {
   position: absolute;
   top: 50%;

@@ -152,7 +152,6 @@ export const COMPOSER_JA: Record<string, string> = {
   "Speaking": "話しています",
   "Muted": "ミュート中",
   "End call": "通話を終了",
-  "No voice here": "ここでは音声なし",
   "Call controls": "通話の操作",
   "Microphone access was denied.": "マイクへのアクセスが拒否されました。",
   "This browser cannot make a voice call.": "このブラウザでは音声通話ができません。",
