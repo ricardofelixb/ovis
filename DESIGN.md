@@ -743,7 +743,8 @@ All spacing derives from a 4px base.
 
 Every box draws square: the ladder keeps its names, so a rule still says which step it is on, but
 each step is `0`. Only a disc (a status dot, an orb, a step mark, a slider knob, the spinner) rounds,
-with `--radius-circle`. Component CSS writes a radius only as one of these tokens or `0`.
+with `--radius-circle`, and the chat composer's Send, Voice and Stop button keeps its circle with
+`--radius-round`. Component CSS writes a radius only as one of these tokens or `0`.
 
 | Token | Value | Usage |
 |-------|-------|-------|
@@ -754,6 +755,7 @@ with `--radius-circle`. Component CSS writes a radius only as one of these token
 | `--radius-2xl` | `0` | The composer's input card |
 | `--radius-pill` | `0` | Pills, chips, toggles and meters |
 | `--radius-circle` | `50%` | Status dots, orbs, step marks, slider knobs, the spinner |
+| `--radius-round` | `999px` | The chat composer's Send, Voice and Stop button |
 
 ### Sizes
 
@@ -2497,7 +2499,7 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   own empty line. While the composer is lifted, the completion menu's height is capped to the
   room over the input card, where it scrolls. On a coarse pointer the greeting takes no touch:
   a tap or drag on it reaches the chat under it, which puts the keyboard away.
-- The action button (`.composer-action`, a `--space-8` / `32px` square with a `--space-4` glyph) is
+- The action button (`.composer-action`, a `--space-8` / `32px` circle (`--radius-round`) with a `--space-4` glyph) is
   Send or Stop in the same place at the same size, so only the glyph changes: Send is `--primary`
   with lucide `ArrowUp`; Stop is `--text-strong` with a `--bg` square, and turns
   `--status-blocked` on hover and focus. Not connected, Stop is disabled and loses its fill

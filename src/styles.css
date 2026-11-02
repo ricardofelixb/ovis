@@ -150,6 +150,8 @@
   --radius-2xl: 0;
   --radius-pill: 0;
   --radius-circle: 50%;
+  /* kept round on purpose: the composer's Send, Voice and Stop button */
+  --radius-round: 999px;
 
   /* sizes */
   --header-h: 52px;
