@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
 
-import { ENDED_SHOWN_MS, endPiVoice, piVoiceState, startPiVoice } from "./piVoiceSession.ts";
+import { ENDED_SHOWN_MS, endPiVoice, formatPiVoiceTime, piVoiceState, resumePiVoice, startPiVoice } from "./piVoiceSession.ts";
 
 /** What the call touches of the browser: a microphone whose permission prompt the test settles, and sockets it can drive. */
 class FakeSocket {
@@ -170,5 +170,49 @@ describe("a call that ended", () => {
     await liveOn("w1:p1");
     endPiVoice();
     expect(piVoiceState().status).toBe("idle");
+  });
+});
+
+describe("a parked call", () => {
+  const sentTypes = (socket: FakeSocket) => socket.sent.map((text) => JSON.parse(text).type as string);
+
+  it("stays live while Pi parks it, and resumes when the orb is tapped", async () => {
+    const socket = await liveOn("w1:p1");
+    socket.receive({ type: "phase", phase: "parked" });
+    expect(piVoiceState()).toMatchObject({ status: "live", phase: "parked", paneId: "w1:p1" });
+    socket.sent.length = 0;
+    resumePiVoice();
+    expect(sentTypes(socket)).toEqual(["resume"]);
+    // the tap answers at once; Pi's own phases take over from there
+    expect(piVoiceState().phase).toBe("connecting");
+    resumePiVoice();
+    expect(sentTypes(socket)).toEqual(["resume"]);
+    socket.receive({ type: "phase", phase: "listening" });
+    expect(piVoiceState().phase).toBe("listening");
+  });
+
+  it("asks Pi for nothing when the call is not parked", async () => {
+    const socket = await liveOn("w1:p1");
+    socket.sent.length = 0;
+    resumePiVoice();
+    expect(socket.sent).toEqual([]);
+    expect(piVoiceState().phase).toBe("listening");
+  });
+});
+
+describe("the call's billed time", () => {
+  it("shows Pi's seconds, and none before the first or after the call", async () => {
+    const socket = await liveOn("w1:p1");
+    expect(piVoiceState().usage).toBeNull();
+    socket.receive({ type: "usage", seconds: 75 });
+    expect(piVoiceState().usage).toBe(75);
+    socket.receive({ type: "usage", seconds: 76 });
+    expect(piVoiceState().usage).toBe(76);
+    socket.receive({ type: "ended", code: "closed" });
+    expect(piVoiceState().usage).toBeNull();
+  });
+
+  it("reads as minutes and seconds", () => {
+    expect([0, 5, 59, 60, 75, 600, 3725].map(formatPiVoiceTime)).toEqual(["0:00", "0:05", "0:59", "1:00", "1:15", "10:00", "62:05"]);
   });
 });
