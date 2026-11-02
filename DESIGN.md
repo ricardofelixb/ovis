@@ -2909,6 +2909,12 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   for a reason (a refused microphone, Pi's error, a cut connection) leaves the dimmed orb for a few
   seconds with the reason beside it, then the orb goes; End or Pi ending the call itself removes it
   at once.
+- Parked: when Pi parks the call for a long task (it closes its voice session so the call stops
+  using voice time, and brings the voice back with the result), the orb sleeps. It is dimmer and
+  slower than any live phase, wears an hourglass on its corner and has a note beside it that stays
+  while the task runs ("Task running. The voice returns with the result."). End stays in reach under
+  it, with no Mute; a tap on the orb asks Pi for the voice back now. The time the call has billed
+  (Pi's `usage` seconds, as m:ss) shows above Mute and End once Pi has said it.
 - The orb is the WebGL glass-liquid sphere (`VoiceOrb.tsx`); where WebGL is missing it is a disc in
   `--primary`. It swells with the reply, draws in while the user speaks, dims when muted, and with
   reduced motion it is drawn once and only swells.
