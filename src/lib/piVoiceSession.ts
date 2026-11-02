@@ -36,10 +36,12 @@ export interface PiVoiceState {
   phase: PiVoicePhase;
   muted: boolean;
   assistantText: string;
+  /** the call's billed connected seconds, as Pi last said; null until it says */
+  usage: number | null;
   end: PiVoiceEnd | null;
 }
 
-const IDLE: PiVoiceState = { status: "idle", machineId: LOCAL_MACHINE, paneId: "", label: "", phase: "connecting", muted: false, assistantText: "", end: null };
+const IDLE: PiVoiceState = { status: "idle", machineId: LOCAL_MACHINE, paneId: "", label: "", phase: "connecting", muted: false, assistantText: "", usage: null, end: null };
 
 /** How long the orb stays to say why a call stopped: the reason's note fades in 4 s (PiVoiceView.css). */
 export const ENDED_SHOWN_MS = 4500;
@@ -162,6 +164,9 @@ function onFrame(frame: PiToPhoneFrame): void {
     case "transcript-clear":
       update({ assistantText: "" });
       break;
+    case "usage":
+      update({ usage: frame.seconds });
+      break;
     case "ended":
       // Pi ending the call on its own account (/live in its terminal) is an End
       if (frame.error) finish({ kind: "error", message: frame.error });
@@ -281,6 +286,21 @@ export function endPiVoice(): void {
   call.userEnded = true;
   send({ type: "stop" });
   finish(null);
+}
+
+/**
+ * The tap on a parked orb: asks Pi to reconnect the voice now instead of when the task is done.
+ * The orb answers at once; Pi's own phases take over from there.
+ */
+export function resumePiVoice(): void {
+  if (state.status !== "live" || state.phase !== "parked") return;
+  send({ type: "resume" });
+  update({ phase: "connecting" });
+}
+
+/** A call's billed seconds as the orb shows them. */
+export function formatPiVoiceTime(seconds: number): string {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
 /** What a call with the Pi in `cwd` is named: the folder's name. */
