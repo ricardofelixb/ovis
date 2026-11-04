@@ -375,6 +375,7 @@ const BASE: Record<string, string> = {
   "Close pane": "关闭面板",
   "Open terminal": "打开终端",
   "Sign in to {agent}": "登录 {agent}",
+  "differs": "不同",
 };
 
 /** The parts ZH is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */
