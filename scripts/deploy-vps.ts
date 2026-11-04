@@ -1,12 +1,17 @@
 /**
- * Puts Ricardo's own Ovis on the latest main: the server on orgo-desktop that
- * https://orgo-desktop.tailb4e5ae.ts.net:8443 fronts (this fork only, see AGENTS.md "This fork").
+ * Puts Ricardo's own Ovis on the latest main: the server on the VPS that
+ * https://vps.tailb4e5ae.ts.net:8443 fronts (this fork only, see AGENTS.md "This fork"). There Ovis
+ * is the herdr plugin `devswha.ovis`, linked from the checkout and started by herdr under the
+ * systemd user unit `herdr.service`.
  *
- * On any other machine it runs itself on orgo-desktop over SSH (a login shell, which has mise's
+ * On any other machine it runs itself on the VPS over SSH (a login shell, which has mise's
  * shims): it pulls origin/main there, fast-forward only, and runs this script with the same
  * arguments, streaming its output and exiting with its exit code. So it deploys origin/main, not
  * this checkout: commits that are not pushed to origin/main (and uncommitted changes) are not
- * deployed, and it warns when HEAD is not on origin/main. On orgo-desktop itself it does:
+ * deployed, and it warns when HEAD is not on origin/main. On the VPS itself it does not pull, but
+ * stops, as the run from another machine does, before changing anything when the checkout is on
+ * another branch, such as a PR under test there: that build would be replaced, and a pull could not
+ * fast-forward it (scripts/deploy-helpers.ts, onMainSteps). Once on main it:
  *
  * 1. builds the client (`bun run build`);
  * 2. restarts the running `bun server/managed.ts` of this checkout with the environment it ran with,
@@ -16,31 +21,31 @@
  * 4. restarts the Ovis app on the Xiaomi over adb, since the Android app ignores a reload.
  *
  * It also sets OVIS_AUTO_UPDATE=1 for the server it starts and in the plugin's `env` file, which a later
- * start (herdr's, after a reboot) reads: from then on Orgo's updater installs by itself every newer plain
+ * start (herdr's, after a reboot) reads: from then on the VPS's updater installs by itself every newer plain
  * `vX.Y.Z` tag its origin gets, such as the fork's calendar tags (`v2026.1101.1`, pushed by the
  * orchestrator's weekly job), and this script is only for putting a change there before it is tagged.
  *
  * Exits non-zero at the first step that fails, saying which; only a clean exit means deployed.
- * `bun scripts/deploy-orgo.ts [--no-build]`. Overrides: OVIS_DEPLOY_URL, OVIS_DEPLOY_CHECK_HOST,
+ * `bun scripts/deploy-vps.ts [--no-build]`. Overrides: OVIS_DEPLOY_URL, OVIS_DEPLOY_CHECK_HOST,
  * OVIS_DEPLOY_ADB_SERIAL, OVIS_DEPLOY_SSH (where to run it from another machine). Every OVIS_DEPLOY_*
- * set here goes along to the run on orgo-desktop, except OVIS_DEPLOY_SSH.
+ * set here goes along to the run on the VPS, except OVIS_DEPLOY_SSH.
  */
 import { existsSync, readFileSync, readlinkSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { withSetting } from "./orgo-settings.ts";
+import { onMainSteps, pullMainSteps, withSetting } from "./deploy-helpers.ts";
 
 const repo = join(import.meta.dir, "..");
-const publicUrl = process.env.OVIS_DEPLOY_URL ?? "https://orgo-desktop.tailb4e5ae.ts.net:8443/";
+const publicUrl = process.env.OVIS_DEPLOY_URL ?? "https://vps.tailb4e5ae.ts.net:8443/";
 const checkHost = process.env.OVIS_DEPLOY_CHECK_HOST ?? "omarchy";
-const adbSerial = process.env.OVIS_DEPLOY_ADB_SERIAL ?? "127.0.0.1:15421";
+const adbSerial = process.env.OVIS_DEPLOY_ADB_SERIAL ?? "100.101.250.35:5555";
 const androidApp = "sh.ovis.app";
-const orgoHostname = "orgo-desktop";
-const orgoSsh = process.env.OVIS_DEPLOY_SSH ?? `ssh://root@${orgoHostname}:2222`;
-const orgoRepo = "/root/Projects/forks/ovis";
+const vpsHostname = "vps";
+const vpsSsh = process.env.OVIS_DEPLOY_SSH ?? `ricardo@${vpsHostname}`;
+const vpsRepo = "/home/ricardo/Projects/forks/ovis";
 
 function fail(message: string): never {
-  console.error(`deploy-orgo: ${message}`);
+  console.error(`deploy-vps: ${message}`);
   process.exit(1);
 }
 
@@ -87,22 +92,24 @@ const bundleOf = (html: string) => html.match(/assets\/index-[^"]+\.js/)?.[0] ??
 
 const shellQuote = (arg: string) => `'${arg.replaceAll("'", "'\\''")}'`;
 
-if (hostname() !== orgoHostname) {
+if (hostname() !== vpsHostname) {
   run(["git", "fetch", "--quiet", "origin", "main"]);
   if (!run(["git", "merge-base", "--is-ancestor", "HEAD", "origin/main"]).ok) {
-    console.warn("deploy-orgo: warning: HEAD is not on origin/main, and only origin/main is deployed; push or merge it first if it should go out");
+    console.warn("deploy-vps: warning: HEAD is not on origin/main, and only origin/main is deployed; push or merge it first if it should go out");
   }
-  console.log(`deploy-orgo: deploying origin/main through ${orgoSsh}, not this checkout`);
+  console.log(`deploy-vps: deploying origin/main through ${vpsSsh}, not this checkout`);
   const overrides = Object.entries(process.env).filter(([name]) => name.startsWith("OVIS_DEPLOY_") && name !== "OVIS_DEPLOY_SSH").map(([name, value]) => `${name}=${shellQuote(value ?? "")} `).join("");
-  const steps = [`cd ${orgoRepo}`, "git pull --ff-only origin main", ". scripts/bun-path.sh", `${overrides}bun scripts/deploy-orgo.ts ${process.argv.slice(2).map(shellQuote).join(" ")}`];
-  const remote = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", orgoSsh, `bash -lc ${shellQuote(steps.join(" && "))}`], { quiet: false });
+  const steps = [...pullMainSteps(vpsRepo), ". scripts/bun-path.sh", `${overrides}bun scripts/deploy-vps.ts ${process.argv.slice(2).map(shellQuote).join(" ")}`];
+  const remote = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", vpsSsh, `bash -lc ${shellQuote(steps.join(" && "))}`], { quiet: false });
   process.exit(remote.code);
 }
+
+if (!run(["sh", "-c", onMainSteps(repo).join(" && ")], { quiet: false }).ok) process.exit(1);
 
 const head = run(["git", "rev-parse", "HEAD"]).out;
 
 if (!process.argv.includes("--no-build")) {
-  console.log("deploy-orgo: building the client");
+  console.log("deploy-vps: building the client");
   if (!run(["bun", "run", "build"], { quiet: false }).ok) fail("the build failed");
 }
 
@@ -114,14 +121,14 @@ if (env.HERDR_PLUGIN_CONFIG_DIR) {
   const settings = join(env.HERDR_PLUGIN_CONFIG_DIR, "env");
   const before = existsSync(settings) ? readFileSync(settings, "utf8") : "";
   const after = withSetting(before, "OVIS_AUTO_UPDATE", "1");
-  if (after !== before) { writeFileSync(settings, after, { mode: 0o600 }); console.log(`deploy-orgo: set OVIS_AUTO_UPDATE=1 in ${settings}`); }
-} else console.warn("deploy-orgo: warning: the server has no HERDR_PLUGIN_CONFIG_DIR, so a later start (a reboot) will not install releases by itself");
+  if (after !== before) { writeFileSync(settings, after, { mode: 0o600 }); console.log(`deploy-vps: set OVIS_AUTO_UPDATE=1 in ${settings}`); }
+} else console.warn("deploy-vps: warning: the server has no HERDR_PLUGIN_CONFIG_DIR, so a later start (a reboot) will not install releases by itself");
 const port = env.PORT ?? "7317";
 let log = "/dev/null";
 try { log = readlinkSync(`/proc/${old}/fd/1`); } catch { /* keep /dev/null */ }
 if (!log.startsWith("/") || log.startsWith("/dev/pts")) log = "/dev/null";
 
-console.log(`deploy-orgo: restarting the server (pid ${old}, port ${port})`);
+console.log(`deploy-vps: restarting the server (pid ${old}, port ${port})`);
 process.kill(old, "SIGTERM");
 await waitFor("the old server to stop", 20_000, () => !alive(old));
 run(["sh", "-c", "setsid nohup bun server/managed.ts >>\"$1\" 2>&1 </dev/null &", "sh", log], { env });
@@ -139,7 +146,7 @@ if (!bundle) fail("the server answers without a client bundle");
 const remote = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", checkHost, `curl -s --max-time 20 ${publicUrl}`]);
 if (!remote.ok) fail(`could not reach ${publicUrl} from ${checkHost}: ${remote.out.slice(0, 200)}`);
 if (bundleOf(remote.out) !== bundle) fail(`${checkHost} gets ${bundleOf(remote.out) ?? "no bundle"} from ${publicUrl}, not ${bundle}`);
-console.log(`deploy-orgo: ${checkHost} gets ${bundle} at ${publicUrl}`);
+console.log(`deploy-vps: ${checkHost} gets ${bundle} at ${publicUrl}`);
 
 const adbOnPath = run(["sh", "-c", "command -v adb"]).out;
 const adb = adbOnPath || join(homedir(), "Android/Sdk/platform-tools/adb");
@@ -151,4 +158,4 @@ if (run([adb, "-s", adbSerial, "get-state"]).out !== "device") {
 run([adb, "-s", adbSerial, "shell", "am", "force-stop", androidApp]);
 run([adb, "-s", adbSerial, "shell", "monkey", "-p", androidApp, "-c", "android.intent.category.LAUNCHER", "1"]);
 await waitFor("the Ovis app to start on the Xiaomi", 15_000, () => run([adb, "-s", adbSerial, "shell", "pidof", androidApp]).ok);
-console.log(`deploy-orgo: deployed ${head.slice(0, 8)}; the Xiaomi app restarted. Desktop windows only need a reload.`);
+console.log(`deploy-vps: deployed ${head.slice(0, 8)}; the Xiaomi app restarted. Desktop windows only need a reload.`);

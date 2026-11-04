@@ -5,7 +5,7 @@ import { handleMachineRequest, readFinishes } from "./machine-api.ts";
 import type { MachineManager } from "./machines.ts";
 
 const machines = [
-  { id: "local", name: "orgo-desktop", kind: "local" },
+  { id: "local", name: "vps", kind: "local" },
   { id: "mini", name: "Mini", kind: "ssh", target: { destination: "ricardos-mac-mini" } },
 ] as Machine[];
 const manager = { subscribe: () => () => undefined, list: () => machines } as unknown as MachineManager;
@@ -38,8 +38,8 @@ describe("POST /api/machines/open", () => {
       expect(event).toEqual({ type: "open", machine_id: "mini", pane_id: "w3:p2" });
 
       // this PC by one of its own addresses, as an SSH config may name it
-      expect(await (await open("100.96.150.40", "orgo", "127.0.0.1")).json()).toEqual({ windows: 1 });
-      expect((await open("100.1.2.3", "orgo-desktop")).status).toBe(404);
+      expect(await (await open("100.96.150.40", "vps", "127.0.0.1")).json()).toEqual({ windows: 1 });
+      expect((await open("100.1.2.3", "vps")).status).toBe(404);
       // an address matches whole, not by its first label: every tailnet address starts `100.`
       expect((await open("100.96.150.40", "100.200.1.1")).status).toBe(404);
       expect((await open("100.96.150.40", "elsewhere")).status).toBe(404);

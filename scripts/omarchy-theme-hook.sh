@@ -9,7 +9,7 @@
 # below); several may be given, separated by spaces. The request reaches Ovis as this machine's
 # browser does, through Tailscale, which is how Ovis tells this machine's theme from another's.
 
-urls="${OVIS_URL:-https://orgo-desktop.tailb4e5ae.ts.net:8443}"
+urls="${OVIS_URL:-https://vps.tailb4e5ae.ts.net:8443}"
 colors="$HOME/.local/state/omarchy/current/theme/colors.toml"
 [[ -f $colors ]] || colors="$HOME/.config/omarchy/current/theme/colors.toml"
 [[ -f $colors ]] || exit 0
