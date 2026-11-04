@@ -178,6 +178,7 @@ try {
     const line = await smallLog.locator(".work-block-line .work-image").boundingBox();
     assert.ok(head !== null && line !== null && Math.abs((line.y + line.height / 2) - (head.y + head.height / 2)) < 2, "the thumbnail sits on the folded line");
     await smallLog.locator(".work-block-head").click();
+    await openWorkRuns(smallLog);
     await smallLog.locator(".work-row-head").first().click();
     await smallLog.locator(".chat-tool-images img").scrollIntoViewIfNeeded();
     await small.waitForFunction(() => document.querySelector<HTMLImageElement>(".chat-tool-images img")?.naturalWidth === 1);
