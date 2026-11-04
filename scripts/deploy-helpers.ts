@@ -1,4 +1,4 @@
-/** Fork only. The plugin's settings file (`env` in its config dir) of Ricardo's own Ovis, as scripts/deploy-orgo.ts keeps it. */
+/** Fork only. The plugin's settings file (`env` in its config dir) of Ricardo's own Ovis, as scripts/deploy-vps.ts keeps it. */
 
 /**
  * `text`, a file of `KEY=value` lines, with `name` set to `value`: each line that sets it changed in

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { withSetting } from "./orgo-settings.ts";
+import { withSetting } from "./deploy-helpers.ts";
 
 describe("a plugin settings file with one setting set", () => {
   it("adds the setting after the others, on a line of its own", () => {

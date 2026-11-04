@@ -115,15 +115,20 @@ to change. Also read [server/AGENTS.md](server/AGENTS.md) and [src/AGENTS.md](sr
   CHANGELOG.md; only a release folds them in.
 
 ## This fork
-- To put a change on Ricardo's own Ovis (orgo-desktop, `https://orgo-desktop.tailb4e5ae.ts.net:8443`),
-  run `bun scripts/deploy-orgo.ts`. It builds, restarts the server, checks the new bundle from
-  omarchy and restarts the Xiaomi app. Say it's deployed only once it exits 0; when it stops at the
-  Xiaomi, ask Ricardo to swipe Ovis away and reopen it.
-- It works from any machine: elsewhere it runs itself on orgo-desktop over SSH (`OVIS_DEPLOY_SSH`),
-  after `git pull --ff-only origin main` there, so it deploys origin/main, not your checkout. Push or
-  merge first; it warns when HEAD is not on origin/main.
-- `deploy-orgo` also sets `OVIS_AUTO_UPDATE=1` for the server it restarts and in the plugin's `env` file
-  (`$HERDR_PLUGIN_CONFIG_DIR/env`, read on every later start). From then on Orgo's updater installs by
+- To put a change on Ricardo's own Ovis (the VPS, `https://vps.tailb4e5ae.ts.net:8443`, which
+  `tailscale serve` fronts from 127.0.0.1:7317), run `bun scripts/deploy-vps.ts`. It builds, restarts
+  the server, checks the new bundle from omarchy and restarts the Xiaomi app. Say it's deployed only
+  once it exits 0; when it stops at the Xiaomi, ask Ricardo to swipe Ovis away and reopen it.
+- There Ovis is the herdr plugin `devswha.ovis`, linked from the checkout
+  `/home/ricardo/Projects/forks/ovis` and started by herdr under the systemd user unit `herdr.service`
+  (never restart that unit to deploy: herdr owns every pane). Its plugin settings are in
+  `/home/ricardo/.config/herdr/plugins/config/devswha.ovis`, its state in `~/.config/ovis`.
+- It works from any machine: elsewhere it runs itself on the VPS over SSH (`OVIS_DEPLOY_SSH`, default
+  `ricardo@vps`), after `git pull --ff-only origin main` there, so it deploys origin/main, not your
+  checkout. Push or merge first; it warns when HEAD is not on origin/main.
+- `deploy-vps` also sets `OVIS_AUTO_UPDATE=1` for the server it restarts and in the plugin's `env` file
+  (`$HERDR_PLUGIN_CONFIG_DIR/env`, read on every later start). From then on the VPS's updater installs by
   itself each newer plain `vX.Y.Z` tag of its origin, such as the fork's calendar tags
   (`v2026.1101.1`, pushed by the orchestrator's weekly job; upstream's are `v0.x.y`). The Xiaomi app is
-  not restarted by that: swipe Ovis away and reopen it.
+  not restarted by that: swipe Ovis away and reopen it. The phone's adb serial is its tailnet address,
+  `100.101.250.35:5555` (`OVIS_DEPLOY_ADB_SERIAL`).
