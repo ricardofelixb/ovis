@@ -41,6 +41,12 @@ function installMuteFixture(): void {
   const spies = { notifications: [] as { title: string; body?: string; tag?: string }[], oscillators: 0 };
   const documents: SharedPreferences[] = [];
   const patch: RosterPatch = {};
+  // the last status told of each pane: a roster carries it, as the server's does, so a page that takes a
+  // roster again (a stream reopened as the tab is shown) finds the panes as the frames left them
+  const told = new Map<string, string>();
+  const withTold = (machine: Machine): Machine => machine.snapshot
+    ? { ...machine, snapshot: { ...machine.snapshot, panes: machine.snapshot.panes.map((pane) => ({ ...pane, agent_status: (told.get(`${machine.id}\n${pane.pane_id}`) ?? pane.agent_status) as typeof pane.agent_status })) } }
+    : machine;
   const patched = (machines: Machine[]): Machine[] => {
     const local = machines[0];
     if (!local?.snapshot) return machines;
@@ -48,8 +54,8 @@ function installMuteFixture(): void {
     if (patch.empty) return [{ ...local, snapshot: { ...local.snapshot, panes: [], agents: [], workspaces: [], tabs: [], layouts: [] } }];
     const long = patch.longLabel;
     if (long) for (const pane of local.snapshot.panes) if (pane.pane_id === long.paneId) pane.label = long.label;
-    if (patch.secondPc) return [...machines, { ...structuredClone(local), id: "pc-2", name: "Laptop", state: patch.secondPc, error: null }];
-    return machines;
+    if (patch.secondPc) return [...machines, { ...structuredClone(local), id: "pc-2", name: "Laptop", state: patch.secondPc, error: null }].map(withTold);
+    return machines.map(withTold);
   };
   const fetchDemo = window.fetch;
   window.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -130,7 +136,10 @@ function installMuteFixture(): void {
   window.muteFixture = {
     documents,
     spies,
-    frame(machineId, message) { inject({ type: "machine-message", machine_id: machineId, message }); },
+    frame(machineId, message) {
+      if (message.type === "pane-status") told.set(`${machineId}\n${message.pane_id}`, message.agent_status);
+      inject({ type: "machine-message", machine_id: machineId, message });
+    },
     async roster(next) {
       Object.assign(patch, next);
       const { machines } = await (await window.fetch("/api/machines")).json();
@@ -187,7 +196,7 @@ async function capture(page: Page, theme: string, language: string, state: strin
   await page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => {
     const target = (animation.effect as KeyframeEffect | null)?.target;
     return animation.effect?.getComputedTiming().endTime !== Infinity && !(target instanceof Element && target.closest(".droplet") !== null);
-  }).map((animation) => animation.finished)));
+  }).map((animation) => animation.finished.catch(() => undefined))));
   await page.screenshot({ path, animations: "disabled" });
   manifest.push({ file, width: viewport.width, height: viewport.height, scale: viewport.width === 390 ? 3 : 1, theme, language, state, sha256: createHash("sha256").update(readFileSync(path)).digest("hex"), capturedAt: new Date().toISOString() });
 }
@@ -561,6 +570,8 @@ try {
           if (phone) {
             // a phone with a keyboard: the arrows walk the sheet's items to the mute item
             await openMenu(page, phone, "local", P);
+            // the sheet takes focus as it opens, so an arrow pressed before that lands on the toggle behind it
+            await page.waitForFunction(() => document.activeElement?.closest(".row-sheet") !== null);
             for (let step = 0; step < 4 && !await muteItem(page).evaluate((item) => item === document.activeElement); step += 1) await page.keyboard.press("ArrowDown");
             await page.waitForFunction(() => document.activeElement?.matches(".row-sheet-item[aria-pressed]") === true);
             await capture(page, theme, language, "menu-focus-visible");

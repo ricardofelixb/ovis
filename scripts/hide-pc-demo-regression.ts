@@ -55,8 +55,9 @@ const patch = `(() => {
 let origin = "";
 const pane = encodeURIComponent(panes.web);
 const workGroup = (page: Page) => page.locator('section.machine-group[aria-label="PC Work PC"]');
-// a screenshot waits for the drawer and the sheet to finish moving, so it shows where they come to rest
-const still = (page: Page): Promise<unknown> => page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
+// a screenshot waits for the drawer and the sheet to finish moving, so it shows where they come to rest;
+// an agent friend's wave never ends, so a loop is no motion to wait for
+const still = (page: Page): Promise<unknown> => page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().endTime === Infinity));
 const selection = (page: Page): Promise<string | null> => page.evaluate(() => JSON.parse(localStorage.getItem("ovis:selection") ?? "null")?.machine_id ?? null);
 
 async function open(browser: Browser, width: number, query: string): Promise<{ page: Page; errors: string[]; phone: boolean; close: () => Promise<void> }> {
