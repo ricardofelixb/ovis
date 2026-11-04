@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pullMainSteps, withSetting } from "./deploy-helpers.ts";
+import { onMainSteps, pullMainSteps, withSetting } from "./deploy-helpers.ts";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -65,6 +65,29 @@ describe("the steps that bring the VPS checkout to origin/main", () => {
     const result = runSteps(checkout);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("not main");
+  });
+});
+
+describe("the check that a run on the VPS itself starts from main", () => {
+  const runGuard = (checkout: string) => spawnSync("sh", ["-c", onMainSteps(checkout).join(" && ")], { encoding: "utf8" });
+
+  it("passes a checkout on main without pulling it", () => {
+    const { checkout, origin } = checkoutBehindOrigin();
+    const before = git(checkout, "rev-parse", "HEAD");
+    expect(runGuard(checkout).status).toBe(0);
+    expect(git(checkout, "rev-parse", "HEAD")).toBe(before);
+    expect(before).not.toBe(git(origin, "rev-parse", "main"));
+  });
+
+  it("stops on a branch under test and on a detached HEAD, before anything is built or restarted", () => {
+    const { checkout } = checkoutBehindOrigin();
+    git(checkout, "switch", "-q", "-c", "feat/under-test");
+    const onBranch = runGuard(checkout);
+    expect(onBranch.status).not.toBe(0);
+    expect(onBranch.stderr).toContain("'feat/under-test', not main");
+    expect(onBranch.stderr).toContain("nothing was changed");
+    git(checkout, "checkout", "-q", "--detach");
+    expect(runGuard(checkout).status).not.toBe(0);
   });
 });
 

@@ -4,17 +4,21 @@
  */
 
 /**
- * The steps, for `&&`, that bring the checkout at `repo` to origin/main: `git pull --ff-only
- * origin main`, but only on the main branch. On another branch (a PR under test there) the pull
- * would fail, or move that branch to main; the steps stop first, changing nothing, as the
- * server's own updater does ("Switch the source checkout to main to update.").
+ * The steps, for `&&`, that stop unless the checkout at `repo` is on the main branch. On another
+ * branch (a PR under test there) a deploy would replace that build, and a pull would fail or move the
+ * branch to main; they stop first, changing nothing, as the server's own updater does ("Switch the
+ * source checkout to main to update.").
  */
-export function pullMainSteps(repo: string): string[] {
+export function onMainSteps(repo: string): string[] {
   return [
     `cd ${repo}`,
-    `if [ "$(git branch --show-current)" != main ]; then echo "deploy-vps: the checkout is on '$(git branch --show-current)', not main, and only origin/main is deployed: switch it to main there first (nothing was changed)" >&2; exit 1; fi`,
-    "git pull --ff-only origin main",
+    `if [ "$(git branch --show-current)" != main ]; then echo "deploy-vps: the checkout is on '$(git branch --show-current)', not main, and only main is deployed: switch it to main first (nothing was changed)" >&2; exit 1; fi`,
   ];
+}
+
+/** The steps, for `&&`, that bring the checkout at `repo` to origin/main: `git pull --ff-only origin main`, but only on main. */
+export function pullMainSteps(repo: string): string[] {
+  return [...onMainSteps(repo), "git pull --ff-only origin main"];
 }
 
 /**
