@@ -196,7 +196,7 @@ async function capture(page: Page, theme: string, language: string, state: strin
   await page.evaluate(() => Promise.all(document.getAnimations().filter((animation) => {
     const target = (animation.effect as KeyframeEffect | null)?.target;
     return animation.effect?.getComputedTiming().endTime !== Infinity && !(target instanceof Element && target.closest(".droplet") !== null);
-  }).map((animation) => animation.finished)));
+  }).map((animation) => animation.finished.catch(() => undefined))));
   await page.screenshot({ path, animations: "disabled" });
   manifest.push({ file, width: viewport.width, height: viewport.height, scale: viewport.width === 390 ? 3 : 1, theme, language, state, sha256: createHash("sha256").update(readFileSync(path)).digest("hex"), capturedAt: new Date().toISOString() });
 }
@@ -570,6 +570,8 @@ try {
           if (phone) {
             // a phone with a keyboard: the arrows walk the sheet's items to the mute item
             await openMenu(page, phone, "local", P);
+            // the sheet takes focus as it opens, so an arrow pressed before that lands on the toggle behind it
+            await page.waitForFunction(() => document.activeElement?.closest(".row-sheet") !== null);
             for (let step = 0; step < 4 && !await muteItem(page).evaluate((item) => item === document.activeElement); step += 1) await page.keyboard.press("ArrowDown");
             await page.waitForFunction(() => document.activeElement?.matches(".row-sheet-item[aria-pressed]") === true);
             await capture(page, theme, language, "menu-focus-visible");
