@@ -1,4 +1,21 @@
-/** Fork only. The plugin's settings file (`env` in its config dir) of Ricardo's own Ovis, as scripts/deploy-vps.ts keeps it. */
+/**
+ * Fork only. What scripts/deploy-vps.ts needs of Ricardo's own Ovis: the steps that bring its
+ * checkout to origin/main, and its plugin's settings file (`env` in its config dir).
+ */
+
+/**
+ * The steps, for `&&`, that bring the checkout at `repo` to origin/main: `git pull --ff-only
+ * origin main`, but only on the main branch. On another branch (a PR under test there) the pull
+ * would fail, or move that branch to main; the steps stop first, changing nothing, as the
+ * server's own updater does ("Switch the source checkout to main to update.").
+ */
+export function pullMainSteps(repo: string): string[] {
+  return [
+    `cd ${repo}`,
+    `if [ "$(git branch --show-current)" != main ]; then echo "deploy-vps: the checkout is on '$(git branch --show-current)', not main, and only origin/main is deployed: switch it to main there first (nothing was changed)" >&2; exit 1; fi`,
+    "git pull --ff-only origin main",
+  ];
+}
 
 /**
  * `text`, a file of `KEY=value` lines, with `name` set to `value`: each line that sets it changed in

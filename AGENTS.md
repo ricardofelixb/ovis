@@ -125,7 +125,9 @@ to change. Also read [server/AGENTS.md](server/AGENTS.md) and [src/AGENTS.md](sr
   `/home/ricardo/.config/herdr/plugins/config/devswha.ovis`, its state in `~/.config/ovis`.
 - It works from any machine: elsewhere it runs itself on the VPS over SSH (`OVIS_DEPLOY_SSH`, default
   `ricardo@vps`), after `git pull --ff-only origin main` there, so it deploys origin/main, not your
-  checkout. Push or merge first; it warns when HEAD is not on origin/main.
+  checkout. Push or merge first; it warns when HEAD is not on origin/main. It stops, changing nothing,
+  while the VPS checkout is on another branch (a PR under test there, as `feat/screen-window-title`
+  was): switch it back to main there first.
 - `deploy-vps` also sets `OVIS_AUTO_UPDATE=1` for the server it restarts and in the plugin's `env` file
   (`$HERDR_PLUGIN_CONFIG_DIR/env`, read on every later start). From then on the VPS's updater installs by
   itself each newer plain `vX.Y.Z` tag of its origin, such as the fork's calendar tags

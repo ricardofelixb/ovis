@@ -8,7 +8,10 @@
  * shims): it pulls origin/main there, fast-forward only, and runs this script with the same
  * arguments, streaming its output and exiting with its exit code. So it deploys origin/main, not
  * this checkout: commits that are not pushed to origin/main (and uncommitted changes) are not
- * deployed, and it warns when HEAD is not on origin/main. On the VPS itself it does:
+ * deployed, and it warns when HEAD is not on origin/main. It stops before changing anything when
+ * the VPS checkout is on another branch, such as a PR under test there: that build would be
+ * replaced, and the pull could not fast-forward it (scripts/deploy-helpers.ts, pullMainSteps).
+ * On the VPS itself it does:
  *
  * 1. builds the client (`bun run build`);
  * 2. restarts the running `bun server/managed.ts` of this checkout with the environment it ran with,
@@ -30,7 +33,7 @@
 import { existsSync, readFileSync, readlinkSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { withSetting } from "./deploy-helpers.ts";
+import { pullMainSteps, withSetting } from "./deploy-helpers.ts";
 
 const repo = join(import.meta.dir, "..");
 const publicUrl = process.env.OVIS_DEPLOY_URL ?? "https://vps.tailb4e5ae.ts.net:8443/";
@@ -96,7 +99,7 @@ if (hostname() !== vpsHostname) {
   }
   console.log(`deploy-vps: deploying origin/main through ${vpsSsh}, not this checkout`);
   const overrides = Object.entries(process.env).filter(([name]) => name.startsWith("OVIS_DEPLOY_") && name !== "OVIS_DEPLOY_SSH").map(([name, value]) => `${name}=${shellQuote(value ?? "")} `).join("");
-  const steps = [`cd ${vpsRepo}`, "git pull --ff-only origin main", ". scripts/bun-path.sh", `${overrides}bun scripts/deploy-vps.ts ${process.argv.slice(2).map(shellQuote).join(" ")}`];
+  const steps = [...pullMainSteps(vpsRepo), ". scripts/bun-path.sh", `${overrides}bun scripts/deploy-vps.ts ${process.argv.slice(2).map(shellQuote).join(" ")}`];
   const remote = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", vpsSsh, `bash -lc ${shellQuote(steps.join(" && "))}`], { quiet: false });
   process.exit(remote.code);
 }
