@@ -188,7 +188,7 @@ try {
     const column = document.querySelector(".pane-column")!;
     return {
       headerChat: header.classList.contains("is-chat"), columnChat: column.classList.contains("is-chat"),
-      header: getComputedStyle(header).backgroundColor, strip: getComputedStyle(document.querySelector(".tab-strip")!).backgroundColor,
+      header: getComputedStyle(header).backgroundColor, strip: getComputedStyle(document.querySelector(".tab-strip-row")!).backgroundColor,
       chat: document.querySelector(".chat-view") ? getComputedStyle(document.querySelector(".chat-view")!).backgroundColor : null,
     };
   });
