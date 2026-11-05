@@ -28,6 +28,7 @@ import { routeDrained } from "./drained-route.ts";
 import { openWorkRuns } from "./work-runs.ts";
 
 const openFiles = async (page: import("playwright-core").Page) => {
+  await page.locator(".header-more-button[data-view]").waitFor();
   const headerButton = page.locator(".header-files-button");
   if (await headerButton.isVisible()) await headerButton.click();
   else await runMoreItem(page, "Browse files");
@@ -540,6 +541,97 @@ try {
     }, fileOpen);
     await page.reload();
   };
+  // Browse/Changes placement is independent from the file viewer, and never blocks the pane.
+  await page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem("ovis:settings") ?? "{}");
+    localStorage.setItem("ovis:settings", JSON.stringify({ ...settings, fileBrowser: "panel", fileOpen: "panel" }));
+  });
+  await page.reload();
+  await openFiles(page);
+  const browserPanel = page.getByRole("region", { name: "Files", exact: true });
+  await browserPanel.waitFor();
+  const assertDockedListFills = async (selector: string) => {
+    const layout = await browserPanel.locator(selector).evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      max: getComputedStyle(element).maxHeight,
+      viewport: innerHeight,
+      bottom: element.parentElement!.getBoundingClientRect().bottom,
+      bodyBottom: element.closest(".modal-body")!.getBoundingClientRect().bottom,
+    }));
+    assert.equal(layout.max, "none", "a docked list has no popup height cap");
+    assert.ok(layout.height > layout.viewport / 2, `${selector}: the list uses the available height`);
+    assert.ok(layout.bodyBottom - layout.bottom <= 16, `${selector}: the browser reaches the bottom padding`);
+  };
+  await assertDockedListFills(".dir-browser-list");
+  assert.equal(await page.locator(".header-files-button, .header-more-button").count(), 0, "the docked browser replaces redundant header controls with its own Close");
+  assert.equal(await browserPanel.getByRole("button", { name: "Close files", exact: true }).count(), 1);
+  assert.equal(await page.locator('.modal-scrim, [aria-modal="true"]').count(), 0, "the browser sidebar is not modal");
+  await browserPanel.locator(".dir-browser-item.is-file").filter({ hasText: "notes.txt" }).click();
+  await panel.getByText("File preview history regression", { exact: true }).waitFor();
+  assert.ok(await browserPanel.isVisible(), "opening a docked file leaves the browser beside it");
+  const browserWidth = () => browserPanel.evaluate((element) => element.getBoundingClientRect().width);
+  const browserBefore = await browserWidth();
+  const previewWidthBefore = await page.evaluate(() => localStorage.getItem("ovis:file-panel-width"));
+  const browserGrip = browserPanel.getByRole("separator", { name: "Resize file panel" });
+  const browserGripBox = await browserGrip.boundingBox();
+  assert.ok(browserGripBox, "the browser has its own resize edge");
+  await page.mouse.move(browserGripBox.x + browserGripBox.width / 2, browserGripBox.y + browserGripBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(browserGripBox.x + browserGripBox.width / 2 - 80, browserGripBox.y + browserGripBox.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const browserStored = Number(await (await page.waitForFunction(() => localStorage.getItem("ovis:files-browser-width"))).jsonValue());
+  assert.ok(Math.abs(browserStored - browserBefore - 80) <= 2, "dragging widens the browser independently");
+  await browserGrip.focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForFunction((want) => Number(localStorage.getItem("ovis:files-browser-width")) === want, browserStored + 16);
+  assert.equal(await page.evaluate(() => localStorage.getItem("ovis:file-panel-width")), previewWidthBefore, "resizing the browser never changes the preview's stored width");
+  await page.reload();
+  await openFiles(page);
+  await browserPanel.waitFor();
+  await panel.getByText("File preview history regression", { exact: true }).waitFor();
+  assert.ok(Math.abs(await browserWidth() - browserStored - 16) <= 2, "the browser width survives a reload");
+  for (const width of [980, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px: the two panels do not widen the page`);
+    const browserBounds = await browserPanel.boundingBox();
+    const appBounds = await page.locator(".app").boundingBox();
+    assert.ok(browserBounds && appBounds && Math.abs(browserBounds.y - appBounds.y) <= 1 && Math.abs(browserBounds.y + browserBounds.height - appBounds.y - appBounds.height) <= 1, `${width}px: the browser uses the app's full height`);
+    const headerBounds = await page.locator(".app-header").boundingBox();
+    assert.ok(headerBounds && browserBounds && headerBounds.x + headerBounds.width <= browserBounds.x + 1, `${width}px: the pane header does not extend behind the browser or preview`);
+    const paneBounds = await page.locator(".pane-column").boundingBox();
+    assert.ok(paneBounds && paneBounds.width >= 279, `${width}px: the pane retains room beside both panels`);
+    if (process.env.UI_EVIDENCE_DIR) await page.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, `files-browser-and-preview-${width}.png`) });
+  }
+  await browserGrip.dblclick();
+  await page.waitForFunction(() => localStorage.getItem("ovis:files-browser-width") === null);
+  await composer.click();
+  await page.keyboard.press("Escape");
+  assert.ok(await browserPanel.isVisible(), "Escape in the pane leaves the browser open");
+  await panel.getByRole("button", { name: "Close file", exact: true }).click();
+  await panel.waitFor({ state: "detached" });
+  await browserPanel.getByRole("button", { name: "Changes", exact: true }).click();
+  await browserPanel.locator(".repo-change").filter({ hasText: "notes.txt" }).waitFor();
+  assert.equal(await browserPanel.locator(".dir-browser").isVisible(), false, "the inactive Browse tab stays hidden");
+  await assertDockedListFills(".repo-changes-list");
+  if (process.env.UI_EVIDENCE_DIR) await page.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, "file-browser-full-height.png") });
+  await browserPanel.locator(".repo-change").filter({ hasText: "notes.txt" }).click();
+  await page.getByRole("button", { name: "Close diff", exact: true }).click();
+  assert.ok(await browserPanel.isVisible(), "closing a diff keeps the Changes sidebar");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const browserPopup = page.getByRole("dialog", { name: "Files", exact: true });
+  await browserPopup.waitFor();
+  assert.equal(await browserPanel.count(), 0, "a narrow window uses the original modal browser");
+  assert.equal(await page.locator(".header-more-button").isVisible(), true, "the popup keeps the ordinary header controls");
+  await browserPopup.getByRole("button", { name: "Close files", exact: true }).click();
+  await browserPopup.waitFor({ state: "detached" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem("ovis:settings") ?? "{}");
+    localStorage.setItem("ovis:settings", JSON.stringify({ ...settings, fileBrowser: "popup" }));
+  });
+  await page.reload();
+  console.log("PASS independent Browse/Changes sidebar: drag and keyboard resize, reload persistence, reset, live pane, file and diff opens, 980/1280/1440px fit and phone popup fallback");
+
   // with Open files at its default, even text opens in the popup; Beside the pane is a choice
   await setFileOpen(null);
   await activateInTranscript(page, notesLink);

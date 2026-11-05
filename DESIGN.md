@@ -828,7 +828,7 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   iPhone home screen app reports a visual viewport shorter than the screen without a keyboard.
 - The header is one line at every width. Anatomy, left to right: mobile drawer toggle / desktop
   sidebar toggle and the command palette (`.header-side`); the flexible context, agent mark and
-  title then the PC › workspace › folder crumb; segmented Chat/Terminal switch; from `769px` a
+  title then the PC › workspace › folder crumb; from `769px` a
   hairline and the Files button (`.header-files-button`); the connection
   chip while the bridge is not live (herdr version in its tooltip), the offline pill, sign out and
   the More menu (`⋯`). Theme lives in Settings and the palette; the herdr version is also read
@@ -903,20 +903,11 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
 ### Segmented control (`.segmented`)
 - One `aria-pressed="true"` option receives hover fill and strong text; the group itself is an
   elevated, bordered `--radius-md` track.
-- Used for Chat/Terminal, theme and density. It is not a generic tab list.
+- Used for Browse/Changes, theme and density. It is not a generic tab list.
 - An option is `--control-h` less `--segmented-inset` tall, so the track is `--control-h`. On a coarse
   pointer the track keeps its height; each option is at least `--touch-target` wide, so neighbours
   never share a tap, and reaches `--touch-target` tall through an invisible `::before` expander sized
   from that same difference, as the palette's filter chips do.
-- The header's Chat/Terminal switch from `769px` drops the track and the glyphs: two words, the
-  chosen one on the hover fill. At `<=768px` it keeps the track; at `<=560px` it is glyphs only.
-  On a phone (`<=768px`) its options draw at the density's option height (`--control-h` less
-  `--segmented-inset`: `28px` in a `34px` track, `26px` in a `32px` track when compact), so the
-  track stands at least `6px` clear of the bar above and below in either density (the compact bar
-  is `46px`), and reach `--touch-target-header` through the same invisible `::before` expander; a
-  glyph sits in the middle of its `--touch-target-header`-wide option. This follows iOS's segmented control in a navigation bar (UIKit draws it about `32pt`
-  in a `44pt` bar and takes taps beyond its drawn edge); the Codex and Claude phone apps have no
-  view switch in their bar to follow.
 
 ### Keyboard hint (`.kbd`)
 - An inline mono keycap: `18px` high, strong bottom edge, `--radius-sm`, `--fs-2xs`.
@@ -1992,10 +1983,11 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   `aria-checked` in the popover and a button with `aria-pressed` in the sheet. While alerts are off on this device the
   More button carries a `--dot-size` `--accent` dot and its name says "alerts are off": the dot
   marks the state that needs a look, never "on".
-- The segmented Chat/Terminal view switch lives in the header. There is no floating view-toggle pill.
-  Files is an action, not a third lens: it opens the Files dialog and never joins the switch.
-- At `<=768px` the drawer toggle and More are `--touch-target-header` squares. The lens buttons
-  are not: they keep the switch's track and inset, as the segmented control entry describes.
+- More contains a **Terminal** switch: on shows the pane's terminal, off shows Chat. The header
+  has no separate lens toggle. The existing per-pane choice and ⌘/Ctrl+Shift+J shortcut remain.
+  Like Alerts, the switch is a `menuitemcheckbox` on desktop and an `aria-pressed` button in the
+  phone sheet; its state is drawn as a track and thumb. Files stays a separate header action.
+- At `<=768px` the drawer toggle and More are `--touch-target-header` squares.
 - Connection is one quiet chip, drawn only while the bridge is not live: a pulsing dot plus the
   written state - connecting until this page's first connection to the PC's socket, reconnecting
   after a drop, disconnected once output stopped. Below `900px` it keeps only its dot; the word stays as
@@ -2131,6 +2123,19 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   header is one row: the name cut inside its stem, Show source and Copy, a **More** (Ellipsis)
   menu holding new tab, raw and download, then Close; the size and folder are left out there unless
   a partial-view notice is among them. A reader page has no Close.
+  Settings → Chat → File viewer → **File browser** independently places Browse/Changes in a
+  popup (default) or beside the pane from 980px (`fileBrowser`, per device). Like Zed's Git panel
+  and VS Code's Source Control sidebar, the list remains visible while opening a file or diff.
+  It is a non-modal region with no scrim, focus trap or phone Back entry. Escape closes it only
+  from inside; narrow windows use the original dialog. The browser and a docked file share the
+  available width without covering the pane. Its left edge uses the file viewer's resize grip:
+  drag or use arrows, Home and End; double-click to reset. Width is kept on this device separately
+  from the preview (`ovis:files-browser-width`), between 220px and 600px where space permits.
+  Both panels shrink as needed to leave the pane at least 320px. The browser spans the window's
+  full height; its Close replaces the redundant Files and More controls above it while docked.
+  Browse and Changes lists fill the remaining height and scroll inside their toolbar and footer,
+  following VS Code's Explorer instead of keeping the popup's row cap. Unlike Zed's default left dock,
+  it stays on the right to match Ovis's existing file viewer.
   A file opens in the popup unless Settings → Chat → Open files is Beside the pane (`fileOpen`,
   per device), which docks text and code from 980px; the header button moves the open file either way.
   This differs from t3code's and paseo's docked file panels, whose look the docked viewer keeps: a
@@ -2254,9 +2259,14 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   settled turn's do. A turn that ended on its final answer stays settled while the agent works
   again: a turn the agent began by itself (a background task ended) or from the terminal has no
   row yet, and the pending `Working…` head under the rows stands for it, as after a send. That
-  head waits 800 ms first: at a turn's end herdr's status trails the answer by 100–400 ms, and a
-  head under each answer would flash. While it waits it keeps its place unseen, so showing it moves
-  nothing a reader is selecting or reading. The Codex app never reopens a finished turn either. Before
+  head shows only once the pane was seen at rest under that answer: at a turn's end herdr's status
+  trails the answer (100–400 ms, longer on a busy PC), and a head under each answer would flash.
+  It then waits 800 ms more, for a new turn's first row to bring its own head. While it waits it keeps its place unseen, so showing it moves
+  nothing a reader is selecting or reading. The Codex app never reopens a finished turn either. The
+  other way round, herdr can rest before a read holds a Claude turn's answer (about 1 s at worst):
+  the turn stays at work until a read brings its answer or a turn of the user's, or for 2 s with
+  no such read. A read that only adds more of the unanswered turn starts the 2 s again. So it never
+  looks ended with no answer. The Codex app also keeps a turn working until its answer is in. Before
   the chat's first read, `Loading conversation…` is the only line: the rows read may hold the
   running turn's own head. A settled turn folds to its header
   with a hairline under it, and the header reads as a footnote: `--text-dim`, regular weight (the

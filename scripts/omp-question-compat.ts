@@ -389,7 +389,7 @@ async function waitForFile(path: string, timeoutMs: number): Promise<void> {
 /** Flips the header's lens toggle to Chat (item 1) or Terminal (item 2), when it shows the other one. */
 async function pickLensIn(binary: string, env: NodeJS.ProcessEnv, item: 1 | 2): Promise<void> {
   const other = item === 1 ? "terminal" : "chat";
-  await browser(binary, env, ["eval", `document.querySelector('.app-header .view-toggle[data-view="${other}"]')?.click()`]);
+  await browser(binary, env, ["eval", `if (document.querySelector('.app-header .header-more-button[data-view="${other}"]')) { document.querySelector('.app-header .header-more-button')?.click(); await new Promise(resolve => requestAnimationFrame(resolve)); document.querySelector('button:has(.row-menu-switch-track)')?.click(); }`]);
 }
 
 async function browser(binary: string, env: NodeJS.ProcessEnv, args: string[]): Promise<string> {

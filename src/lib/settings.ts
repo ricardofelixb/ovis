@@ -209,6 +209,8 @@ export interface Settings {
   diffStyle: DiffStyle;
   /** where a file opens from the chat, terminal or Files: the popup, or beside the pane on a wide window (lib/filePresentation.ts) */
   fileOpen: FilePresentation;
+  /** Browse and Changes placement, independently of individual file previews. */
+  fileBrowser: FilePresentation;
   /** where a click on a web address opens it: a new tab, or the panel beside the pane (lib/webPanel.ts); Shift opens the other one */
   webLinks: WebLinkTarget;
   /** the mode a Claude Code started from the new workspace, tab and worktree dialogs runs in (lib/agentLaunchMode.ts); default adds no flag */
@@ -229,7 +231,7 @@ export type DiffStyle = (typeof DIFF_STYLES)[number];
  * (shared/telemetry.ts) does not carry them. */
 type TelemetrySourceSettings = Omit<Settings,
   "keyBarExtras" | "keyBarItems" | "shortcutOverrides" | "terminalFontFamily" | "chatFontFamily" | "uiFontFamily"
-  | "quickReplies" | "usageOrder" | "usageHidden" | "fileOpen" | "webLinks" | "claudeLaunchMode" | "codexLaunchMode"
+  | "quickReplies" | "usageOrder" | "usageHidden" | "fileOpen" | "fileBrowser" | "webLinks" | "claudeLaunchMode" | "codexLaunchMode"
   | "followHerdrFocus" | "composerNewTabButton" | "composerArtifacts" | "terminalMirrorWrap" | "sidebarFilter" | "historyPrompts"
   | "expandThinking" | "foldWork" | "followOmarchy" | "contextCircle" | "speechVoice" | "liveVoice" | "openLiveWork" | "autoTabNames">;
 
@@ -328,7 +330,7 @@ export const SETTING_SCOPE = {
   paletteLight: "device", paletteDark: "device", statusIndicators: "device",
   voiceInput: "device", voiceLanguage: "device", voicePolishChat: "device", voicePolishTerminal: "device", speechVoice: "device", liveVoice: "device",
   // Viewer layout follows this screen, as chatWidth does.
-  wrapCode: "device", markdownWidth: "device", diffStyle: "device", fileOpen: "device", webLinks: "device",
+  wrapCode: "device", markdownWidth: "device", diffStyle: "device", fileOpen: "device", fileBrowser: "device", webLinks: "device",
   // a new agent starts the same way whichever device opened it
   claudeLaunchMode: "shared", codexLaunchMode: "shared",
 } as const satisfies Record<keyof Settings, "shared" | "device">;
@@ -405,6 +407,7 @@ export const DEFAULT_SETTINGS: Settings = {
   markdownWidth: "readable",
   diffStyle: "unified",
   fileOpen: "popup",
+  fileBrowser: "popup",
   webLinks: "tab",
   claudeLaunchMode: "default",
   codexLaunchMode: "default",
@@ -601,6 +604,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     markdownWidth: MARKDOWN_WIDTHS.find((width) => width === record["markdownWidth"]) ?? DEFAULT_SETTINGS.markdownWidth,
     diffStyle: DIFF_STYLES.find((style) => style === record["diffStyle"]) ?? DEFAULT_SETTINGS.diffStyle,
     fileOpen: FILE_OPEN_TARGETS.find((target) => target === record["fileOpen"]) ?? DEFAULT_SETTINGS.fileOpen,
+    fileBrowser: FILE_OPEN_TARGETS.find((target) => target === record["fileBrowser"]) ?? DEFAULT_SETTINGS.fileBrowser,
     webLinks: WEB_LINK_TARGETS.find((target) => target === record["webLinks"]) ?? DEFAULT_SETTINGS.webLinks,
     claudeLaunchMode: CLAUDE_LAUNCH_MODES.find((mode) => mode === record["claudeLaunchMode"]) ?? DEFAULT_SETTINGS.claudeLaunchMode,
     codexLaunchMode: CODEX_LAUNCH_MODES.find((mode) => mode === record["codexLaunchMode"]) ?? DEFAULT_SETTINGS.codexLaunchMode,

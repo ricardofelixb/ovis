@@ -239,6 +239,8 @@ export const SETTINGS_JA: Record<string, string> = {
   "This version has already been counted. The next event is sent after an update.": "このバージョンは集計済みです。次の送信は更新の後です。",
   "Name each workspace on one line, or show what its agent is doing with the workspace under it": "ワークスペース名だけを 1 行で表示するか、エージェントの作業を上に、ワークスペースを下に表示します",
   "Settings can't be shown.": "設定を表示できません。",
+  "File browser": "ファイルブラウザー",
+  "Keep Browse and Changes beside the pane on a wide window. A narrow window uses a popup.": "広いウィンドウでは閲覧と変更をペインの横に表示します。狭いウィンドウではポップアップを使います。",
   "Open files": "ファイルを開く",
   "On a wide window, text and code can open beside the pane. Media, PDFs and folders always open in a popup, and the viewer's header button moves the file open now.": "広いウィンドウでは、テキストとコードをペインの横に開けます。メディア、PDF、フォルダーは常にポップアップで開き、ビューアー上部のボタンで今開いているファイルを移動できます。",
   "In a popup": "ポップアップで",

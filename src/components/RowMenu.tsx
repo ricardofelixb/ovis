@@ -36,6 +36,8 @@ export interface RowMenuItem {
   current?: boolean;
   /** a switch's state, when the item is one: it is then a checkbox item (a pressed button in the sheet), not a plain item */
   checked?: boolean;
+  /** Draw the checked state as a switch instead of a checkmark. */
+  switch?: boolean;
   /** shown with its state but not runnable here (a watching device and a shared switch): it keeps its place in the keyboard order, and a press on it leaves the menu open */
   disabled?: boolean;
   run: () => void;
@@ -225,7 +227,7 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail
                 {item.glyph ?? <item.icon aria-hidden="true" />}
                 <span className="row-sheet-label">{item.label}</span>
                 {item.hint && <span className="row-sheet-hint">{item.hint}</span>}
-                {item.checked && <Check className="row-sheet-check" aria-hidden="true" />}
+                {item.switch ? <span className="row-menu-switch-track" data-checked={item.checked} aria-hidden="true"><span /></span> : item.checked && <Check className="row-sheet-check" aria-hidden="true" />}
               </button>
             ))}
           </div>
@@ -247,7 +249,7 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail
             {item.glyph ?? <item.icon aria-hidden="true" />}
             <span className="menu-item-main">{item.label}</span>
             {item.hint && <span className="menu-item-hint">{item.hint}</span>}
-            {item.checked && <Check className="menu-item-check" aria-hidden="true" />}
+            {item.switch ? <span className="row-menu-switch-track" data-checked={item.checked} aria-hidden="true"><span /></span> : item.checked && <Check className="menu-item-check" aria-hidden="true" />}
           </button>
         </Fragment>
       ))}

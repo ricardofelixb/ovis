@@ -60,6 +60,13 @@ export interface ChatTimelineProps<Row extends ChatTimelineRow> {
   listRef: RefObject<LegendListRef | null>;
   following: RefObject<boolean>;
   /**
+   * When the footer last got shorter (the Working line leaving it as the turn's own head takes its
+   * place a frame later). The browser clamps the view up by what the footer lost before the new row
+   * has grown the transcript again, and the scroll event for that arrives after both: the chat
+   * reads a move up in that window as the layout's, not the reader's.
+   */
+  footerShrunkAt: RefObject<number>;
+  /**
    * A click a following reader made is laid out where they are until the rows change; held by the
    * chat, which lets it go when the reader goes back to the end (Jump to latest), whatever set it.
    */
@@ -84,7 +91,7 @@ export interface ChatTimelineProps<Row extends ChatTimelineRow> {
 }
 
 /** One scroll owner; selected and focused rows stay real DOM nodes outside its window. */
-export function ChatTimeline<Row extends ChatTimelineRow>({ rows, scope, source, scroller, listRef, following, manualLayout, selecting, memories, header, footer, label, onScroll, onFollowed, onOpen, renderRow }: ChatTimelineProps<Row>) {
+export function ChatTimeline<Row extends ChatTimelineRow>({ rows, scope, source, scroller, listRef, following, footerShrunkAt, manualLayout, selecting, memories, header, footer, label, onScroll, onFollowed, onOpen, renderRow }: ChatTimelineProps<Row>) {
   const [selectionKeys, setSelectionKeys] = useState<string[]>([]);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   useLayoutEffect(() => {
@@ -416,6 +423,7 @@ export function ChatTimeline<Row extends ChatTimelineRow>({ rows, scope, source,
     let height = box.offsetHeight;
     const observer = new ResizeObserver(() => {
       const grew = box.offsetHeight > height;
+      if (box.offsetHeight < height) footerShrunkAt.current = performance.now();
       height = box.offsetHeight;
       const node = scroller.current;
       // held under a selection: a shrunk footer moves nothing either
@@ -426,7 +434,7 @@ export function ChatTimeline<Row extends ChatTimelineRow>({ rows, scope, source,
     });
     observer.observe(box);
     return () => observer.disconnect();
-  }, [scroller, listRef, following, manualLayout, selecting, keep]);
+  }, [scroller, listRef, following, footerShrunkAt, manualLayout, selecting, keep]);
 
   useLayoutEffect(() => {
     const transcript = scroller.current?.querySelector<HTMLElement>(".chat-transcript");

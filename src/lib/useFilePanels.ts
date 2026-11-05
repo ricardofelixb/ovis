@@ -18,14 +18,16 @@ export interface FilePanelsParams {
 export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId }: FilePanelsParams) {
   // the Files dialog, and the file open in the viewer (a path as the chat or the dialog gave it)
   const [filesOpen, setFilesOpen] = useState(false);
+  const filesDocked = filePanelAvailable && settings.fileBrowser === "panel";
+  useFocusReturn(filesOpen && filesDocked);
   const { viewing, openFile: openPreview, closeFile, setPresentation, releaseFile } = useFileViewer();
   // a repository diff from the Files dialog's Changes tab, an entry of its own like a file
   const { viewing: diffViewing, openDiff, closeDiff, releaseDiff } = useRepoDiffViewer();
   const presentation = viewing?.presentation ?? openPresentation(viewing?.path ?? "", settings.fileOpen);
   const fileDocked = filePanelAvailable && presentation === "panel";
   useEffect(() => {
-    if (viewing !== null && fileDocked) setFilesOpen(false);
-  }, [viewing, fileDocked]);
+    if (viewing !== null && fileDocked && !filesDocked) setFilesOpen(false);
+  }, [viewing, fileDocked, filesDocked]);
   // a same-host web page shares the docked file's place on wide windows and opens as a popup on narrow ones.
   // Either replacing the other takes over its history entry in place: no push over it, no Back to wait on.
   const { webPage, openWebPage: openWebPanel, closeWebPage, yieldEntry, holdsEntry } = useWebPanel({ settings, filePanelAvailable });
@@ -107,8 +109,8 @@ export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, se
     : undefined;
   const viewFile = useCallback((path: string) => {
     // the Files dialog would cover the docked panel the file opens in
-    if (filePanelAvailable && openPresentation(path, settings.fileOpen) === "panel") setFilesOpen(false);
+    if (!filesDocked && filePanelAvailable && openPresentation(path, settings.fileOpen) === "panel") setFilesOpen(false);
     openFile({ path, paneId: selectedPaneId, machineId: selectedMachineId });
-  }, [openFile, selectedPaneId, selectedMachineId, filePanelAvailable, settings.fileOpen]);
-  return { filesOpen, setFilesOpen, viewing, openFile, closeFile, setPresentation, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, closeWebPage, openWebPage, collapsing, presentFile, openDiffFile, reportFileKind, toggleFilePresentation, viewFile };
+  }, [openFile, selectedPaneId, selectedMachineId, filePanelAvailable, settings.fileOpen, filesDocked]);
+  return { filesOpen, setFilesOpen, filesDocked, viewing, openFile, closeFile, setPresentation, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, closeWebPage, openWebPage, collapsing, presentFile, openDiffFile, reportFileKind, toggleFilePresentation, viewFile };
 }

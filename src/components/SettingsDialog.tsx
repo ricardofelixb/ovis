@@ -543,6 +543,9 @@ function ChatPage() {
         <SettingsRow label={t("Diff layout")} description={t("A phone shows one column either way.")}>
           <Segmented label={t("Diff layout")} value={settings.diffStyle} onChange={(diffStyle) => update({ diffStyle })} options={DIFF_STYLES.map((diffStyle) => ({ value: diffStyle, label: diffStyle === "split" ? t("Split") : t("Unified") }))} />
         </SettingsRow>
+        <SettingsRow label={t("File browser")} description={t("Keep Browse and Changes beside the pane on a wide window. A narrow window uses a popup.")}>
+          <Segmented label={t("File browser")} value={settings.fileBrowser} onChange={(fileBrowser) => update({ fileBrowser })} options={FILE_OPEN_TARGETS.map((fileBrowser) => ({ value: fileBrowser, label: fileBrowser === "panel" ? t("Beside the pane") : t("In a popup") }))} />
+        </SettingsRow>
         <SettingsRow label={t("Open files")} description={t("On a wide window, text and code can open beside the pane. Media, PDFs and folders always open in a popup, and the viewer's header button moves the file open now.")}>
           <Segmented label={t("Open files")} value={settings.fileOpen} onChange={(fileOpen) => update({ fileOpen })} options={FILE_OPEN_TARGETS.map((fileOpen) => ({ value: fileOpen, label: fileOpen === "panel" ? t("Beside the pane") : t("In a popup") }))} />
         </SettingsRow>
