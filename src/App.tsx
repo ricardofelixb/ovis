@@ -1,5 +1,6 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, CircleHelp, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, Search, SquareTerminal, Target, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Bell, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, Search, SquareTerminal, X } from "lucide-react";
 
 import type { HerdrPane, PaneDirection } from "../shared/protocol.ts";
 import { authenticate, createTab, movePaneBeside, moveTabToWorkspace, paneSessionKey, shareSeen, swapPaneWith } from "./lib/api.ts";
@@ -15,7 +16,6 @@ import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
 import { useAgentFriends } from "./lib/friends.ts";
 import { PiVoiceView } from "./components/PiVoiceView.tsx";
-import { AgentMark } from "./components/AgentMark.tsx";
 import { ComputerView } from "./components/ComputerView.tsx";
 import { forgetComputerLogins, useComputerView } from "./lib/computerSettings.ts";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
@@ -94,10 +94,6 @@ import { useFilePanels } from "./lib/useFilePanels.ts";
 import { usePaneCoverage } from "./lib/usePaneCoverage.ts";
 import { useT } from "./lib/i18n.ts";
 import { useConnectionChip, useServerMessageHandler } from "./lib/useConnectionChip.ts";
-import { useHeaderConnection } from "./lib/headerConnection.ts";
-import { ConnectionRouteMark } from "./components/ConnectionRouteMark.tsx";
-import { HeaderSessions } from "./components/HeaderSessions.tsx";
-import { nextWaitingPane, sessionCounts, tabPosition } from "./lib/headerSessions.ts";
 import { carryMovedPane, movedView } from "./lib/paneMove.ts";
 import { useScreenWakeLock } from "./lib/wakeLock.ts";
 import { useSidebarLayout } from "./lib/useSidebarLayout.ts";
@@ -117,9 +113,10 @@ import { lensOwner, storedView, usePaneLens, usePaneLensState, usePaneViewPicks 
 import { useSplitLayout, useSplitRecheck, useSplitState } from "./lib/useSplitView.ts";
 import { linkSelects, useLinkLanding, useMachineGone, useNotificationTargets, useOpenWhenListed, useSelectedLayout, useSelectedMachine, useSelectedPane, useSelectionMark, useSelectionState, useSelectPane, useSelectTarget } from "./lib/useSelection.ts";
 import { useAddressBar } from "./lib/useAddressBar.ts";
-import { goalStatusWord, sessionMenuLines, sizeWords, useSessionStats, workedWords } from "./lib/sessionStats.ts";
 
 const APP_TITLE = "Ovis";
+
+const portalInto = (target: HTMLElement | null, node: ReactNode): ReactNode => target === null ? node : createPortal(node, target);
 /** how soon after a key press a focus counts as the user's own (lastKeyAtRef) */
 const KEY_FOCUS_MS = 1000;
 
@@ -157,11 +154,10 @@ function ConnectingNote() {
 /** The header's connection chip. It speaks only while the bridge is not live; live, it stays in the document
     for a screen reader (and the browser scripts that wait on it), drawn by nothing (styles.css). Its word lands
     a frame after the chip (lib/useAnnouncedText.ts), as every status line's does. */
-function ConnectionChip({ connected, word, title, quiet }: { connected: boolean; word: string; title: string | undefined; quiet: boolean }) {
+function ConnectionChip({ connected, word, title }: { connected: boolean; word: string; title: string | undefined }) {
   const shown = useAnnouncedText(word);
   return (
-    // quiet: the title area says it in words (lib/headerConnection.ts), so the chip keeps only its dot
-    <span className={`conn ${connected ? "conn-live" : "conn-reconnecting"}${quiet ? " conn-quiet" : ""}`} role="status" title={title}>
+    <span className={`conn ${connected ? "conn-live" : "conn-reconnecting"}`} role="status" title={title}>
       <span className="conn-dot" aria-hidden="true" />
       <span className="conn-text">{shown}</span>
     </span>
@@ -213,6 +209,7 @@ export function App() {
   const [screenMachineId, setScreenMachineId, keptScreenId] = useComputerView();
   const machineName = (id: string) => machines.find((item) => item.id === id)?.name ?? id;
   // the header's place for the open column's tab strip (the pane slot portals it there)
+  const [headerTabs, setHeaderTabs] = useState<HTMLDivElement | null>(null);
   const { otherRecheck, otherRosterTick, setOtherRosterTick } = useSplitRecheck();
   const { rosterIn, pendingFile, selectionHint, setHeaderNote, note, autoSelected, setAutoSelected } = useLinkLanding({ initialLink, otherRecheck, setOtherRosterTick, pendingLink, rosterSeq, setRosterTick, linkLanded, t });
   const { drawerOpen, setDrawerOpen, drawerOpenRef, wideScreen, sidebarCollapsed, setSidebarCollapsed, sidebarWidth, setSidebarWidth, filePanelAvailable, filePanelWidth, setFilePanelWidth, sidebarFilterRequest, openSidebarFilter } = useSidebarLayout({ initialLink });
@@ -240,7 +237,7 @@ export function App() {
   const diffPaneObserving = usePaneObserving(diffViewing?.paneId ? paneStorageId(diffViewing.machineId, diffViewing.paneId) : null);
   const { settingsOpen, setSettingsOpen, settingsLinkPage, setSettingsLinkPage, settingsLinkSection, setSettingsLinkSection, settingsPage, settingsSection, setSettingsSection, closeSettings, onSettingsPage } = useSettingsDialog(initialLink);
   const { newSessionOpen, setNewSessionOpen, newPrefill, setNewPrefill, newFields, setNewFields, pendingCreate, newTab, setNewTab, sessionHistory, setSessionHistory } = useNewSessionState({ initialLink });
-  const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped, reportedBy, setReportedBy } = useConnectionChip();
+  const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped, setReportedBy } = useConnectionChip();
   const { notifications, setNotifications, pushOn, setPushOn, pushOnRef } = useNotificationState(alertsOn);
   // the shared settings and pins, the same in every browser of this server, once the app is in
   const { receive: receivePreferences, saveError: settingsSaveError, paused: settingsSavePaused, retrying: settingsSaveRetrying, retry: retrySettingsSave, resubscribed: preferencesResubscribed, disconnected: preferencesDisconnected, closed: preferencesClosed } = usePreferencesSync(locked === false);
@@ -427,23 +424,9 @@ export function App() {
 
   const { bell, bellVisible, alertsOffDot } = alertsBell({ t, settings, alertsOn, notifications, pushOn, enableNotifications, disableNotifications });
   const connWord = t(connected ? "live" : outputStopped ? "disconnected" : connectedBefore ? "reconnecting" : "connecting");
-  // each split half has sockets of its own, even on one PC: the line is about the active half's
-  const headerConnection = useHeaderConnection({ scope: `${split ? split.active : soloSlot}:${selectedMachineId}`, reportedBy, connected, connectedBefore, outputStopped });
-  // the selected pane's chat totals (lib/sessionStats.ts): after the crumb from 769px, and in More
-  const session = useSessionStats(selectedMachineId, selectedPane?.pane_id ?? null);
-  const sessionLines = session === null ? null : sessionMenuLines(session);
-  const sessionShort = session === null ? [] : [workedWords(session), sizeWords(session)].filter((part) => part !== null);
   const crumb = selectedPane && selectedTitle !== null
     ? headerCrumb({ machine: selectedMachine?.name ?? selectedMachineId, machineCount: machines.length, workspace: selectedWorkspace?.label ?? selectedPane.workspace_id, title: selectedTitle, cwd: selectedPane.cwd })
     : null;
-  // the selected PC's sessions as its sidebar draws them, and the tab's place in its strip. A PC that
-  // is not connected has only a cached roster, which its sidebar greys out: the header counts none of it
-  const rosterPanesShown = selectedMachine?.state === "connected" ? snapshot?.panes ?? [] : [];
-  const shownStatus = (pane: (typeof rosterPanesShown)[number]) => activity.status(selectedMachineId, pane);
-  const sessionTally = sessionCounts(rosterPanesShown, shownStatus);
-  const nextWaiting = nextWaitingPane(rosterPanesShown, shownStatus, selectedPaneId, snapshot?.layouts);
-  const tabPlace = snapshot ? tabPosition(snapshot, selectedPaneId) : null;
-  const position = tabPlace && { ...tabPlace, words: t("Tab {index} of {count}", { index: tabPlace.index, count: tabPlace.count }) };
 
   // App asks the server for the agents' friends (lib/friends.ts); the sidebar and the tabs read them
   useAgentFriends(machines);
@@ -666,22 +649,12 @@ export function App() {
   const cramped = useMediaQuery(CRAMPED_QUERY);
   const paneMenuInMore = selectedPane !== null
     && loneTabHidden(cramped, snapshot?.tabs.filter((tab) => tab.workspace_id === selectedPane.workspace_id).length ?? 0);
-  // on a phone the header's line is the title's: the sessions' one pill goes to the end of the tab row
-  // under it. Where that row is not drawn (a lone tab on a cramped phone) More carries the jump instead,
-  // its first item, with a waiting-coloured dot on its button
-  const phoneNarrow = useMediaQuery("(max-width: 480px)");
-  const sessionsInStrip = phoneNarrow && !paneMenuInMore && !splitOn;
-  const sessionsInMore = phoneNarrow && paneMenuInMore && !splitOn;
-  const waitingInMore = sessionsInMore && sessionTally.waiting > 0;
-  const sessionsPill = <HeaderSessions counts={sessionTally} onNextWaiting={nextWaiting === null ? null : () => selectPane(nextWaiting)} compact={phoneNarrow} />;
   const paneMoreItems = paneMenuInMore && selectedPane ? (paneActionsRef.current?.(selectedPane) ?? []).map((item, index): RowMenuItem => ({
     ...item, divider: index === 0 || item.divider,
     run: () => paneActionsRef.current?.(selectedPane).find((fresh) => fresh.id === item.id)?.run(),
   })) : [];
-  const moreBase = alertsOffDot ? t("More · alerts are off") : t("More");
-  const moreLabel = waitingInMore ? `${moreBase} · ${t("{count} waiting for you", { count: sessionTally.waiting })}` : moreBase;
+  const moreLabel = alertsOffDot ? t("More · alerts are off") : t("More");
   const moreItems: RowMenuItem[] = [
-    ...(waitingInMore && nextWaiting !== null ? [{ id: "next-waiting", label: t("Open the next session waiting for you"), hint: String(sessionTally.waiting), icon: CircleHelp, run: () => selectPane(nextWaiting) }] : []),
     // first at every width: a phone's header has no palette button, and a touch screen no shortcut
     { id: "palette", label: t("Search panes and actions"), icon: Search, ...(paletteKeys ? { hint: paletteKeys } : {}), run: () => openPalette() },
     ...(selectedPane && screenMachineId === null ? [{ id: "view", label: t("Terminal"), checked: (terminalPeek !== null ? "terminal" : view) === "terminal", switch: true, title: terminalPeek !== null || view === "terminal" ? t("Switch to chat (⌘⇧J)") : terminalAttach ? t("Switch to terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there"), icon: SquareTerminal, run: actions.toggleView }] : []),
@@ -774,41 +747,11 @@ export function App() {
           </button>
         </div>
         <HeaderNote note={note} />
-        {note !== null ? null : selectedPane && crumb ? (
-          <div className={`context${headerConnection === null ? "" : " has-connection"}`} title={crumb.tooltip}>
-            <div className="context-title">
-              {selectedAgent && <AgentMark agent={selectedAgent} size={18} />}
-              <span className="context-title-text">{selectedTitle}</span>
-              {position && <span className="context-position" title={position.words}>
-                <span aria-hidden="true">{position.index}/{position.count}</span>
-                <span className="visually-hidden">{position.words}</span>
-              </span>}
-            </div>
-            {/* lost and back, the connection takes the crumb's place in words, in the same box: nothing moves */}
-            <div className={`context-sub${headerConnection === null ? "" : ` context-connection is-${headerConnection}`}`}>
-              {headerConnection !== null ? <span>{t(headerConnection === "connected" ? "Connected" : "Reconnecting…")}</span> : <>
-                {/* one PC needs no name: the sidebar leaves it out too, and More still says it */}
-                {crumb.showMachine && <><span className="machine-context-name">{crumb.machine}</span><span className="context-sep" aria-hidden="true">›</span></>}
-                <span>{crumb.workspace}</span>
-                {crumb.folder !== null && (
-                  <>
-                    <span className="context-sep" aria-hidden="true">›</span>
-                    <span>{crumb.folder}</span>
-                  </>
-                )}
-              </>}
-            </div>
-            {/* after the crumb, so it wraps out of sight before the crumb does; the connection's word has the line */}
-            {headerConnection === null && session !== null && sessionLines !== null && (sessionShort.length > 0 || session.goal !== null) && (
-              <div className="context-sub context-session" title={[sessionLines.totals, sessionLines.goal].filter((line) => line !== null).join("\n")}>
-                {sessionShort.length > 0 && <span>{sessionShort.join(" · ")}</span>}
-                {session.goal !== null && <span className="context-session-goal"><Target aria-hidden="true" />{goalStatusWord(session.goal.status)}</span>}
-              </div>
-            )}
-          </div>
-        ) : (
-          <><Brand /><span className="machine-context-name">{selectedMachine?.name ?? selectedMachineId}</span></>
-        )}
+        {note === null && !(selectedPane && crumb) && <><Brand /><span className="machine-context-name">{selectedMachine?.name ?? selectedMachineId}</span></>}
+        {/* the open column's tab strip is drawn here (the pane slot portals it), in the title's old place;
+            a split view keeps each column's strip over its column */}
+        {selectedPane && !splitOn && <div ref={setHeaderTabs} className="header-tabs" hidden={screenMachineId !== null} />}
+        {screenMachineId !== null && <span className="machine-context-name header-screen-name">{machineName(screenMachineId)}</span>}
         {selectedPane && wideScreen && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
@@ -819,13 +762,10 @@ export function App() {
           </>
         )}
         <div className="header-meta">
-          {!sessionsInStrip && !sessionsInMore && sessionsPill}
           {/* the chip speaks for the pane's terminal: the setup guide stands in the pane's place and has none */}
-          <ConnectionRouteMark portal={auth?.via === "portal"} ingress={security.state === "known" ? security.summary.observed_ingress : null} />
           {!guideShown && screenMachineId === null && <ConnectionChip
             connected={connected}
             word={connWord}
-            quiet={headerConnection === "reconnecting" && note === null && crumb !== null}
             title={[connected ? null : connWord, shownHerdr ? (shownHerdr.runtime === "herdr-core" ? t("herdr-core {version} · protocol {protocol}", { version: shownHerdr.version, protocol: shownHerdr.protocol }) : t("herdr {version} · protocol {protocol}", { version: shownHerdr.version, protocol: shownHerdr.protocol })) : null].filter((part) => part !== null).join(" · ") || undefined}
           />}
           {/* the Host's herdr is away: the step to take is on that PC (the sidebar's state line says the same) */}
@@ -855,7 +795,7 @@ export function App() {
             >
               <Ellipsis />
             </button>
-            {waitingInMore ? <span className="header-more-dot is-waiting" aria-hidden="true" /> : alertsOffDot && <span className="header-more-dot" aria-hidden="true" />}
+            {alertsOffDot && <span className="header-more-dot" aria-hidden="true" />}
           </span>
         </div>
         {more && (
@@ -866,10 +806,6 @@ export function App() {
               <div className="header-more-crumb">
                 <span>{crumb.place}</span>
                 {crumb.path !== null && <span className="header-more-path">{crumb.path}</span>}
-                {sessionLines !== null && <span className="header-more-session">
-                  <span>{sessionLines.totals}</span>
-                  {sessionLines.goal !== null && <span>{sessionLines.goal}</span>}
-                </span>}
               </div>
             ) : undefined}
             items={moreItems}
@@ -996,8 +932,8 @@ export function App() {
                 <RenderBoundary resetKey={`${machineId}:${paneId ?? ""}`} fallback={(retry) => <>{slotBar}<RegionCrash message={t("This pane can't be shown.")} retry={retry} onShown={active ? paneLost : undefined} /></>}>
                 <CrashProbe region="pane" />
                 {!(slotSnapshot && pane && workspace) && slotBar}
-                {slotSnapshot && pane && workspace && (
-                  <TabStrip snapshot={slotSnapshot} workspace={workspace} selectedPane={pane} panelId={slotPanelId} splitDrag={wideScreen} onSelectPane={onSelect} end={slotEnd ?? (sessionsInStrip && active ? <div className="tab-strip-sessions">{sessionsPill}</div> : undefined)}
+                {slotSnapshot && pane && workspace && portalInto(splitOn ? null : headerTabs, (
+                  <TabStrip snapshot={slotSnapshot} workspace={workspace} selectedPane={pane} panelId={slotPanelId} splitDrag={wideScreen} onSelectPane={onSelect} end={slotEnd}
                     renameRequest={active && renameRequest?.machineId === machineId && renameRequest.paneId === pane.pane_id ? renameRequest : null}
                     onRenameHandled={clearRenameRequest}
                     onNewTab={() => actions.openNewTab(active ? undefined : { machineId, workspaceId: workspace.workspace_id })}
@@ -1011,7 +947,7 @@ export function App() {
                       // longer offers (a close a lock took away, lib/paneLocks.ts) does nothing
                       return paneActionsRef.current(target).map((item) => ({ ...item, run: () => paneActionsRef.current?.(target).find((fresh) => fresh.id === item.id)?.run() }));
                     } : undefined} />
-                )}
+                ))}
                 {/* the tab strip's panel: its id is what each tab's aria-controls points at, one per half.
                     No tabIndex - the terminal (PaneTerminal) and the composer are the focusable things inside it. */}
                 <main className="terminal-host">

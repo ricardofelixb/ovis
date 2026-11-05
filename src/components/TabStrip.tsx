@@ -224,9 +224,11 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     if (!open) return;
     const view = row.getBoundingClientRect();
     const item = open.getBoundingClientRect();
+    // the + sticks over the strip's end: a tab scrolled up to the edge would sit under it
+    const end = row.querySelector<HTMLElement>(".tab-strip-add")?.getBoundingClientRect().left ?? view.right;
     const before = row.scrollLeft;
     if (item.left < view.left) row.scrollLeft -= view.left - item.left;
-    else if (item.right > view.right) row.scrollLeft += item.right - view.right;
+    else if (item.right > end) row.scrollLeft += item.right - end;
     // where the browser really left it; a strip that did not have to move may hold a scroll of
     // the user's whose event is still to come, and that one is left for the event to tell
     if (row.scrollLeft !== before || scroll.current.at === null) scroll.current = stripPlaced(scroll.current, row.scrollLeft);
@@ -561,7 +563,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     );
   return (
     <>
-      {end === undefined ? row : <div className="tab-strip-row">{row}<div className="tab-strip-end">{end}</div></div>}
+      <div className="tab-strip-row">{row}{end !== undefined && <div className="tab-strip-end">{end}</div>}</div>
       {picker && <RowMenu key={picker.workspaces ? "workspaces" : "tab"} anchor={picker.anchor} point={picker.point} restoreFocusTo={picker.previousFocus}
         title={picker.workspaces ? t("Move {tab} to", { tab: nameOf(picker.tab) }) : nameOf(picker.tab)}
         subtitle={picker.workspaces ? undefined : place}

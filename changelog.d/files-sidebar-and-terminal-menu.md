@@ -1,4 +1,6 @@
 ### Changed
+- The header keeps only the tab strip: no PC › workspace › folder line, session counts, tab position,
+  connection words or connection-route indicator (Tailscale, LAN, relay) beside the connection dot.
 - Chat/Terminal now lives in More as a Terminal switch. Per-pane choices and the keyboard shortcut
   are unchanged.
 ### Fixed

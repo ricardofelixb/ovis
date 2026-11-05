@@ -228,7 +228,6 @@ const BASE: Record<string, string> = {
   "{count} waiting for you": "応答待ち {count} 件",
   "{count} done": "完了 {count} 件",
   "Open the next session waiting for you": "応答を待っている次のセッションを開く",
-  "Tab {index} of {count}": "タブ {index}/{count}",
   "Reconnecting…": "再接続しています…",
   "Add PC": "PC を追加",
   "Connect": "接続",

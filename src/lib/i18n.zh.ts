@@ -230,7 +230,6 @@ const BASE: Record<string, string> = {
   "{count} waiting for you": "{count} 个等待你回应",
   "{count} done": "{count} 个已完成",
   "Open the next session waiting for you": "打开下一个等待你回应的会话",
-  "Tab {index} of {count}": "第 {index} 个标签页，共 {count} 个",
   "Reconnecting…": "正在重连…",
   "Add PC": "添加 PC",
   "Connect": "连接",
