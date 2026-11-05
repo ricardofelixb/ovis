@@ -53,6 +53,8 @@ export async function checkHeaderLensSwitch(browser: Browser, origin: string, ev
         const bounds = await toggle.boundingBox();
         if (sheet) assert.ok(bounds && bounds.height >= 44, "the sheet switch has a finger-sized target");
         if (evidence) await page.screenshot({ path: join(evidence, `terminal-menu-${width}.png`) });
+        // The menu focuses its first item in a frame; let that settle before sending a key to another.
+        await page.waitForFunction(() => Boolean(document.activeElement?.closest(".row-menu, .row-sheet")));
         await toggle.press("Space");
         await menu.waitFor({ state: "detached" });
         await page.locator(`${VIEW_BUTTON}[data-view="terminal"]`).waitFor();

@@ -8,8 +8,8 @@ import { buildDemoApp } from "./demo-build.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens } from "./view-toggle.ts";
 
-// #1457: a compact-height phone (including the iPhone Duo's outer display, or a phone with its
-// keyboard up) drops a lone tab's row, and the chat then puts the glass header over the pane. The
+// #1457: a compact-height phone (including the iPhone Duo's outer display, but not a tall phone
+// made short by its keyboard) drops a lone tab's row, putting the glass header over the pane. The
 // pane then draws no ellipsis under the header's own: the header's More menu carries the pane's and
 // the tab's actions (#2622), and a banner (View only) starts below the header.
 type SocketsWindow = Window & { glassSockets: WebSocket[] };
@@ -58,6 +58,8 @@ try {
       const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: "en-US" });
       try {
         await context.addInitScript(() => {
+          // The native app previously drew an extra Change PC row above Settings.
+          Object.defineProperty(globalThis, "Capacitor", { value: { isNativePlatform: () => true } });
           localStorage.setItem("ovis:settings", JSON.stringify({ language: "en" }));
           const viewport = window.visualViewport!;
           let height = 795;
@@ -72,6 +74,8 @@ try {
         page.on("pageerror", (error) => errors.push(error.message));
         await page.goto(`http://127.0.0.1:${server.port}/herdr-web-ui/demo/app/?pane=${encodeURIComponent(panes.api)}`);
         await page.locator(".conn-live").waitFor();
+        assert.equal(await page.locator(".sidebar-footer .sidebar-footer-pc").count(), 0, "the native app has no redundant Change PC footer row");
+        assert.equal(await page.locator(".sidebar-footer").getByRole("button", { name: "Change PC", exact: true }).count(), 0);
         // A short phone draws no tab row for a workspace's only tab: close the pane's sibling tabs.
         const closed = await page.evaluate(async (id) => {
           const { snapshot } = await (await fetch("/api/session")).json() as { snapshot: { panes: { pane_id: string; tab_id: string; workspace_id: string }[]; tabs: { tab_id: string; workspace_id: string }[] } };
@@ -173,22 +177,34 @@ try {
         await page.setViewportSize({ width: 390, height: 844 });
         await page.locator(".tab-strip").waitFor();
 
-        // the report's own moment: the message box focused and the keyboard up. Android shrinks the
-        // layout viewport with it, under the 700px that drops a lone tab's row (TabStrip's cramped).
+        // Android shrinks the layout viewport under its keyboard. Keep the tall phone's tab and
+        // pane controls: only a genuinely short screen should switch to the lone-tab glass header.
         await message.click();
         await page.setViewportSize({ width: 390, height: 470 });
         await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(470));
         await page.waitForFunction(() => document.documentElement.hasAttribute("data-keyboard"));
+        await page.locator(".header-tabs .tab-strip").waitFor();
+        assert.equal(await page.locator(".header-tabs .tab-strip-label", { hasText: "Duo tab" }).count(), 1, "the open tab stays in the header while typing");
+        assert.equal(await message.evaluate((node) => document.activeElement === node), true, "the composer keeps keyboard focus");
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(844));
+        await page.waitForFunction(() => !document.documentElement.hasAttribute("data-keyboard"));
+        await page.locator(".header-tabs .tab-strip").waitFor();
+
+        // Turning the phone really changes the space available, so the compact layout still works.
+        await message.evaluate((node) => node.blur());
+        await page.setViewportSize({ width: 740, height: 390 });
+        await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(390));
         await page.locator(".tab-strip").waitFor({ state: "detached" });
         assert.notEqual(await page.locator(".app-header").evaluate((node) => getComputedStyle(node).backdropFilter), "none",
           "the chat of a lone tab with no row puts the glass header over the pane");
-        await checkMenus(page, "chat-keyboard");
+        await checkMenus(page, "chat-landscape");
 
         // a view-only connection draws its "View only" banner at the pane's top right, below the glass header
         await page.evaluate(() => (window as SocketsWindow).glassSockets.at(-1)!.send(JSON.stringify({ type: "role", mode: "observe" })));
         await page.locator(".terminal-banner-observe").waitFor();
         await page.locator(".tab-strip").waitFor({ state: "detached" });
-        await checkMenus(page, "chat-keyboard-view-only");
+        await checkMenus(page, "chat-landscape-view-only");
         const header = await page.locator(".app-header").boundingBox();
         if (!header) throw new Error("the glass header has a box");
         const banners = await page.locator(".terminal-banners > :not(.visually-hidden)").evaluateAll((nodes) => nodes.map((node) => {
@@ -199,7 +215,10 @@ try {
         for (const banner of banners) {
           assert.ok(banner.y >= header.y + header.height - 0.5, `the banner "${banner.text}" ${JSON.stringify(banner)} starts below the glass header (bottom ${header.y + header.height})`);
         }
-        // the move from the header's menu: the lone tab joins another workspace, and the view goes with its pane
+        // Back at a sheet-width compact screen, moving the lone tab follows its pane to the new workspace.
+        await page.setViewportSize({ width: 390, height: 470 });
+        await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(470));
+        await page.locator(".tab-strip").waitFor({ state: "detached" });
         const before = new URL(page.url()).searchParams.get("ws");
         await openMore(page);
         await sheet.getByText("Move to workspace\u2026", { exact: true }).click();

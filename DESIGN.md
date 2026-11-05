@@ -1070,8 +1070,11 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   A lone pane beside such a `⋯` draws no second ellipsis (its actions are in the tab's menu), on a
   desktop as on touch. The pane's own context menu carries pane actions; it opens at the pointer
   without changing which pane is focused. The pane header's ellipsis opens the same menu on touch.
+  Unlike upstream's raw height query, a keyboard shortening a tall phone keeps the tab row and
+  its pane controls (`lib/useCramped.ts`): typing must not change the navigation layout. The value
+  from before typing holds until the keyboard closes or the screen width changes (rotation).
   A lone tab with no row (a phone at most 700px tall, including the iPhone Duo's 678-point outer
-  display, landscape or a screen made short by its keyboard) draws no pane ellipsis either: a second
+  display, or landscape) draws no pane ellipsis either: a second
   `⋯` below the glass header would repeat the header's own. The header's `⋯` is then the one menu,
   as an iPhone navigation bar (and the Claude iOS app) keeps one overflow button in the bar. After its
   own items and a divider it carries what the missing row's menu would: a split tab's panes first,
@@ -1560,12 +1563,8 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   so a footer row kept showing in every browser tab and in browsers that never prompt. Settings →
   Phone & devices → Install offers it when the browser can install, and the steps otherwise,
   as the Claude web app keeps getting its apps in the account menu rather than a sidebar row.
-- Above that row, only where the page is one PC of a phone's list (a PC's page on the hosted
-  relay shell, or the phone app), one full-width row (`.sidebar-footer-pc`) names the PC, the lone
-  Host's name its header no longer shows, then **Change PC** in `--text-dim` and a switch glyph: a
-  tap goes back to the list of PCs (the shell's front page, or the app's list), as the Claude app's
-  sidebar foot names whose account it is and switches it in one tap. Settings → Phone & devices
-  keeps its Change PC row. A PC's own app never shows it: its sidebar lists its PCs itself.
+- No **Change PC** row sits above the footer: this fork's sidebar already lists its PCs.
+  Settings → Phone & devices keeps its Change PC action for native and hosted-shell windows.
 
 ### Plan meters (`.usage*`)
 - Right of the Settings gear, one button holding as many chips as the row has room for (judged

@@ -25,7 +25,8 @@ import { autoTabLabel, customTabLabel, tabLabel } from "../lib/tabName.ts";
 import { shownTabLabels, subscribeTabLabels } from "../lib/tabLabels.ts";
 import { STRIP_AT_REST, stripPlaced, stripScrolled, stripSelected, type StripScroll } from "../lib/tabStripScroll.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "../lib/paneRegion.ts";
-import { CRAMPED_QUERY, loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
+import { loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
+import { useCramped } from "../lib/useCramped.ts";
 import { rosterPanes } from "../lib/dagPane.ts";
 import { moveDestinations } from "../lib/layoutTargets.ts";
 import { useAppLayout, useMachineApi, useMachineId } from "../lib/machineContext.tsx";
@@ -96,7 +97,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const soloPanes = useMediaQuery(SOLO_PANE_QUERY);
   // a compact-height phone screen (a foldable's outer display, landscape or the keyboard) has no
   // height to spare: a lone tab is not drawn there, so the pane and approval cards keep their room
-  const cramped = useMediaQuery(CRAMPED_QUERY);
+  const cramped = useCramped();
   const strip = useRef<HTMLDivElement>(null);
   const [picker, setPicker] = useState<{ anchor: HTMLElement; tab: HerdrTab; point?: { x: number; y: number }; previousFocus: HTMLElement | null; touch: boolean; workspaces?: true } | null>(null);
   const [editing, setEditing] = useState<{ tabId: string; value: string } | null>(null);
