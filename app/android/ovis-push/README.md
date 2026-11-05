@@ -61,7 +61,8 @@ drops it. Errors carry a code: `unavailable` (no Firebase in this build), `permi
    `wrangler secret put FCM_SERVICE_ACCOUNT < key.json` (push-relay/README.md), then delete
    the downloaded file.
 5. **Relay address**: the app registers with `https://push.ovis.sh`
-   (`res/values/strings.xml`, `ovis_push_relay`); a self-hosted relay goes there.
+   (`ovis_push_relay`, from `build.gradle`); build with `OVIS_PUSH_RELAY` set to a self-hosted
+   relay's address to use that one instead.
 
 ## Privacy
 
