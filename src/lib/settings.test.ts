@@ -1144,6 +1144,10 @@ it("keeps the Markdown preview's width to readable or full, readable by default"
 it("keeps where web links open to a tab or the panel, a tab by default", () => {
   expect(DEFAULT_SETTINGS.webLinks).toBe("tab");
   expect(DEFAULT_SETTINGS.fileOpen).toBe("popup");
+  expect(DEFAULT_SETTINGS.fileBrowser).toBe("popup");
+  expect(sanitizeSettings({ fileBrowser: "panel", fileOpen: "popup" }).fileBrowser).toBe("panel");
+  expect(sanitizeSettings({ fileBrowser: "panel", fileOpen: "popup" }).fileOpen).toBe("popup");
+  for (const bad of ["tab", "", null, true]) expect(sanitizeSettings({ fileBrowser: bad }).fileBrowser).toBe("popup");
   expect(sanitizeSettings({ fileOpen: "panel" }).fileOpen).toBe("panel");
   for (const bad of ["tab", "", null, true]) expect(sanitizeSettings({ fileOpen: bad }).fileOpen).toBe("popup");
   expect(sanitizeSettings({ webLinks: "panel" }).webLinks).toBe("panel");

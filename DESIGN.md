@@ -2123,6 +2123,13 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   The reader page and dialog share **Show source** (Braces glyph, pressed while the source shows, so it
   never looks like Open raw file), highlighted source with CSS-counter line
   numbers (past 2 000 lines, the virtualizer's numbered rows; see File viewer under Typography),
+  Settings → Chat → File viewer → **File browser** independently places Browse/Changes in a
+  popup (default) or beside the pane from 980px (`fileBrowser`, per device). Like Zed's Git panel
+  and VS Code's Source Control sidebar, the list remains visible while opening a file or diff.
+  It is a non-modal region with no scrim, focus trap or phone Back entry. Escape closes it only
+  from inside; narrow windows use the original dialog. The browser and a docked file share the
+  available width without covering the pane. Unlike Zed's default left dock, it stays on the
+  right to match Ovis's existing file viewer.
   and **Copy file** for complete text (selecting the source if clipboard copy fails).
   There is no separate Raw action. HTML blocks in Markdown files are parsed in the preview worker
   with HTML enabled; local images still pass through the file endpoint's image-size check.

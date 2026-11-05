@@ -541,6 +541,49 @@ try {
     await page.reload();
   };
   // with Open files at its default, even text opens in the popup; Beside the pane is a choice
+  // Browse/Changes placement is independent from the file viewer, and never blocks the pane.
+  await page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem("ovis:settings") ?? "{}");
+    localStorage.setItem("ovis:settings", JSON.stringify({ ...settings, fileBrowser: "panel", fileOpen: "panel" }));
+  });
+  await page.reload();
+  await openFiles(page);
+  const browserPanel = page.getByRole("region", { name: "Files", exact: true });
+  await browserPanel.waitFor();
+  assert.equal(await page.locator('.modal-scrim, [aria-modal="true"]').count(), 0, "the browser sidebar is not modal");
+  await browserPanel.locator(".dir-browser-item.is-file").filter({ hasText: "notes.txt" }).click();
+  await panel.getByText("File preview history regression", { exact: true }).waitFor();
+  assert.ok(await browserPanel.isVisible(), "opening a docked file leaves the browser beside it");
+  for (const width of [980, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px: the two panels do not widen the page`);
+    const paneBounds = await page.locator(".pane-column").boundingBox();
+    assert.ok(paneBounds && paneBounds.width >= 279, `${width}px: the pane retains room beside both panels`);
+    if (process.env.UI_EVIDENCE_DIR) await page.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, `files-browser-and-preview-${width}.png`) });
+  }
+  await composer.click();
+  await page.keyboard.press("Escape");
+  assert.ok(await browserPanel.isVisible(), "Escape in the pane leaves the browser open");
+  await panel.getByRole("button", { name: "Close file", exact: true }).click();
+  await panel.waitFor({ state: "detached" });
+  await browserPanel.getByRole("button", { name: "Changes", exact: true }).click();
+  await browserPanel.locator(".repo-change").filter({ hasText: "notes.txt" }).click();
+  await page.getByRole("button", { name: "Close diff", exact: true }).click();
+  assert.ok(await browserPanel.isVisible(), "closing a diff keeps the Changes sidebar");
+  await page.setViewportSize({ width: 390, height: 844 });
+  const browserPopup = page.getByRole("dialog", { name: "Files", exact: true });
+  await browserPopup.waitFor();
+  assert.equal(await browserPanel.count(), 0, "a narrow window uses the original modal browser");
+  await browserPopup.getByRole("button", { name: "Close files", exact: true }).click();
+  await browserPopup.waitFor({ state: "detached" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.evaluate(() => {
+    const settings = JSON.parse(localStorage.getItem("ovis:settings") ?? "{}");
+    localStorage.setItem("ovis:settings", JSON.stringify({ ...settings, fileBrowser: "popup" }));
+  });
+  await page.reload();
+  console.log("PASS independent Browse/Changes sidebar, live pane, file and diff opens, 980/1280/1440px fit and phone popup fallback");
+
   await setFileOpen(null);
   await activateInTranscript(page, notesLink);
   await textPopup.getByText("File preview history regression", { exact: true }).waitFor();

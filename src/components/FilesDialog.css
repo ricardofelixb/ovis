@@ -1,4 +1,47 @@
-/* Browse | Changes in the Files dialog's header, between the title and Close */
+/* Browse | Changes can stay beside the chat, independently of file previews. */
+.files-panel {
+  width: var(--files-panel-w);
+  flex: 0 0 var(--files-panel-w);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: var(--hairline) solid var(--border);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.files-panel .modal-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-2);
+}
+
+.files-panel .files-dialog-tabs {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: start;
+}
+
+.files-panel .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--space-3);
+}
+
+.files-panel .repo-changes-bar,
+.files-panel .repo-changes-tools,
+.files-panel .repo-changes-scopes {
+  flex-wrap: wrap;
+}
+
+/* A file preview may sit beside the browser too; leave room for the pane. */
+.app-body:has(.files-panel) {
+  --files-panel-w: clamp(220px, 22vw, 300px);
+  --file-panel-shown-w: min(max(220px, min(var(--file-panel-user-w, min(42vw, 560px)), 60vw)), calc(100vw - var(--sidebar-shown-w) - var(--files-panel-w) - clamp(280px, 25vw, 440px)));
+}
+
+/* Browse | Changes in the Files header, between the title and Close */
 .files-dialog-tabs {
   flex: none;
 }

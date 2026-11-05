@@ -239,6 +239,8 @@ export const SETTINGS_ZH: Record<string, string> = {
   "This version has already been counted. The next event is sent after an update.": "此版本已统计。下一次发送在更新之后。",
   "Name each workspace on one line, or show what its agent is doing with the workspace under it": "每个工作区只显示一行名称，或在上方显示智能体正在做的事、下方显示工作区",
   "Settings can't be shown.": "无法显示设置。",
+  "File browser": "文件浏览器",
+  "Keep Browse and Changes beside the pane on a wide window. A narrow window uses a popup.": "在宽窗口中，将浏览和更改保留在窗格旁。在窄窗口中使用弹窗。",
   "Open files": "打开文件",
   "On a wide window, text and code can open beside the pane. Media, PDFs and folders always open in a popup, and the viewer's header button moves the file open now.": "在宽窗口中，文本和代码可以在窗格旁打开。媒体、PDF 和文件夹始终以弹窗打开，查看器顶部的按钮可以移动当前打开的文件。",
   "In a popup": "以弹窗",

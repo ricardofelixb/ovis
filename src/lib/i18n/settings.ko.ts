@@ -239,6 +239,8 @@ export const SETTINGS_KO: Record<string, string> = {
   "This version has already been counted. The next event is sent after an update.": "이 버전은 이미 집계되었습니다. 다음 전송은 업데이트 후입니다.",
   "Name each workspace on one line, or show what its agent is doing with the workspace under it": "워크스페이스 이름만 한 줄로 보여주거나, 에이전트가 하는 작업을 위에 두고 워크스페이스를 아래에 보여줍니다",
   "Settings can't be shown.": "설정을 표시할 수 없습니다.",
+  "File browser": "파일 탐색기",
+  "Keep Browse and Changes beside the pane on a wide window. A narrow window uses a popup.": "넓은 창에서는 탐색과 변경 사항을 창 옆에 표시합니다. 좁은 창에서는 팝업으로 엽니다.",
   "Open files": "파일 열기",
   "On a wide window, text and code can open beside the pane. Media, PDFs and folders always open in a popup, and the viewer's header button moves the file open now.": "넓은 창에서는 텍스트와 코드를 창 옆에 열 수 있습니다. 미디어, PDF, 폴더는 항상 팝업으로 열리고, 뷰어 위쪽 버튼으로 지금 연 파일을 옮길 수 있습니다.",
   "In a popup": "팝업으로",
