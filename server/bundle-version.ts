@@ -36,7 +36,11 @@ export function sourceBundleVersion(root: string, release = RELEASE_VERSION): st
   };
   for (const path of [...BUNDLE_PATHSPECS].sort()) visit(path);
   add("package.json", dependencies(readFileSync(join(root, "package.json"), "utf8")));
-  add(BUNDLE_WORKFLOW, bunPins(readFileSync(join(root, BUNDLE_WORKFLOW), "utf8")));
+  // Minimal source copies need not ship CI configuration; hash pins when it is present.
+  let workflow = "";
+  try { workflow = readFileSync(join(root, BUNDLE_WORKFLOW), "utf8"); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  add(BUNDLE_WORKFLOW, bunPins(workflow));
   return `${release}+${hash.digest("hex").slice(0, 24)}`;
 }
 

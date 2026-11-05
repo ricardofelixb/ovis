@@ -40,6 +40,17 @@ it("ignores UI, tests, docs, fixtures, app release numbers and generated Rust ta
   expect(sourceBundleVersion(root)).toBe(first);
 });
 
+it("starts from minimal source copies without CI configuration and still hashes pins when present", () => {
+  const { root, put } = fixture();
+  const pinned = sourceBundleVersion(root);
+  rmSync(join(root, ".github"), { recursive: true });
+  const minimal = runtimeBundleVersion(root);
+  expect(minimal).not.toBe(pinned);
+  expect(runtimeBundleVersion(root)).toBe(minimal);
+  put(".github/workflows/remote-bundles.yml", "bun-version: 1.4.2");
+  expect(runtimeBundleVersion(root)).toBe(pinned);
+});
+
 it("carries the source identity into a bundle without needing source-only files", () => {
   const { root, put } = fixture();
   const revision = sourceBundleVersion(root);
