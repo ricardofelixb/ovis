@@ -27,9 +27,18 @@ export async function checkHeaderLensSwitch(browser: Browser, origin: string, ev
         await page.locator(VIEW_BUTTON).waitFor();
         assert.equal(await page.locator(".app-header .view-toggle").count(), 0, "the old header toggle is removed");
         await pickLens(page, "chat", { tap: touch });
+        if (touch) await page.locator(".drawer-toggle").click();
+        const sidebarMenu = page.locator(".sidebar-row-action.row-menu-toggle").first();
+        await sidebarMenu.waitFor({ state: "attached" });
+        if (touch) assert.equal(await sidebarMenu.isVisible(), true, "the phone drawer shows its row menus");
+        assert.deepEqual(await sidebarMenu.evaluate((button) => {
+          const style = getComputedStyle(button);
+          return { border: style.borderTopWidth, background: style.backgroundColor };
+        }), { border: "0px", background: "rgba(0, 0, 0, 0)" }, "sidebar menu triggers stay borderless and transparent, not styled as switches");
+        if (touch) await page.locator(".drawer-toggle").click();
         await page.locator(VIEW_BUTTON).click();
         const menu = page.locator(sheet ? ".row-sheet" : ".row-menu");
-        const toggle = menu.locator("button:has(.row-menu-toggle)");
+        const toggle = menu.locator("button:has(.row-menu-switch-track)");
         await toggle.waitFor();
         assert.equal(await toggle.getAttribute(sheet ? "aria-pressed" : "aria-checked"), "false", "Chat means Terminal is off");
         const bounds = await toggle.boundingBox();

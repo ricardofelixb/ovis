@@ -227,7 +227,7 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail
                 {item.glyph ?? <item.icon aria-hidden="true" />}
                 <span className="row-sheet-label">{item.label}</span>
                 {item.hint && <span className="row-sheet-hint">{item.hint}</span>}
-                {item.switch ? <span className="row-menu-toggle" data-checked={item.checked} aria-hidden="true"><span /></span> : item.checked && <Check className="row-sheet-check" aria-hidden="true" />}
+                {item.switch ? <span className="row-menu-switch-track" data-checked={item.checked} aria-hidden="true"><span /></span> : item.checked && <Check className="row-sheet-check" aria-hidden="true" />}
               </button>
             ))}
           </div>
@@ -249,7 +249,7 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, detail
             {item.glyph ?? <item.icon aria-hidden="true" />}
             <span className="menu-item-main">{item.label}</span>
             {item.hint && <span className="menu-item-hint">{item.hint}</span>}
-            {item.switch ? <span className="row-menu-toggle" data-checked={item.checked} aria-hidden="true"><span /></span> : item.checked && <Check className="menu-item-check" aria-hidden="true" />}
+            {item.switch ? <span className="row-menu-switch-track" data-checked={item.checked} aria-hidden="true"><span /></span> : item.checked && <Check className="menu-item-check" aria-hidden="true" />}
           </button>
         </Fragment>
       ))}

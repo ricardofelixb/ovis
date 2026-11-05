@@ -827,11 +827,11 @@ const TAKES: Record<string, Take> = {
     notes: "the demo has no agent TUI: Terminal shows the demo's boxed notice (\"This is the demo… Switch back to Chat above\"); not film material",
     run: async (page, hand, marks) => {
       await hand.click(".app-header .header-more-button");
-      await hand.click("button:has(.row-menu-toggle)");
+      await hand.click("button:has(.row-menu-switch-track)");
       marks.add("Terminal");
       await Bun.sleep(1600);
       await hand.click(".app-header .header-more-button");
-      await hand.click("button:has(.row-menu-toggle)");
+      await hand.click("button:has(.row-menu-switch-track)");
       marks.add("Chat");
       await Bun.sleep(1400);
     },

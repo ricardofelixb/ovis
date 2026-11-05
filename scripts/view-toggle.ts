@@ -9,7 +9,7 @@ export async function pickLens(page: Page, lens: Lens, { tap = false }: { tap?: 
   await button.waitFor();
   if ((await button.getAttribute("data-view")) !== lens) {
     if (await button.getAttribute("aria-expanded") !== "true") await (tap ? button.tap() : button.click());
-    const toggle = page.locator(".row-menu, .row-sheet").locator("button:has(.row-menu-toggle)");
+    const toggle = page.locator(".row-menu, .row-sheet").locator("button:has(.row-menu-switch-track)");
     await (tap ? toggle.tap() : toggle.click());
   }
   await page.locator(`${VIEW_BUTTON}[data-view="${lens}"]`).waitFor();
