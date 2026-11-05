@@ -3,10 +3,18 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Browser } from "playwright-core";
+import type { Browser, Page } from "playwright-core";
 import { workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens, shownLens, VIEW_BUTTON } from "./view-toggle.ts";
+
+async function checkTabSurface(page: Page): Promise<void> {
+  await page.locator(".header-tabs .tab-strip-add").waitFor();
+  const backgrounds = await page.locator(".header-tabs .tab-strip-row, .header-tabs .tab-strip, .header-tabs .tab-strip-add")
+    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).backgroundColor));
+  assert.deepEqual(backgrounds, Array(3).fill("rgba(0, 0, 0, 0)"), "the tabs and + share the header's surface, without an opaque band");
+  assert.equal(await page.locator(".header-tabs .tab-strip .tab-strip-add").count(), 0, "the + sits outside the scrolling tabs so it needs no opaque cover");
+}
 
 export async function checkHeaderLensSwitch(browser: Browser, origin: string, evidence?: string): Promise<void> {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ovis-lens-switch-")));
@@ -27,6 +35,7 @@ export async function checkHeaderLensSwitch(browser: Browser, origin: string, ev
         await page.locator(VIEW_BUTTON).waitFor();
         assert.equal(await page.locator(".app-header .view-toggle").count(), 0, "the old header toggle is removed");
         await pickLens(page, "chat", { tap: touch });
+        await checkTabSurface(page);
         if (touch) await page.locator(".drawer-toggle").click();
         const sidebarMenu = page.locator(".sidebar-row-action.row-menu-toggle").first();
         await sidebarMenu.waitFor({ state: "attached" });
@@ -46,7 +55,9 @@ export async function checkHeaderLensSwitch(browser: Browser, origin: string, ev
         if (evidence) await page.screenshot({ path: join(evidence, `terminal-menu-${width}.png`) });
         await toggle.press("Space");
         await menu.waitFor({ state: "detached" });
+        await page.locator(`${VIEW_BUTTON}[data-view="terminal"]`).waitFor();
         assert.equal(await shownLens(page), "terminal");
+        await checkTabSurface(page);
         await page.reload();
         await page.locator(`${VIEW_BUTTON}[data-view="terminal"]`).waitFor();
         await page.locator(VIEW_BUTTON).click();

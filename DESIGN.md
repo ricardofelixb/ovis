@@ -828,8 +828,8 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   `visualViewport` so the keyboard does not cover input; otherwise the shell is `100dvh`, because an
   iPhone home screen app reports a visual viewport shorter than the screen without a keyboard.
 - The header is one line at every width. Anatomy, left to right: mobile drawer toggle / desktop
-  sidebar toggle and the command palette (`.header-side`); the flexible context, agent mark and
-  title then the PC › workspace › folder crumb; from `769px` a
+  sidebar toggle and the command palette (`.header-side`); the flexible tab strip (`.header-tabs`),
+  without a repeated title, breadcrumb or session counts; from `769px` a
   hairline and the Files button (`.header-files-button`); the connection
   chip while the bridge is not live (herdr version in its tooltip), the offline pill, sign out and
   the More menu (`⋯`). Theme lives in Settings and the palette; the herdr version is also read
@@ -839,10 +839,12 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   sidebar's seam runs to the top of the window. Over the pane, the header takes the pane's
   surface: under the chat lens `--bg` with no bottom rule, the transcript scrolling under a
   `--space-5` fade from `--bg`; under the terminal lens, with no pane, or with a pane herdr could
-  not restore, `--term-bg` and the rule. A tab strip takes the same surface as the header over
-  it from `769px` (`--strip-bg`: `--bg` under the chat lens, `--term-bg` otherwise, `--bg-panel`
-  below `769px`) and keeps its hairline, under the chat the one line over the transcript (no
-  fade under it). The update notice, the alerts health notice, a PC's action banner and the pairing line (below) are drawn in
+  not restore, `--term-bg` and the rule. The header's tabs and their row are transparent in both
+  lenses, preserving the fork's pre-merge header, including the phone's glass surface. The `+`
+  follows the scroller, rather than upstream's sticky overlay: tabs cannot run underneath it,
+  so it needs no opaque cover. Outside the header, split tab rows keep their pane's surface
+  (`--strip-bg`: `--bg` under chat, `--term-bg` under terminal from `769px`, `--bg-panel` below)
+  and hairline. The update notice, the alerts health notice, a PC's action banner and the pairing line (below) are drawn in
   the pane column, over the tab strip, never across the window: the sidebar and its top row stay
   one piece. A device pairing with this server while a window is open (`device-paired` on the
   machines event stream) is one `.update-notice.is-paired` line there: a `--accent` phone glyph

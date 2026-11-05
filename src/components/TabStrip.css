@@ -34,6 +34,7 @@
 .tab-strip-row > .tab-strip {
   flex: 0 1 auto;
   min-width: 0;
+  --strip-bg: inherit;
   border-bottom: 0;
 }
 
@@ -153,20 +154,9 @@
   white-space: nowrap;
 }
 
-/* the + stays at the strip's end while the tabs scroll under it: more tabs than fit must not
-   take it off the screen */
+/* The + follows the scroller, so tabs cannot pass underneath it and need no opaque cover. */
 .tab-strip-add {
-  position: sticky;
-  right: 0;
-  background: var(--strip-bg);
-  /* the strip's own end padding, in the strip's colour: no tab shows past the + */
-  box-shadow: var(--space-3) 0 0 var(--strip-bg);
-}
-
-/* over the shared hover below: the hover tint sits on the strip's colour, never on a tab */
-.tab-strip .tab-strip-add:hover,
-.tab-strip .tab-strip-add:focus-visible {
-  background: linear-gradient(var(--bg-hover), var(--bg-hover)) var(--strip-bg);
+  margin: 0 var(--space-3) 0 var(--space-1);
 }
 
 .tab-strip-menu:hover,
@@ -269,7 +259,7 @@
 
 /* in the header the strip shares a phone's width with the bar's buttons: a long name (an unnamed tab's
    agent title) is cut, so the open tab and the + after it both fit */
-.header-tabs .tab-strip-item { max-width: calc(100% - var(--touch-target) - var(--space-1)); }
+.header-tabs .tab-strip-item { max-width: 100%; }
 .header-tabs .tab-strip-tab { overflow: hidden; }
 .header-tabs .tab-strip-label {
   min-width: 0;

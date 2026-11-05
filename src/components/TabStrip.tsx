@@ -224,11 +224,9 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     if (!open) return;
     const view = row.getBoundingClientRect();
     const item = open.getBoundingClientRect();
-    // the + sticks over the strip's end: a tab scrolled up to the edge would sit under it
-    const end = row.querySelector<HTMLElement>(".tab-strip-add")?.getBoundingClientRect().left ?? view.right;
     const before = row.scrollLeft;
     if (item.left < view.left) row.scrollLeft -= view.left - item.left;
-    else if (item.right > end) row.scrollLeft += item.right - end;
+    else if (item.right > view.right) row.scrollLeft += item.right - view.right;
     // where the browser really left it; a strip that did not have to move may hold a scroll of
     // the user's whose event is still to come, and that one is left for the event to tell
     if (row.scrollLeft !== before || scroll.current.at === null) scroll.current = stripPlaced(scroll.current, row.scrollLeft);
@@ -264,15 +262,16 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     row.addEventListener("wheel", onWheel, { passive: false });
     return () => row.removeEventListener("wheel", onWheel);
   }, [shown, tabsHidden]);
-  // in the header the strip's width follows the bar's other buttons, which can settle after the
-  // open tab was brought into view: a narrower strip brings it again, as a late face does
+  // Header buttons can change the strip's width, and late fonts can resize the tabs without
+  // resizing their scroller. Measure after either settles, unless the user scrolled elsewhere.
   useEffect(() => {
     const row = strip.current;
     if (!row || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => { if (!scroll.current.moved) bringOpenTab(); });
     observer.observe(row);
+    row.querySelectorAll(".tab-strip-item").forEach((item) => observer.observe(item));
     return () => observer.disconnect();
-  }, [shown, tabsHidden]);
+  }, [shown, tabsHidden, tabs.length]);
   const onScroll = (): void => {
     const row = strip.current;
     if (row) scroll.current = stripScrolled(scroll.current, row.scrollLeft, row.scrollWidth - row.clientWidth);
@@ -554,16 +553,19 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
             </div>
           );
         })}
+      </div>
+    );
+  return (
+    <>
+      <div className="tab-strip-row">
+        {row}
         <button type="button" className="tab-strip-add" aria-label={t("New terminal")} title={t("New terminal")}
           onClick={() => { setError(null); void onNewTerminal().catch((reason: unknown) => setError(t("New terminal failed: {reason}", { reason: said(reason) }))); }}>
           <Plus aria-hidden="true" />
         </button>
         {error && <span className="tab-strip-error" role="alert">{error}</span>}
+        {end !== undefined && <div className="tab-strip-end">{end}</div>}
       </div>
-    );
-  return (
-    <>
-      <div className="tab-strip-row">{row}{end !== undefined && <div className="tab-strip-end">{end}</div>}</div>
       {picker && <RowMenu key={picker.workspaces ? "workspaces" : "tab"} anchor={picker.anchor} point={picker.point} restoreFocusTo={picker.previousFocus}
         title={picker.workspaces ? t("Move {tab} to", { tab: nameOf(picker.tab) }) : nameOf(picker.tab)}
         subtitle={picker.workspaces ? undefined : place}

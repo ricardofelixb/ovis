@@ -4,6 +4,8 @@
 - Chat/Terminal now lives in More as a Terminal switch. Per-pane choices and the keyboard shortcut
   are unchanged.
 ### Fixed
+- Header tabs and their `+` button use the header's background again, without a darker rectangle.
+  The `+` stays outside the scrolling tabs so no opaque cover is needed.
 - Sidebar overflow buttons keep their borderless appearance; only the Terminal switch uses the
   switch styling.
 - The chat keeps following the latest message when a turn starts. The Working line moving from
