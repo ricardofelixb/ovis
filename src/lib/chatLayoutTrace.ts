@@ -8,18 +8,26 @@ const flags = new WeakMap<HTMLElement, Flags>();
 const cleanups = new Set<() => void>();
 let began = 0, timer = 0, lossTimer = 0, finished = false;
 
-function download(): void {
-  if (finished || events.length === 0) return;
-  finished = true;
-  clearTimeout(timer); clearTimeout(lossTimer);
-  for (const cleanup of cleanups) cleanup();
-  cleanups.clear();
+/** Saves what was recorded. Alt+Shift+L saves it by hand: a download made by a key press is never blocked as an automatic one. */
+function download(manual = false): void {
+  if (events.length === 0 || (finished && !manual)) return;
+  if (!manual) {
+    finished = true;
+    clearTimeout(timer); clearTimeout(lossTimer);
+    for (const cleanup of cleanups) cleanup();
+    cleanups.clear();
+  }
   const blob = new Blob([JSON.stringify({ version: 1, events }, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob), link = document.createElement("a");
   link.href = url;
   link.download = `ovis-chat-layout-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+if (enabled) {
+  window.addEventListener("keydown", (event) => {
+    if (event.altKey && event.shiftKey && event.code === "KeyL") { event.preventDefault(); download(true); }
+  });
 }
 
 export function traceChatLayout(node: HTMLElement | null, reason: Reason, next: Flags = {}): void {
