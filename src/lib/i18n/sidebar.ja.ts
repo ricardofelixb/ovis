@@ -32,6 +32,7 @@ export const SIDEBAR_JA: Record<string, string> = {
   "Close workspace": "ワークスペースを閉じる",
   "New worktree": "新しいワークツリー",
   "Open worktree…": "ワークツリーを開く…",
+  "Pull requests…": "プルリクエスト…",
   "Earlier sessions…": "以前のセッション…",
   "Delete worktree checkout…": "ワークツリーのチェックアウトを削除…",
   "Delete the checkout of {name}?": "{name} のチェックアウトを削除しますか？",

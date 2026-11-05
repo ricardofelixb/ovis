@@ -49,6 +49,8 @@ export function useMachineApi() {
     createWorktree: (request: CreateWorktreeRequest) => api.createWorktree(request, id),
     listWorktrees: (workspace: string) => api.listWorktrees(workspace, id),
     openWorktree: (request: OpenWorktreeRequest) => api.openWorktree(request, id),
+    listPullRequests: (workspace: string) => api.listPullRequests(workspace, id),
+    fetchPullRequestBranch: (workspace: string, branch: string) => api.fetchPullRequestBranch(workspace, branch, id),
     removeWorktree: (request: RemoveWorktreeRequest) => api.removeWorktree(request, id),
     renamePane: (pane: string, label: string) => api.renamePane(pane, label, id),
     renameAgent: (pane: string, name: string | null) => api.renameAgent(pane, name, id),

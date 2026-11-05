@@ -81,6 +81,7 @@ import type {
   PluginActions,
   PluginActionsResponse,
   WorktreeListing,
+  PullRequestListing,
   WorktreeOpened,
   WorktreeRemoved,
   ZoomPaneRequest,
@@ -1124,6 +1125,17 @@ export async function createWorktree(request: CreateWorktreeRequest, machineId =
 /** GET /api/worktree/list: every checkout of the workspace's repository, with the workspace each is open in. */
 export function listWorktrees(workspaceId: string, machineId = "local"): Promise<WorktreeListing> {
   return getJson<WorktreeListing>(`${machinePath(machineId, "worktree/list")}?workspace_id=${encodeURIComponent(workspaceId)}`);
+}
+
+/** GET /api/worktree/pull-requests: the repository's open pull requests, read with the `gh` account that can see it; never cached. */
+export function listPullRequests(workspaceId: string, machineId = "local"): Promise<PullRequestListing> {
+  return getJson<PullRequestListing>(`${machinePath(machineId, "worktree/pull-requests")}?workspace_id=${encodeURIComponent(workspaceId)}`, { cache: "no-store" });
+}
+
+/** POST /api/worktree/pull-request-fetch: the pull request's branch fetched from origin; the ref a worktree starts from. */
+export async function fetchPullRequestBranch(workspaceId: string, branch: string, machineId = "local"): Promise<{ ref: string }> {
+  const response = await sendJson(machinePath(machineId, "worktree/pull-request-fetch"), "POST", { workspace_id: workspaceId, branch });
+  return (await response.json()) as { ref: string };
 }
 
 /** POST /api/worktree/open: an existing checkout as a workspace; the one it already has when it is open. */

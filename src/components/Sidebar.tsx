@@ -1,9 +1,9 @@
 import { Fragment, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type AnimationEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { ChevronDown, ChevronRight, Ellipsis, Folder, FolderOpen, GitBranch, History, Layers, ListChecks, Pencil, Pin, PinOff, Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Ellipsis, Folder, FolderOpen, GitBranch, GitPullRequest, History, Layers, ListChecks, Pencil, Pin, PinOff, Plus, Trash2, TriangleAlert, X } from "lucide-react";
 
 import "./Sidebar.css";
 
-import type { AgentStatus, PaneInfo, PlanSummary, SessionSnapshot, WorkspaceInfo } from "../../shared/protocol.ts";
+import type { AgentStatus, PaneInfo, PlanSummary, SessionSnapshot, WorkspaceInfo, WorktreeOpened } from "../../shared/protocol.ts";
 import { paneTitle } from "../../shared/notify-policy.ts";
 import { MAX_LABEL_CHARS } from "../../shared/labels.ts";
 import { useAppLayout, useMachineApi, useMachineId, useReorderCoordinator } from "../lib/machineContext.tsx";
@@ -13,6 +13,7 @@ import { indicatorGlyph, knownStatus, rollupStatus, STATUS_WORD } from "../lib/s
 import { WorkspaceFavicon } from "./WorkspaceFavicon.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./RowMenu.tsx";
+import { PullRequestsDialog } from "./PullRequestsDialog.tsx";
 import { WorktreeDialog, type WorktreeDialogMode } from "./WorktreeDialog.tsx";
 import { focusWorkspaceListToggle } from "../lib/focus.ts";
 import { shortPathTitle, stripPaneChrome, tabTitle } from "../lib/paneName.ts";
@@ -243,8 +244,9 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [worktreeDialog, setWorktreeDialog] = useState<{ mode: WorktreeDialogMode; workspace: WorkspaceInfo } | null>(null);
+  const [pullRequestsFor, setPullRequestsFor] = useState<WorkspaceInfo | null>(null);
   // worktrees are not offered to a watching device: one open when this device turns into one closes
-  useEffect(() => { if (watching) setWorktreeDialog(null); }, [watching]);
+  useEffect(() => { if (watching) { setWorktreeDialog(null); setPullRequestsFor(null); } }, [watching]);
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
   const [workspaceLabel, setWorkspaceLabel] = useState("");
   // the order App's coordinator draws: herdr's, or a drag's until a roster read after its moves comes
@@ -398,6 +400,19 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     focusWorkspaceListToggle();
   };
 
+  // a checkout the worktree or pull requests dialog opened becomes the selected pane, its group unfolded
+  const showOpenedWorktree = (opened: WorktreeOpened, from: WorkspaceInfo): void => {
+    rememberOpened(opened);
+    revealOpenedWorkspace.current = opened.workspace_id;
+    const repoKey = from.worktree?.repo_key;
+    // opened under a filter, the group opens for the filter's time only: the saved fold stays as it was
+    if (repoKey) toggleWorktrees(repoKey, true);
+    setWorktreeDialog(null);
+    setPullRequestsFor(null);
+    if (opened.agent_started === true) actions.agentStarted(machineId, opened.pane_id);
+    actions.selectPane(opened.pane_id);
+  };
+
   const menuItems = (state: MenuState): RowMenuItem[] => {
     // the roster may have moved on since the menu opened (a pane closed from another client):
     // what an item does follows the latest snapshot, not what the row showed at the click
@@ -416,6 +431,10 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     const worktreeItems: RowMenuItem[] = (workspace.worktree || repositoryWorkspaces.has(workspace.workspace_id)) && !linked && !watching && !appLayout ? [
       { id: "new-worktree", label: t("New worktree"), icon: GitBranch, run: () => setWorktreeDialog({ mode: "create", workspace }) },
       { id: "open-worktree", label: t("Open worktree…"), icon: FolderOpen, run: () => setWorktreeDialog({ mode: "open", workspace }) },
+    ] : [];
+    // a pull request's checkout is made from any checkout of the repository: a linked worktree lists them too
+    const pullRequestItems: RowMenuItem[] = (workspace.worktree || repositoryWorkspaces.has(workspace.workspace_id)) && !watching && !appLayout ? [
+      { id: "pull-requests", label: t("Pull requests…"), icon: GitPullRequest, run: () => setPullRequestsFor(workspace) },
     ] : [];
     const deleteItems: RowMenuItem[] = linked && !appLayout ? [{
       id: "delete-worktree", label: t("Delete worktree checkout…"), icon: Trash2, danger: true,
@@ -450,7 +469,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
       // the folder's earlier sessions, listed for the agent of the pane the row opens
       ...(historyOffered && !watching ? [{ id: "session-history", label: t("Earlier sessions…"), icon: History, run: () => actions.openSessionHistory({ machineId, workspaceId: workspace.workspace_id, agent: (panes.length > 0 ? currentPane(workspace, panes) : null)?.agent ?? null }) }] : []),
       { ...closeItem, label: t(sameRepo.length > 0 ? "Close group" : "Close workspace"), divider: false },
-      ...worktreeItems, ...deleteItems,
+      ...worktreeItems, ...pullRequestItems, ...deleteItems,
       ...(worktrees.length > 0 && repoKey ? [{ id: "fold", label: t(folded ? "Expand" : "Collapse"), icon: folded ? ChevronRight : ChevronDown, run: () => toggleWorktrees(repoKey, folded) }] : []),
     ];
   };
@@ -799,16 +818,8 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
       </nav>
       {menu && <RowMenu anchor={menu.anchor} point={menu.point} restoreFocusTo={menu.previousFocus} title={menu.title} subtitle={menu.place} items={menuItems(menu)} onClose={closeMenu} />}
       {confirm && <ConfirmDialog title={confirm.title} body={confirm.body} confirmLabel={confirm.action ?? t("Close")} onConfirm={confirm.run} escalation={confirm.escalation} onClose={() => setConfirm(null)} />}
-      {worktreeDialog && <WorktreeDialog mode={worktreeDialog.mode} workspace={worktreeDialog.workspace} onClose={() => setWorktreeDialog(null)} onOpenPane={(paneId) => { setWorktreeDialog(null); actions.selectPane(paneId); }} onOpened={(opened) => {
-        rememberOpened(opened);
-        revealOpenedWorkspace.current = opened.workspace_id;
-        const repoKey = worktreeDialog.workspace.worktree?.repo_key;
-        // opened under a filter, the group opens for the filter's time only: the saved fold stays as it was
-        if (repoKey) toggleWorktrees(repoKey, true);
-        setWorktreeDialog(null);
-        if (opened.agent_started === true) actions.agentStarted(machineId, opened.pane_id);
-        actions.selectPane(opened.pane_id);
-      }} />}
+      {worktreeDialog && <WorktreeDialog mode={worktreeDialog.mode} workspace={worktreeDialog.workspace} onClose={() => setWorktreeDialog(null)} onOpenPane={(paneId) => { setWorktreeDialog(null); actions.selectPane(paneId); }} onOpened={(opened) => showOpenedWorktree(opened, worktreeDialog.workspace)} />}
+      {pullRequestsFor && <PullRequestsDialog workspace={pullRequestsFor} onClose={() => setPullRequestsFor(null)} onOpened={(opened) => showOpenedWorktree(opened, pullRequestsFor)} />}
     </div>
   );
 }

@@ -15,7 +15,7 @@
  * What does not: files, images, push and remote PCs, which need a real machine.
  */
 import { NO_AGENT_MESSAGE } from "../../shared/submit-outcome.ts";
-import type { AgentIntegration, AgentStatus, CommandForm, CommandOutcome, ConversationTurn, DevicePairedEvent, DevicesRevokedAll, HealthAuth, IntegrationsResponse, Machine, MachineEvent, OmoActivity, OmoTask, PairedDevice, PairingCode, PaneBackgroundAgentDetail, PaneDirection, PaneFindMatch, PaneFindRequest, PanePlan, PaneResized, PaneSplit, PaneSwapped, PaneZoomed, PendingMessage, PlanStep, PluginActionResult, PluginActions, PluginActionsResponse, PortalStatus, RelayStatus, SecuritySummary, ServerMessage, SessionSnapshot, SlashCommand, TabMoved, TabMovedToWorkspace, UsageReport, WorkspaceCreated, WorkspaceInfo, WorktreeEntry, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../../shared/protocol.ts";
+import type { AgentIntegration, AgentStatus, CommandForm, CommandOutcome, ConversationTurn, DevicePairedEvent, DevicesRevokedAll, HealthAuth, IntegrationsResponse, Machine, MachineEvent, OmoActivity, OmoTask, PairedDevice, PairingCode, PaneBackgroundAgentDetail, PaneDirection, PaneFindMatch, PaneFindRequest, PanePlan, PaneResized, PaneSplit, PaneSwapped, PaneZoomed, PendingMessage, PlanStep, PluginActionResult, PluginActions, PluginActionsResponse, PortalStatus, PullRequestEntry, PullRequestListing, RelayStatus, SecuritySummary, ServerMessage, SessionSnapshot, SlashCommand, TabMoved, TabMovedToWorkspace, UsageReport, WorkspaceCreated, WorkspaceInfo, WorktreeEntry, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../../shared/protocol.ts";
 import type { PushSubscriptionStatus, RepoBranchComparison, RepoDiffFile, RepoDiffFileList, RepoDiffFilePatch, RepoDiffRefs, RepoDiffRepository, RepoDiffScope, SessionHistoryAgent, SessionHistoryResponse, SessionResumeResponse } from "../../shared/protocol.ts";
 import { nextTabLabels, normalizeThemeChange, sharedPreferencesBody, type SharedPreferences } from "../../shared/preferences.ts";
 import { VOICE_DEFAULTS, type VoiceStatus } from "../../shared/voice.ts";
@@ -1409,6 +1409,33 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     const created = await route(new URL("/api/tab/create", url), "POST", { method: "POST", body: JSON.stringify({ workspace_id: workspaceId, agent: { kind: "claude", args: ["--resume", sessionId] } }) }, input);
     if (!created.ok) return created;
     return json({ action: "created", ...(await created.json() as { workspace_id: string; pane_id: string; agent_started: boolean }) } satisfies SessionResumeResponse);
+  }
+
+  if (path === "/api/worktree/pull-requests" || path === "/api/worktree/pull-request-fetch") {
+    const listing = path === "/api/worktree/pull-requests";
+    if (method !== (listing ? "GET" : "POST")) return error("method_not_allowed", listing ? "use GET" : "use POST", 400);
+    const body = listing ? {} : await bodyOf(init, input);
+    const workspaceId = listing ? query.get("workspace_id") : body["workspace_id"];
+    const repo = snapshot().workspaces.find((candidate) => candidate.workspace_id === workspaceId)?.worktree;
+    const known = repo ? repositories.get(repo.repo_key) : undefined;
+    if (!repo || !known) return error("not_git_repository", "the workspace is not in a repository", 404);
+    if (!listing) return json({ ref: `origin/${String(body["branch"] ?? "")}` });
+    const now = Date.now();
+    const rows: Array<Pick<PullRequestEntry, "number" | "title" | "branch" | "draft" | "checks" | "review" | "author"> & { minutes: number }> = [
+      { number: 142, title: "Retry the export when the connection drops", branch: "feat/export-guard", draft: false, checks: "passing", review: "approved", author: "demo", minutes: 120 },
+      { number: 139, title: "Add the retry flag to the CLI", branch: "feat/retry-flag", draft: true, checks: "pending", review: "none", author: "demo", minutes: 600 },
+      { number: 131, title: "Fix the flaky retry test", branch: "fix/flaky-retry-test", draft: false, checks: "failing", review: "changes_requested", author: "maria", minutes: 3000 },
+      { number: 127, title: "Document the release steps", branch: "docs/release-steps", draft: false, checks: "passing", review: "review_required", author: "maria", minutes: 9000 },
+    ];
+    return json({
+      repository: `demo/${known.repoName}`,
+      account: "demo",
+      pull_requests: rows.map(({ minutes, ...row }) => {
+        const checkout = known.checkouts.find((candidate) => candidate.branch === row.branch);
+        const open = checkout && snapshot().workspaces.find((candidate) => candidate.worktree?.repo_key === known.repoKey && candidate.worktree.checkout_path === checkout.path);
+        return { ...row, url: `https://github.com/demo/${known.repoName}/pull/${row.number}`, fork: false, updated_at: new Date(now - minutes * 60_000).toISOString(), checkout: checkout ? { path: checkout.path, open_workspace_id: open?.workspace_id ?? null } : null };
+      }),
+    } satisfies PullRequestListing);
   }
 
   if (path === "/api/worktree/list" || path === "/api/worktree/create" || path === "/api/worktree/open" || path === "/api/worktree/remove") {

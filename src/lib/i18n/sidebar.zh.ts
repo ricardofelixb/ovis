@@ -32,6 +32,7 @@ export const SIDEBAR_ZH: Record<string, string> = {
   "Close workspace": "关闭工作区",
   "New worktree": "新建工作树",
   "Open worktree…": "打开工作树…",
+  "Pull requests…": "拉取请求…",
   "Earlier sessions…": "之前的会话…",
   "Delete worktree checkout…": "删除工作树检出…",
   "Delete the checkout of {name}?": "删除 {name} 的检出？",

@@ -16,6 +16,7 @@ import { createDirectory, listDirectories } from "./directories.ts";
 import { HerdrError, paneMoveToNewTab, sessionSnapshot, tabClose, tabCreate, tabMove, tabRename, workspaceClose, workspaceCreate, workspaceMove, workspaceRename, worktreeCreate, worktreeList, worktreeOpen, worktreeRemove } from "./herdr/client.ts";
 import { badRequest, conflictResponse, errorResponse, isJsonObject, jsonResponse, readJsonObject, setRequestRoute } from "./http.ts";
 import { paneContext } from "./pane-context.ts";
+import { fetchPullRequestBranch, listPullRequests, PullRequestError } from "./pull-requests.ts";
 import { repoDiffResponse } from "./repo-diff.ts";
 import type { ShellAgentLocator } from "./shell-agent.ts";
 
@@ -181,6 +182,34 @@ export async function handleWorkspaceRequest(request: Request, url: URL, pathnam
       const listing = await worktreeList(workspaceId);
       return jsonResponse({ source: listing.source, worktrees: listing.worktrees });
     } catch (error) {
+      return errorResponse(error);
+    }
+  }
+
+  // The repository's open pull requests (read with the signed-in `gh`, server/pull-requests.ts) and the fetch
+  // of one's branch before a worktree is made from it. A refusal GitHub or `gh` gives is a 409 the dialog shows.
+  if (pathname === "/api/worktree/pull-requests" || pathname === "/api/worktree/pull-request-fetch") {
+    setRequestRoute(pathname);
+    const listing = pathname === "/api/worktree/pull-requests";
+    if (request.method !== (listing ? "GET" : "POST")) return badRequest("method_not_allowed", listing ? "use GET" : "use POST");
+    let workspaceId = url.searchParams.get("workspace_id") ?? "";
+    let branch = "";
+    if (!listing) {
+      const payload = await readJsonObject<{ workspace_id?: unknown; branch?: unknown }>(request);
+      if (payload instanceof Response) return payload;
+      workspaceId = typeof payload.workspace_id === "string" ? payload.workspace_id : "";
+      if (typeof payload.branch !== "string" || payload.branch.length === 0) return badRequest("missing_branch", "branch is required");
+      branch = payload.branch;
+    }
+    if (workspaceId === "") return badRequest("missing_workspace_id", "workspace_id is required");
+    // gh is asked once per account and git fetches over the network; Bun's default idle timeout is shorter.
+    bunServer.timeout(request, 75);
+    try {
+      const repository = await worktreeList(workspaceId);
+      if (listing) return jsonResponse(await listPullRequests(repository.source.repo_root, repository.worktrees));
+      return jsonResponse({ ref: await fetchPullRequestBranch(repository.source.repo_root, branch) });
+    } catch (error) {
+      if (error instanceof PullRequestError) return conflictResponse(error.code, error.message);
       return errorResponse(error);
     }
   }
