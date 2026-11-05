@@ -1,7 +1,7 @@
 /** Temporary, opt-in geometry trace. Never reads message text, inputs, URLs or pane IDs. */
 const enabled = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("trace-chat-layout") === "1";
 
-type Flags = Partial<Record<"following" | "manual" | "selecting" | "working" | "streaming" | "revealing" | "workBlockLive" | "answerOnlyLive" | "reserved" | "reader" | "up" | "shrunkAbove" | "shrunk" | "leftEnd" | "turns" | "liveParts", boolean | number>>;
+type Flags = Partial<Record<"following" | "manual" | "selecting" | "working" | "streaming" | "revealing" | "workBlockLive" | "answerOnlyLive" | "reserved" | "reader" | "up" | "shrunkAbove" | "shrunk" | "footerShrank" | "leftEnd" | "turns" | "liveParts", boolean | number>>;
 type Reason = "commit" | "scroll" | "frame" | "resize" | "mutation";
 const events: object[] = [];
 const flags = new WeakMap<HTMLElement, Flags>();

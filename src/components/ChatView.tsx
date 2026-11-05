@@ -87,6 +87,8 @@ const READER_ALLOWANCE_PX = 1;
 // no input this page sees (a screen reader's, a Firefox scrollbar's) leaves the end only past it, and
 // only over a transcript that did not shrink under it (onScroll, #2042).
 const LAYOUT_ALLOWANCE_PX = 48;
+/** how long after the footer got shorter a move up without input is still the layout's (ChatTimeline footerShrunkAt) */
+const FOOTER_SHRINK_MS = 150;
 /** The pane this chat shows, for what its rows fetch on request (a tool call's whole output). */
 const ChatPaneContext = createContext<string | null>(null);
 const ChatHistoryContext = createContext("");
@@ -1388,6 +1390,8 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   const stickToBottom = useRef(true);
   // the timeline's hold on a following reader's own click layout (ChatTimeline manualLayout)
   const manualLayout = useRef(false);
+  // when the chat footer last got shorter, read by the scroll handler (ChatTimeline footerShrunkAt)
+  const footerShrunkAt = useRef(Number.NEGATIVE_INFINITY);
   // a selection in progress in the transcript (ChatTimeline selecting): nothing follows the end under it
   const selecting = useRef(false);
   // Explicit paging stays away even inside the ordinary near-bottom tolerance.
@@ -2131,7 +2135,10 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     // without a selection.
     const below = placedAt.current === null ? null : placedAt.current - node.scrollTop;
     const trimmed = selecting.current && below !== null && below > 0 && below <= READER_ALLOWANCE_PX && up <= READER_ALLOWANCE_PX;
-    const heldInPlace = scrollingUp && !byReader && (shrankUnderView || distanceFromBottom <= LAYOUT_ALLOWANCE_PX || trimmed);
+    // The footer got shorter and the browser clamped the view up with it before the row that takes
+    // its place grew the transcript again, so the transcript no longer reads as shorter here.
+    const footerShrank = performance.now() - footerShrunkAt.current < FOOTER_SHRINK_MS;
+    const heldInPlace = scrollingUp && !byReader && (shrankUnderView || footerShrank || distanceFromBottom <= LAYOUT_ALLOWANCE_PX || trimmed);
     const leftEnd = scrollingUp && !heldInPlace;
     // Reaching the rounded endpoint clears reading intent unless still paging upward.
     // After the reader opened a row, the list settling back onto the end is not them going back.
@@ -2161,7 +2168,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       stickToBottom.current = following;
     }
     setAway(!stickToBottom.current);
-    traceChatLayout(node, "scroll", { following: stickToBottom.current, manual: manualLayout.current, selecting: selecting.current, reader: byReader, up, shrunkAbove, shrunk, leftEnd });
+    traceChatLayout(node, "scroll", { following: stickToBottom.current, manual: manualLayout.current, selecting: selecting.current, reader: byReader, up, shrunkAbove, shrunk, footerShrank, leftEnd });
     measureEnd();
     if (loaded && restoring.current === null && state.source === "conversation") rememberPlace(node);
     if (node.scrollTop < LOAD_OLDER_PX && olderState === "idle") void loadOlder();
@@ -2573,6 +2580,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       scroller={scroller}
       listRef={timeline}
       following={stickToBottom}
+      footerShrunkAt={footerShrunkAt}
       manualLayout={manualLayout}
       selecting={selecting}
       memories={rowMemories}
