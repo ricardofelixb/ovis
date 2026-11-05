@@ -30,6 +30,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- the account service's sign-in comes back here (OvisAuthPlugin) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ovis" android:host="account" android:path="/callback" />
+            </intent-filter>
+
         </activity>
 
         <!-- keeps a live call going out of sight or with the screen locked (LiveCallService.java) -->

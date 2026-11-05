@@ -14,7 +14,7 @@ function cramped(): boolean {
   const width = window.innerWidth;
   const short = window.matchMedia?.(CRAMPED_QUERY).matches === true;
   // a keyboard only takes height away: a screen tall enough with it is tall enough without
-  const typing = short && (keyboardUp() || (window.matchMedia("(pointer: coarse)").matches && keyboardTypingField(document.activeElement)));
+  const typing = short && (keyboardUp() || (window.matchMedia("(pointer: coarse)").matches && document.activeElement !== null && keyboardTypingField(document.activeElement)));
   if (!typing || held === null || held.width !== width) held = { width, cramped: short };
   return held.cramped;
 }

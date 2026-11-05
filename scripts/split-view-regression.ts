@@ -5,7 +5,6 @@ import { join } from "node:path";
 import type { Browser, BrowserContext, Page, Route, WebSocket } from "playwright-core";
 import { herdrRpc, paneFocus, paneRead, paneSplit, sessionSnapshot, tabCreate, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import type { TabMovedToWorkspace } from "../shared/protocol.ts";
-import { shownLens } from "./view-toggle.ts";
 
 /**
  * The split view's edges (lib/split.ts), each on a browser context of its own: the other half's
@@ -205,7 +204,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       // the half dropped on the right is slot b, which draws on a connection of its own (App's SlotSessions)
       assert.equal(sockets.length, 2, "the second half opens a second socket to the PC");
       // the right half is active: closing the left one must not mount its pane again
-      await half(page, "left").getByRole("button", { name: "Close this column", exact: true }).click();
+      await half(page, "left").getByRole("button", { name: "Close this half", exact: true }).click();
       await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 1);
       await settled(page);
       assert.equal(await kept.evaluate((element) => element.isConnected), true, "the active half's terminal stays mounted");
@@ -253,7 +252,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       };
 
       await preview(false, null);
-      assert.equal(await guide.locator(".split-drop-column").count(), 2, "both drop guides stay mounted");
+      assert.equal(await guide.locator(".split-drop-half").count(), 2, "both drop guides stay mounted");
       assert.equal(await guide.locator(".split-drop-target").count(), 1, "one indicator moves between the guides");
       const indicator = (await guide.locator(".split-drop-target").elementHandle())!;
       await start();
@@ -393,31 +392,90 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       assert.deepEqual(errors, []);
     }
 
-    // A real title drag must survive the frame's click-to-focus handler.
+    // A real title drag must survive the frame's click-to-focus handler. Over its own tab the title
+    // arranges the tab (#1819): another pane's body shows the half the dragged pane would take there,
+    // from the nearest edge, with no half of the pane area offered, and a drop puts it there (herdr's
+    // pane.move); over the dragged pane itself nothing is offered. Over the other half showing another
+    // tab, the title still opens its pane there.
     {
-      const [first] = await panesFor("title-drag") as [string];
+      const [first, other] = await panesFor("title-drag", "title-drag-other") as [string, string];
       const beside = (await paneSplit(first, "right", false)).pane_id;
-      const { page, errors } = await open([first, beside], "terminal");
+      const { page, errors } = await open([first, beside, other], "terminal");
       const title = page.locator(`[data-layout-pane="${beside}"] .pane-frame-title`);
       await title.click();
       assert.equal(await page.evaluate((pane) => document.activeElement?.closest("[data-layout-pane]")?.getAttribute("data-layout-pane") === pane, beside), true,
         "a title click still focuses its pane's input");
-      const from = (await title.boundingBox())!;
-      const area = (await page.locator(".pane-split").boundingBox())!;
-      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(from.x + from.width / 2 + 8, from.y + from.height / 2 + 4, { steps: 2 });
-      await page.waitForFunction(() => document.querySelector(".split-drop")?.classList.contains("is-visible"));
-      await page.mouse.move(area.x + area.width * 0.2, area.y + area.height / 2, { steps: 8 });
-      await page.mouse.move(area.x + area.width * 0.2, area.y + area.height / 2);
-      await page.waitForFunction(() => document.querySelector(".split-drop")?.getAttribute("data-side") === "left");
+      const frame = (pane: string) => page.locator(`[data-layout-pane="${pane}"]`);
+      const marked = (pane: string, side: string | null) => page.waitForFunction(([id, which]) =>
+        document.querySelector(`[data-layout-pane="${id}"]`)?.getAttribute("data-move-side") === which, [pane, side] as const);
+      /** a press on the title, then the pointer over `pane`'s body near `edge` */
+      const dragOver = async (pane: string, edge: "left" | "down"): Promise<void> => {
+        const from = (await title.boundingBox())!;
+        await page.mouse.move(from.x + 30, from.y + from.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(from.x + 38, from.y + from.height / 2 + 4, { steps: 2 });
+        const box = (await frame(pane).locator(".pane-frame-body").boundingBox())!;
+        const [x, y] = edge === "left" ? [box.x + box.width * 0.1, box.y + box.height / 2] : [box.x + box.width / 2, box.y + box.height * 0.9];
+        await page.mouse.move(x, y, { steps: 8 });
+        await page.mouse.move(x + 1, y);
+        await marked(pane, edge);
+      };
+      const herdrRect = async (pane: string) => (await sessionSnapshot()).layouts.flatMap((layout) => layout.panes).find((candidate) => candidate.pane_id === pane)!.rect;
+      await dragOver(first, "down");
+      assert.equal(await page.locator(".split-drop.is-visible").count(), 0, "no half is offered over a pane of its own tab");
+      // back over the dragged pane itself: the mark goes, and nothing else is offered
+      const own = (await frame(beside).locator(".pane-frame-body").boundingBox())!;
+      await page.mouse.move(own.x + own.width / 2, own.y + own.height / 2, { steps: 4 });
+      await page.mouse.move(own.x + own.width / 2 + 1, own.y + own.height / 2);
+      await marked(first, null);
+      assert.equal(await page.locator(".split-drop.is-visible").count(), 0, "nothing is offered over the dragged pane itself");
+      assert.equal(await page.locator("[data-move-side]").count(), 0);
+      const body = (await frame(first).locator(".pane-frame-body").boundingBox())!;
+      await page.mouse.move(body.x + body.width / 2, body.y + body.height * 0.9, { steps: 4 });
+      await page.mouse.move(body.x + body.width / 2 + 1, body.y + body.height * 0.9);
+      await marked(first, "down");
+      let moved = page.waitForResponse((response) => response.url().endsWith("/api/pane/move") && response.request().method() === "POST");
       await page.mouse.up();
-      await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 2);
+      assert.deepEqual((await moved).request().postDataJSON(), { pane_id: beside, target_pane_id: first, side: "down" });
+      await page.waitForFunction(([top, bottom]) => {
+        const rect = (id: string) => document.querySelector(`[data-layout-pane="${id}"]`)!.getBoundingClientRect();
+        return rect(bottom).top > rect(top).top && rect(bottom).left === rect(top).left;
+      }, [first, beside] as const);
+      const [upper, lower] = [await herdrRect(first), await herdrRect(beside)];
+      assert.ok(lower.y > upper.y && lower.x === upper.x && lower.width === upper.width, "herdr put the pane below its target");
+      assert.equal(await page.locator("[data-move-side]").count(), 0, "the mark is cleared");
+      assert.equal(await page.locator(".pane-slot").count(), 1, "a move opens no split view");
+      assert.equal(await page.locator(".pane-frame.is-current").getAttribute("data-layout-pane"), beside, "the moved pane stays selected");
+      // left of it: herdr puts a moved pane right of its target, and a swap then puts it first
+      await dragOver(first, "left");
+      moved = page.waitForResponse((response) => response.url().endsWith("/api/pane/move") && response.request().method() === "POST");
+      await page.mouse.up();
+      await moved;
+      await page.waitForFunction(([right, left]) => {
+        const rect = (id: string) => document.querySelector(`[data-layout-pane="${id}"]`)!.getBoundingClientRect();
+        return rect(left).left < rect(right).left && rect(left).top === rect(right).top;
+      }, [first, beside] as const);
+      const [rightOf, leftOf] = [await herdrRect(first), await herdrRect(beside)];
+      assert.ok(leftOf.x < rightOf.x && leftOf.y === rightOf.y && leftOf.height === rightOf.height, "herdr put the pane left of its target");
+      console.log("PASS a title dropped on another pane's body of its tab moves it to that side, and over itself offers nothing");
+      // the other half showing another tab: the title opens its pane there, as before
+      await splitRight(page, other);
+      await half(page, "left").locator(".pane-frame").first().click({ position: { x: 40, y: 40 } });
       await isActive(page, "left");
-      assert.equal(await half(page, "left").locator(".pane-frame.is-current").getAttribute("data-layout-pane"), beside,
+      const from = (await half(page, "left").locator(`[data-layout-pane="${beside}"] .pane-frame-title`).boundingBox())!;
+      const area = (await page.locator(".pane-split").boundingBox())!;
+      await page.mouse.move(from.x + 30, from.y + from.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(from.x + 38, from.y + from.height / 2 + 4, { steps: 2 });
+      await page.mouse.move(area.x + area.width * 0.8, area.y + area.height / 2, { steps: 8 });
+      await page.mouse.move(area.x + area.width * 0.8 + 1, area.y + area.height / 2);
+      await page.waitForFunction(() => document.querySelector(".split-drop")?.getAttribute("data-side") === "right");
+      await page.mouse.up();
+      await isActive(page, "right");
+      assert.equal(await half(page, "right").locator(".pane-frame.is-current").getAttribute("data-layout-pane"), beside,
         "the destination half selects the pane dragged by its title");
       assert.deepEqual(errors, []);
-      console.log("PASS a real mouse drag from a two-pane tab's title opens that pane in the other half");
+      console.log("PASS a title dragged onto the other half showing another tab opens its pane there");
     }
 
     // A title dropped on another pane's title of its tab: the two trade places (herdr's pane.swap),
@@ -556,7 +614,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       const frames: string[] = [];
       const { page, errors } = await open([first, beside], "terminal", async (context) => {
         await context.addInitScript(([other]) => {
-          sessionStorage.setItem("ovis:split", JSON.stringify({ order: ["a", "b"], active: "a", panes: { b: { machineId: "local", paneId: other } } }));
+          sessionStorage.setItem("ovis:split", JSON.stringify({ other: { machineId: "local", paneId: other }, bSide: "right", active: "a" }));
         }, [first] as const);
         // what the page asks of the PC's socket: attach/detach/input frames tell an attachment lost from one never made
         const note = (direction: string, payload: string | Buffer): void => {
@@ -625,7 +683,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       await page.keyboard.type("echo split-ok-42\n");
       await reaches("split-ok-42", "drawn in both halves");
       // the duplicate closed: its socket's detach is its own, the left half's terminal still types
-      await half(page, "right").getByRole("button", { name: "Close this column", exact: true }).click();
+      await half(page, "right").getByRole("button", { name: "Close this half", exact: true }).click();
       await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 1);
       await settled(page);
       // one pane again: its slot has no side
@@ -700,7 +758,7 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       await half(page, "left").locator(".terminal-host").click({ position: { x: 40, y: 40 } });
       await isActive(page, "left");
       await settled(page);
-      assert.equal(await shownLens(page), "terminal",
+      assert.equal(await page.locator('.view-switch button[aria-pressed="true"]').innerText(), "Terminal",
         "activating the half keeps the in-memory lens choice");
       assert.deepEqual(errors, []);
       console.log("PASS an inactive-half lens choice works and survives activation when storage writes fail");
@@ -876,13 +934,43 @@ export async function checkSplitView(browser: Browser, origin: string): Promise<
       console.log("PASS a tab moved to another workspace keeps its half of the split, active or not");
     }
 
+    // A move made outside this browser (herdr's own window, another browser) reaches it as the server's
+    // pane-moved: the half showing the pane follows it to its new ID, and what was typed there and the
+    // lens picked for it go with it, sent nowhere (#1503).
+    {
+      const [left, right, , ] = await panesFor("tui-left", "tui-right", "tui-target") as [string, string, string];
+      const target = workspaces.at(-1)!;
+      const { page, errors } = await open([left, right], "chat");
+      await splitRight(page, right);
+      const shows = (side: string, pane: string) => page.waitForFunction(([which, id]) =>
+        document.querySelector(`.pane-slot[data-side="${which}"] [data-layout-pane="${id}"]:not([inert])`) !== null, [side, pane] as const);
+      await shows("left", left);
+      const composer = half(page, "left").getByRole("textbox", { name: "Message", exact: true });
+      await composer.fill("held across the move");
+      await page.waitForFunction((id) => (localStorage.getItem(`ovis:composer-draft:${id}`) ?? "").includes("held across the move"), left);
+      // the RPC behind `herdr pane move <pane> --new-tab --workspace <id>` in herdr's own window
+      const { move_result } = await herdrRpc<{ move_result: { pane: { pane_id: string } } }>("pane.move", {
+        pane_id: left, destination: { type: "new_tab", workspace_id: target }, focus: false,
+      });
+      const moved = move_result.pane.pane_id;
+      assert.notEqual(moved, left, "herdr gives the moved pane a new ID");
+      await shows("left", moved);
+      await shows("right", right);
+      assert.equal(await page.locator(".pane-slot").count(), 2, "the split stays when a pane moves elsewhere");
+      assert.equal(await half(page, "left").getByRole("textbox", { name: "Message", exact: true }).inputValue(), "held across the move");
+      assert.deepEqual(await page.evaluate((ids) => ids.map((id) => localStorage.getItem(`ovis:view:${id}`)), [left, moved]), [null, "chat"]);
+      assert.equal(await page.evaluate((id) => localStorage.getItem(`ovis:composer-draft:${id}`), left), null);
+      assert.deepEqual(errors, []);
+      console.log("PASS a pane moved outside this browser keeps its half, its draft and its lens under the new ID");
+    }
+
     // A saved partner on a removed PC is discarded only after the roster arrives.
     {
       const [pane] = await panesFor("removed-machine") as [string];
       const { page, errors } = await open([pane], "chat", (context) => context.addInitScript(() => {
         sessionStorage.setItem("ovis:split", JSON.stringify({
-          order: ["a", "b"], active: "a",
-          panes: { b: { machineId: "removed-split-fixture", paneId: "missing-pane" } },
+          other: { machineId: "removed-split-fixture", paneId: "missing-pane" },
+          bSide: "right", active: "a",
         }));
       }));
       await page.waitForFunction(() => document.querySelectorAll(".pane-slot").length === 1

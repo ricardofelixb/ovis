@@ -1,4 +1,5 @@
 import { SETTINGS_JA } from "./i18n/settings.ja.ts";
+import { SETTINGS_ACCESS_JA } from "./i18n/settings-access.ja.ts";
 import { TERMINAL_JA } from "./i18n/terminal.ja.ts";
 import { COMPOSER_JA } from "./i18n/composer.ja.ts";
 import { CHAT_JA } from "./i18n/chat.ja.ts";
@@ -13,6 +14,7 @@ import { GUIDE_JA } from "./i18n/guide.ja.ts";
 import { UPDATES_JA } from "./i18n/updates.ja.ts";
 import { PALETTE_JA } from "./i18n/palette.ja.ts";
 import { RELAY_JA } from "./i18n/relay.ja.ts";
+import { FORK_JA } from "./i18n/fork.ja.ts";
 
 /**
  * Japanese for every `t("…")` in src/ that no part in lib/i18n/ holds: keys more than one feature
@@ -27,6 +29,37 @@ import { RELAY_JA } from "./i18n/relay.ja.ts";
  */
 const BASE: Record<string, string> = {
   "Model": "モデル",
+  "Draft": "ドラフト",
+  "Not pasted: the file's path holds a line break, which the terminal would take as Enter.": "貼り付けていません: ファイルのパスに改行があり、ターミナルが Enter として受け取ります。",
+  "Attach files": "ファイルを添付",
+  "Sign out": "サインアウト",
+
+  "Only for {pc}": "{pc} のみ",
+  "Could not verify this device. It was declined: approve only a device you are signing in yourself.": "このデバイスを確認できなかったため拒否しました。自分でサインインしているデバイスだけを承認してください。",
+  "Account": "アカウント",
+  "Finish signing in in your browser.": "ブラウザーでサインインを完了してください。",
+  "Signed in with {provider}": "{provider} でサインイン中",
+  "Signing in…": "サインイン中…",
+  "The sign-in did not finish. Try again.": "サインインが完了しませんでした。もう一度お試しください。",
+  "Open GitHub and enter this code. Enter it only if you started this sign-in on this page.": "GitHub を開いてこのコードを入力してください。このページで自分で始めたサインインのときだけ入力してください。",
+  "Waiting for GitHub…": "GitHub の承認を待っています…",
+  "Open GitHub": "GitHub を開く",
+  "GitHub refused the sign-in.": "GitHub でサインインが拒否されました。",
+  "The code expired. Sign in again to get a new one.": "コードの有効期限が切れました。もう一度サインインして新しいコードを受け取ってください。",
+  "This account service can't sign in a browser on this PC yet.": "このアカウントサービスは、この PC のブラウザーでのサインインにまだ対応していません。",
+  "Your sign-in ended. Sign in again to see every PC of your account.": "サインインが終了しました。アカウントのすべての PC を表示するには、もう一度サインインしてください。",
+  "The account service could not be reached. The PCs this device is paired with still work.": "アカウントサービスに接続できません。このデバイスとペアリング済みの PC はそのまま使えます。",
+  "Add {device}?": "{device} を追加しますか？",
+  "Through {pc} · joins your {n} PCs": "{pc} 経由 · {n} 台の PC に参加します",
+  "Pick the number on {device}": "{device} に表示されている数字を選んでください",
+  "Didn't ask for this? Deny it.": "心当たりがなければ拒否してください。",
+  "Deny": "拒否",
+  "never": "なし",
+  "just now": "たった今",
+  "{n} min ago": "{n} 分前",
+  "{n} h ago": "{n} 時間前",
+  "Remove": "削除",
+  "Remove {name}": "{name} を削除",
   "Save": "保存",
   "Goal": "目標",
   "Waiting for your answer": "回答待ち",
@@ -79,7 +112,7 @@ const BASE: Record<string, string> = {
   "Pane closed": "ペインは閉じられました",
   "Show the terminal": "ターミナルを表示",
   "Show the chat": "チャットを表示",
-  "Close this column": "この列を閉じる",
+  "Close this half": "この半分を閉じる",
   "Toggle sidebar (⌘⇧B)": "サイドバーの切り替え (⌘⇧B)",
   "Switch to chat (⌘⇧J)": "チャットに切り替え (⌘⇧J)",
   "Switch to terminal (⌘⇧J)": "ターミナルに切り替え (⌘⇧J)",
@@ -120,6 +153,7 @@ const BASE: Record<string, string> = {
   "Type on {name}": "{name} に入力",
   "{name}'s desktop": "{name}のデスクトップ",
   "herdr {version} · protocol {protocol}": "herdr {version} · プロトコル {protocol}",
+  "herdr-core {version} · protocol {protocol}": "herdr-core {version} · プロトコル {protocol}",
   "live": "接続中",
   "disconnected": "切断",
   "reconnecting": "再接続中",
@@ -127,13 +161,22 @@ const BASE: Record<string, string> = {
   "herdr offline": "herdr オフライン",
   "Status unknown": "状態不明",
   "herdr unavailable": "herdr 応答なし",
+  "Open the Herdr app on this PC, or check HC_SESSION and HC_SOCKET.": "この PC で Herdr アプリを開くか、HC_SESSION と HC_SOCKET を確認してください。",
+  "herdr-core unavailable": "herdr-core を利用できません",
   "The last health check failed. Last seen: herdr {version} · protocol {protocol}": "直近の状態確認に失敗しました。最後に確認した状態: herdr {version} · プロトコル {protocol}",
+  "The last health check failed. Last seen: herdr-core {version} · protocol {protocol}": "直近の状態確認に失敗しました。最後に確認した状態: herdr-core {version} · プロトコル {protocol}",
   "The health check failed": "状態確認に失敗しました",
   "Start herdr on this PC, or check HERDR_SOCKET.": "この PC で herdr を起動するか、HERDR_SOCKET を確認してください。",
   "The other PC's answer was larger than this app accepts": "別の PC の応答が、このアプリで受け取れるサイズを超えています",
   "The other PC's answer could not be read": "別の PC の応答を読み取れませんでした",
   "Browse files": "ファイルを参照",
   "Copy link": "リンクをコピー",
+  "Goal: {objective}": "目標: {objective}",
+  "Transcript size unknown": "記録のサイズは不明",
+  "Transcript {size}": "記録 {size}",
+  "Work time unknown": "作業時間は不明",
+  "Worked at least {duration}": "{duration} 以上作業",
+  "Worked {duration}": "{duration} 作業",
   "Share link": "リンクを共有",
   "Copy address": "アドレスをコピー",
   "Link copied": "リンクをコピーしました",
@@ -170,6 +213,21 @@ const BASE: Record<string, string> = {
   "Filter workspaces and agents": "ワークスペースとエージェントを絞り込む",
   "Connecting…": "接続しています…",
   "Connected": "接続済み",
+  "relay": "リレー",
+  "direct": "直接",
+  "local": "ローカル",
+  "Via a loopback address: this PC, or a tunnel to it": "ループバックアドレス経由: このPC、またはそこへのトンネル",
+  "Via the Ovis relay": "Ovis リレー経由",
+  "Via the Portal relay": "Portal リレー経由",
+  "Via Tailscale": "Tailscale 経由",
+  "Via Tailscale, or Funnel from the internet": "Tailscale 経由、またはインターネットから Funnel 経由",
+  "Via the local network": "ローカルネットワーク経由",
+  "Straight to this address": "このアドレスへ直接",
+  "Sessions on this PC": "この PC のセッション",
+  "{count} working": "作業中 {count} 件",
+  "{count} waiting for you": "応答待ち {count} 件",
+  "{count} done": "完了 {count} 件",
+  "Open the next session waiting for you": "応答を待っている次のセッションを開く",
   "Reconnecting…": "再接続しています…",
   "Add PC": "PC を追加",
   "Connect": "接続",
@@ -179,6 +237,7 @@ const BASE: Record<string, string> = {
   // ---- command palette ----
   "Refresh": "更新",
   "Search panes and actions": "ペインと操作を検索",
+  "Search conversation": "会話を検索",
 
   // ---- new workspace ----
   "Browse": "参照",
@@ -277,6 +336,9 @@ const BASE: Record<string, string> = {
   // ---- devices ----
   "Loading…": "読み込んでいます…",
   "Done": "完了",
+  "Name": "名前",
+  "Recent": "最近",
+  "Needs you": "応答が必要",
 
   // ---- phone ----
   "Copy": "コピー",
@@ -296,6 +358,7 @@ const BASE: Record<string, string> = {
   "This device would not make a push subscription. Check that push messaging is allowed in its settings, then try again.": "このデバイスでプッシュ通知の登録を作成できませんでした。設定でプッシュメッセージが許可されているか確認してから、もう一度お試しください。",
   "This device can only watch.": "この端末は閲覧のみできます。",
   "Needs input": "入力が必要",
+  "Needs permission": "許可が必要",
   "Finished": "完了",
   "Open pane": "ペインを開く",
   "Quick replies": "クイック返信",
@@ -313,6 +376,8 @@ const BASE: Record<string, string> = {
   "{n} background task": "バックグラウンドタスク {n} 件",
   "{n} background tasks": "バックグラウンドタスク {n} 件",
   "Try again": "再試行",
+  "The relay did not start: {message}": "リレーを開始できませんでした: {message}",
+  "Turning on the relay closes the device gate: a new browser then needs a pairing code or the access token.": "リレーをオンにするとデバイスゲートが閉じます。以後、新しいブラウザーにはペアリングコードかアクセストークンが必要です。",
   // tabs: the strip over the pane, and the New tab dialog
   "New tab": "新しいタブ",
   "Rename tab": "タブの名前を変更",
@@ -323,10 +388,13 @@ const BASE: Record<string, string> = {
   "Pane swap was refused: {reason}": "ペインの入れ替えが拒否されました: {reason}",
   "The panes are in different tabs.": "ペインが別々のタブにあります。",
   "Choose two different panes.": "異なる2つのペインを選んでください。",
+  "The pane moved to the right instead.": "ペインは代わりに右側へ移動しました。",
+  "The pane moved below instead.": "ペインは代わりに下側へ移動しました。",
   "A pane is no longer available.": "ペインは利用できなくなりました。",
   "There is no pane on that side.": "その方向にペインはありません。",
   "Split pane right": "ペインを右に分割",
   "Split pane down": "ペインを下に分割",
+  "Zoom or unzoom pane": "ペインのズームまたは解除",
   "Plan: {done} of {total} done": "計画: {total} 件中 {done} 件完了",
   "Plan": "計画",
   "Something went wrong": "問題が発生しました",
@@ -373,13 +441,35 @@ const BASE: Record<string, string> = {
   "Close pane": "ペインを閉じる",
   "Open terminal": "ターミナルを開く",
   "Sign in to {agent}": "{agent} にサインイン",
+  "Approve": "承認",
+  "Pair a phone through the relay": "リレー経由でスマートフォンをペアリング",
+  "{name} wants to pair through the relay. Approve it only if its screen shows": "{name} がリレー経由でペアリングしようとしています。その画面に次の数字が表示されている場合だけ承認してください:",
+  "Decline": "拒否",
   "differs": "不一致",
+  "this PC": "このPC",
+  "It matches": "一致しています",
+  "Does {name}'s screen show this ID?": "{name} の画面にこの ID が表示されていますか？",
+  "The PC shows its ID under the code, in Settings → Phone & devices. Pair only if every group matches.": "PC は「設定 → スマートフォンとデバイス」のコードの下に自分の ID を表示します。すべてのまとまりが一致する場合だけペアリングしてください。",
+  "ID of the PC this code found": "このコードで見つかった PC の ID",
+  "A code has ten letters and digits, like 7K3QD-M2XHA.": "コードは 7K3QD-M2XHA のような英数字 10 文字です。",
+  "No PC shows this code. Check it, or show a new one on the PC.": "このコードを表示している PC はありません。確認するか、PC で新しいコードを表示してください。",
+  "That code did not work. Check it and try again; after three wrong tries the PC needs a new code.": "そのコードでは接続できませんでした。確認してもう一度お試しください。3 回間違えると PC で新しいコードが必要です。",
+  "That code ran out. Show a new one on the PC.": "コードの期限が切れました。PC で新しいコードを表示してください。",
+  "Another device is trying this code, or it was tried too often. Wait a moment, or show a new code on the PC.": "別のデバイスがこのコードを試しているか、試行が多すぎます。少し待つか、PC で新しいコードを表示してください。",
+  "The answer did not come from a PC this app can pair with. Show a new code on the PC, or scan its QR code.": "このアプリがペアリングできる PC からの応答ではありません。PC で新しいコードを表示するか、QR コードを読み取ってください。",
+  "The relay could not be reached. Check this device's connection, then try again.": "リレーに接続できませんでした。このデバイスの接続を確認してから、もう一度お試しください。",
+  "Reset": "リセット",
+  "Group name": "グループ名",
+  "Remove group {group}": "グループ {group} を削除",
+  "New group": "新しいグループ",
+  "Add group": "グループを追加",
+  "No group": "グループなし",
 };
 
 /** The parts JA is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */
 export const JA_PARTS: Record<string, Record<string, string>> = {
   base: BASE,
-  settings: SETTINGS_JA,
+  settings: { ...SETTINGS_JA, ...SETTINGS_ACCESS_JA },
   terminal: TERMINAL_JA,
   composer: COMPOSER_JA,
   chat: CHAT_JA,
@@ -394,6 +484,7 @@ export const JA_PARTS: Record<string, Record<string, string>> = {
   updates: UPDATES_JA,
   palette: PALETTE_JA,
   relay: RELAY_JA,
+  fork: FORK_JA,
 };
 
 export const JA: Record<string, string> = Object.assign({}, ...Object.values(JA_PARTS));

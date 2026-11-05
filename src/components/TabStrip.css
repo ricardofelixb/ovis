@@ -3,10 +3,13 @@
   display: flex;
   align-items: stretch;
   gap: var(--space-1);
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
   min-height: var(--control-h);
-  padding-left: var(--space-3);
+  padding: 0 var(--space-3);
+  /* the strip's surface, which the + that covers the scrolling tabs paints too */
+  --strip-bg: var(--bg-panel);
+  background: var(--strip-bg);
+  border-bottom: var(--hairline) solid var(--border);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
@@ -16,15 +19,23 @@
   display: none;
 }
 
-/* the row: its tabs scroll, as wide as they are, the + follows them, and a split view half's end
-   (App's grip and close) takes the rest of the row, all on the row's one surface */
+/* a split view half's row: its tabs scroll, as wide as they are, and the end (App's grip and
+   close) takes the rest of the row */
 .tab-strip-row {
   display: flex;
   flex: 0 0 auto;
   min-width: 0;
+  /* the strip's own surface (below), so the end around the close is no band of another colour */
   --strip-bg: var(--bg-panel);
   background: var(--strip-bg);
   border-bottom: var(--hairline) solid var(--border);
+}
+
+.tab-strip-row > .tab-strip {
+  flex: 0 1 auto;
+  min-width: 0;
+  --strip-bg: inherit;
+  border-bottom: 0;
 }
 
 .tab-strip-end {
@@ -85,7 +96,7 @@
   flex: 0 0 auto;
   width: var(--dot-size);
   height: var(--dot-size);
-  border-radius: var(--radius-circle);
+  border-radius: var(--radius-pill);
 }
 
 .tab-strip-dot[data-status="working"] { background: var(--status-working); }
@@ -143,7 +154,7 @@
   white-space: nowrap;
 }
 
-/* the + after the scrolling tabs: more tabs than fit never take it off the screen */
+/* The + follows the scroller, so tabs cannot pass underneath it and need no opaque cover. */
 .tab-strip-add {
   margin: 0 var(--space-3) 0 var(--space-1);
 }
@@ -218,11 +229,14 @@
    or the chat's, where the header has no rule and the strip's hairline is the one line over the
    transcript. Below that the header is the panel's bar and the strip stays with it. */
 @media (min-width: 769px) {
+  .tab-strip,
   .tab-strip-row {
     --strip-bg: var(--term-bg);
   }
 
+  .pane-column.is-chat .tab-strip,
   .pane-column.is-chat .tab-strip-row,
+  .pane-slot.is-chat .tab-strip,
   .pane-slot.is-chat .tab-strip-row {
     --strip-bg: var(--bg);
   }

@@ -74,7 +74,7 @@ export function usePaneLinkOpener(machines: readonly Pick<Machine, "id" | "targe
   return useCallback<WebPanelOpener>((uri, shiftKey, machineId) => {
     const remote = machineId === LOCAL_MACHINE ? null : remotePcUrl(uri, machines.find((item) => item.id === machineId)?.target?.destination);
     if (remote === null) return openWebPage(uri, shiftKey, machineId);
-    openWebLink(remote);
+    openWebLink(remote, false);
     return true;
   }, [machines, openWebPage]);
 }
