@@ -32,6 +32,7 @@ export const SIDEBAR_KO: Record<string, string> = {
   "Close workspace": "워크스페이스 닫기",
   "New worktree": "새 워크트리",
   "Open worktree…": "워크트리 열기…",
+  "Pull requests…": "풀 리퀘스트…",
   "Earlier sessions…": "이전 세션…",
   "Delete worktree checkout…": "워크트리 체크아웃 삭제…",
   "Delete the checkout of {name}?": "{name}의 체크아웃을 삭제할까요?",

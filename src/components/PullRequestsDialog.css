@@ -1,0 +1,106 @@
+/* the pull requests dialog shares the worktree dialog's shell (WorktreeDialog.css); these are its rows */
+.pr-modal {
+  width: min(100%, 640px);
+}
+
+.pr-search {
+  width: 100%;
+  margin-bottom: var(--space-3);
+}
+
+.pr-list {
+  gap: var(--space-2);
+}
+
+.pr-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.pr-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--status-done);
+}
+
+.pr-icon-draft {
+  color: var(--text-dim);
+}
+
+.pr-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  text-decoration: none;
+}
+
+.pr-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pr-title:hover,
+.pr-title:focus-visible {
+  text-decoration: underline;
+}
+
+.pr-title > svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  color: var(--text-dim);
+}
+
+.pr-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.pr-checks-passing,
+.pr-review-approved {
+  color: var(--status-done);
+}
+
+.pr-checks-failing,
+.pr-review-changes_requested {
+  color: var(--status-blocked);
+}
+
+.pr-checks-pending {
+  color: var(--status-working);
+}
+
+.pr-action {
+  flex: 0 0 auto;
+}
+
+/* a phone: the action takes the row's width under the copy */
+@media (max-width: 600px) {
+  .pr-modal {
+    width: 100%;
+  }
+
+  .pr-row {
+    flex-wrap: wrap;
+  }
+
+  .pr-row .worktree-copy {
+    flex: 1 1 calc(100% - 40px);
+  }
+
+  .pr-action {
+    flex: 1 1 100%;
+    min-height: var(--row-h);
+  }
+}

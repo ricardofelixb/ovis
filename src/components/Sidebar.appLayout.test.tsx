@@ -85,8 +85,8 @@ describe("the sidebar on a PC the Herdr app lays out", () => {
 
   it("offers a TUI PC's rows their rename, worktree and delete items", async () => {
     await draw(roster([workspace("root", worktree(false)), workspace("child", worktree(true))]), false);
-    expect(await menuOf("root")).toEqual(["pin-workspace", "rename-workspace", "session-history", "close", "new-worktree", "open-worktree", "fold"]);
-    expect(await menuOf("child")).toEqual(["pin-workspace", "rename-workspace", "session-history", "close", "delete-worktree"]);
+    expect(await menuOf("root")).toEqual(["pin-workspace", "rename-workspace", "session-history", "close", "new-worktree", "open-worktree", "pull-requests", "fold"]);
+    expect(await menuOf("child")).toEqual(["pin-workspace", "rename-workspace", "session-history", "close", "pull-requests", "delete-worktree"]);
   });
 
   it("leaves rename, the worktree actions and the checkout's delete out on a core PC, and keeps pin, earlier sessions, close and the fold", async () => {

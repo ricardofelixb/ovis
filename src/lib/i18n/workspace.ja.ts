@@ -1,6 +1,6 @@
 /**
  * Japanese for the keys only the workspace files use:
- * components/NewSessionDialog.tsx, components/WorktreeDialog.tsx, components/DirectoryBrowser.tsx,
+ * components/NewSessionDialog.tsx, components/WorktreeDialog.tsx, components/PullRequestsDialog.tsx, components/DirectoryBrowser.tsx,
  * components/RecentFolderChips.tsx, components/SessionHistory.tsx, lib/sessionHistory.ts.
  * Register and fixed terms follow ../i18n.ja.ts; a key another feature also uses goes there.
  */
@@ -94,4 +94,23 @@ export const WORKSPACE_JA: Record<string, string> = {
   "Add another agent…": "別のエージェントを追加…",
   "It is installed, but this PC does not offer it here yet. Restart Ovis on the PC, or start it in a terminal tab.": "インストールは済みましたが、このPCではまだここで選べません。PCでOvisを再起動するか、ターミナルタブで起動してください。",
   "It is installed. Waiting for this PC to offer it here…": "インストールしました。このPCでここから選べるようになるのを待っています…",
+  "Pull requests · {name}": "プルリクエスト · {name}",
+  "Close pull requests dialog": "プルリクエストのダイアログを閉じる",
+  "Reading pull requests…": "プルリクエストを読み込み中…",
+  "No open pull requests.": "オープンなプルリクエストはありません。",
+  "Search pull requests…": "プルリクエストを検索…",
+  "No pull request matches.": "一致するプルリクエストはありません。",
+  "Checkout": "チェックアウト",
+  "Checking out…": "チェックアウト中…",
+  "Go to workspace": "ワークスペースへ移動",
+  "Open checkout": "チェックアウトを開く",
+  "Draft": "ドラフト",
+  "Checks passing": "チェック成功",
+  "Checks failing": "チェック失敗",
+  "Checks running": "チェック実行中",
+  "Approved": "承認済み",
+  "Changes requested": "変更を要求",
+  "Review required": "レビューが必要",
+  "From a fork": "フォークから",
+  "A pull request from a fork cannot be checked out here yet.": "フォークからのプルリクエストは、まだここではチェックアウトできません。",
 };

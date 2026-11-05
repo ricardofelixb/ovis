@@ -1,6 +1,6 @@
 /**
  * Korean for the keys only the workspace files use:
- * components/NewSessionDialog.tsx, components/WorktreeDialog.tsx, components/DirectoryBrowser.tsx,
+ * components/NewSessionDialog.tsx, components/WorktreeDialog.tsx, components/PullRequestsDialog.tsx, components/DirectoryBrowser.tsx,
  * components/RecentFolderChips.tsx, components/SessionHistory.tsx, lib/sessionHistory.ts.
  * Register and fixed terms follow ../i18n.ko.ts; a key another feature also uses goes there.
  */
@@ -94,4 +94,23 @@ export const WORKSPACE_KO: Record<string, string> = {
   "Add another agent…": "다른 에이전트 추가…",
   "It is installed, but this PC does not offer it here yet. Restart Ovis on the PC, or start it in a terminal tab.": "설치는 됐지만 이 PC가 아직 여기서 고를 수 있게 내놓지 않아요. PC에서 Ovis를 다시 시작하거나, 터미널 탭에서 시작하세요.",
   "It is installed. Waiting for this PC to offer it here…": "설치됐어요. 이 PC에서 고를 수 있게 될 때까지 기다리는 중…",
+  "Pull requests · {name}": "풀 리퀘스트 · {name}",
+  "Close pull requests dialog": "풀 리퀘스트 대화상자 닫기",
+  "Reading pull requests…": "풀 리퀘스트 읽는 중…",
+  "No open pull requests.": "열린 풀 리퀘스트가 없습니다.",
+  "Search pull requests…": "풀 리퀘스트 검색…",
+  "No pull request matches.": "일치하는 풀 리퀘스트가 없습니다.",
+  "Checkout": "체크아웃",
+  "Checking out…": "체크아웃 중…",
+  "Go to workspace": "워크스페이스로 이동",
+  "Open checkout": "체크아웃 열기",
+  "Draft": "초안",
+  "Checks passing": "검사 통과",
+  "Checks failing": "검사 실패",
+  "Checks running": "검사 실행 중",
+  "Approved": "승인됨",
+  "Changes requested": "변경 요청됨",
+  "Review required": "리뷰 필요",
+  "From a fork": "포크에서",
+  "A pull request from a fork cannot be checked out here yet.": "포크의 풀 리퀘스트는 아직 여기서 체크아웃할 수 없습니다.",
 };

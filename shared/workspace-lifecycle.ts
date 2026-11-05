@@ -112,6 +112,35 @@ export interface WorktreeListing {
   worktrees: WorktreeEntry[];
 }
 
+/** How a pull request's checks stand: the worst of its check runs and commit statuses. */
+export type PullRequestChecks = "passing" | "failing" | "pending" | "none";
+
+/** One open pull request of the workspace's repository, with the checkout of its branch when there is one. */
+export interface PullRequestEntry {
+  number: number;
+  title: string;
+  url: string;
+  branch: string;
+  author: string | null;
+  draft: boolean;
+  /** true when the branch lives in a fork: it cannot be checked out by branch name */
+  fork: boolean;
+  updated_at: string;
+  checks: PullRequestChecks;
+  review: "approved" | "changes_requested" | "review_required" | "none";
+  /** the checkout of the branch: its path, and the workspace it is open in */
+  checkout: { path: string; open_workspace_id: string | null } | null;
+}
+
+/** GET /api/worktree/pull-requests: the repository's open pull requests, read with the `gh` account that can see it. */
+export interface PullRequestListing {
+  /** `owner/name` on GitHub */
+  repository: string;
+  /** the `gh` account that read them */
+  account: string;
+  pull_requests: PullRequestEntry[];
+}
+
 export interface WorkspaceCreated {
   workspace_id: string;
   pane_id: string;

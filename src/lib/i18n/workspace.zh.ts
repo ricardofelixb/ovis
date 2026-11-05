@@ -1,6 +1,6 @@
 /**
  * Simplified Chinese for the keys only the workspace files use:
- * components/NewSessionDialog.tsx, components/WorktreeDialog.tsx, components/DirectoryBrowser.tsx,
+ * components/NewSessionDialog.tsx, components/WorktreeDialog.tsx, components/PullRequestsDialog.tsx, components/DirectoryBrowser.tsx,
  * components/RecentFolderChips.tsx, components/SessionHistory.tsx, lib/sessionHistory.ts.
  * Register and fixed terms follow ../i18n.zh.ts; a key another feature also uses goes there.
  */
@@ -94,4 +94,23 @@ export const WORKSPACE_ZH: Record<string, string> = {
   "Add another agent…": "添加其他代理…",
   "It is installed, but this PC does not offer it here yet. Restart Ovis on the PC, or start it in a terminal tab.": "已经安装，但这台电脑还没有在这里提供它。请在电脑上重启 Ovis，或在终端标签页中启动它。",
   "It is installed. Waiting for this PC to offer it here…": "已安装。正在等待这台电脑在这里提供它…",
+  "Pull requests · {name}": "拉取请求 · {name}",
+  "Close pull requests dialog": "关闭拉取请求对话框",
+  "Reading pull requests…": "正在读取拉取请求…",
+  "No open pull requests.": "没有打开的拉取请求。",
+  "Search pull requests…": "搜索拉取请求…",
+  "No pull request matches.": "没有匹配的拉取请求。",
+  "Checkout": "检出",
+  "Checking out…": "正在检出…",
+  "Go to workspace": "前往工作区",
+  "Open checkout": "打开检出",
+  "Draft": "草稿",
+  "Checks passing": "检查通过",
+  "Checks failing": "检查失败",
+  "Checks running": "检查进行中",
+  "Approved": "已批准",
+  "Changes requested": "要求修改",
+  "Review required": "需要审查",
+  "From a fork": "来自复刻",
+  "A pull request from a fork cannot be checked out here yet.": "来自复刻的拉取请求暂时无法在此检出。",
 };
