@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRIDGE_PROTOCOL, REMOTE_BUNDLE_VERSION, type Machine, type SetupJob } from "../shared/machines.ts";
+import { BRIDGE_PROTOCOL, type Machine, type SetupJob } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
 import { unmanagedUpdateStatus, type UpdateStatus } from "../shared/update.ts";
 import { MachineManager } from "./machines.ts";
 import { handleMachineRequest } from "./machine-api.ts";
@@ -634,7 +635,7 @@ describe("a PC whose own Ovis is older than this app", () => {
   });
 
   it("tells an update that ended on a newer version than this app's as an update of this app, with nothing on offer beside it", async () => {
-    const { manager, installs, until } = pc({ status: managedOffer(), replacementBundle: String(Number(REMOTE_BUNDLE_VERSION) + 1), access: { port: OWN_PORT, tailscale: { serving_url: null } } }, { ownUpdate: { pollMs: 5 } });
+    const { manager, installs, until } = pc({ status: managedOffer(), replacementBundle: String(parseInt(REMOTE_BUNDLE_VERSION, 10) + 1), access: { port: OWN_PORT, tailscale: { serving_url: null } } }, { ownUpdate: { pollMs: 5 } });
     const running = await until((machine) => !!machine.updating);
     const waiting = await until((machine) => machine.action_required === "setup" && !machine.updating);
     expect(waiting.error).toContain("Update this app in Settings");
@@ -645,7 +646,7 @@ describe("a PC whose own Ovis is older than this app", () => {
   });
 
   it("keeps where it answers when its updated bridge answers an older version than it registered", async () => {
-    const { manager, until } = pc({ status: managedOffer(), replacementLiveBundle: String(Number(REMOTE_BUNDLE_VERSION) - 1), access: { port: OWN_PORT, tailscale: { serving_url: "https://home-server.example.ts.net" } } }, { ownUpdate: { pollMs: 5 } });
+    const { manager, until } = pc({ status: managedOffer(), replacementLiveBundle: String(parseInt(REMOTE_BUNDLE_VERSION, 10) - 1), access: { port: OWN_PORT, tailscale: { serving_url: "https://home-server.example.ts.net" } } }, { ownUpdate: { pollMs: 5 } });
     const running = await until((machine) => !!machine.updating);
     const waiting = await until((machine) => machine.action_required === "setup" && !machine.updating);
     expect(waiting.error).toContain("Update it through its own Settings");
@@ -709,7 +710,7 @@ describe("a PC whose own Ovis is older than this app", () => {
   });
 
   it("keeps a newer one's message, asks it nothing about its updates and links no address it did not give", async () => {
-    const { requests, until } = pc({ status: managedOffer(), bundle: String(Number(REMOTE_BUNDLE_VERSION) + 1) });
+    const { requests, until } = pc({ status: managedOffer(), bundle: String(parseInt(REMOTE_BUNDLE_VERSION, 10) + 1) });
     const waiting = await until((machine) => machine.action_required === "setup");
     expect(waiting.error).toContain("of a newer version");
     expect(waiting.error).toContain("Update this app in Settings");

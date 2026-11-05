@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { REMOTE_BUNDLE_VERSION as SOURCE_VERSION, sourceBundleVersion } from "../server/bundle-version.ts";
 import { REMOTE_BUNDLE_VERSION } from "../shared/machines.ts";
 import { architectures, NAME as PTY_SIDECAR } from "./pty-sidecar.ts";
 
@@ -75,9 +76,10 @@ async function archive(): Promise<void> {
   const tar = Bun.spawn(["tar", "czf", temporaryArchive, "-C", stage, "."], { stdout: "inherit", stderr: "inherit" });
   if (await tar.exited !== 0) throw new Error("Bundle archive failed");
   const sha256 = digest(readFileSync(temporaryArchive));
+  if (sourceBundleVersion(root) !== SOURCE_VERSION) throw new Error("Bundle inputs changed during the build; retry from a stable checkout");
   renameSync(temporaryArchive, archive);
   const manifest = join(output, `manifest-${platform}.json`);
-  writeFileSync(manifest + ".tmp", JSON.stringify({ version: REMOTE_BUNDLE_VERSION, assets: { [platform]: { url: filename, sha256 } } }, null, 2));
+  writeFileSync(manifest + ".tmp", JSON.stringify({ version: REMOTE_BUNDLE_VERSION, revision: SOURCE_VERSION, assets: { [platform]: { url: filename, sha256 } } }, null, 2));
   renameSync(manifest + ".tmp", manifest);
   console.log(`${filename} sha256:${sha256}`);
 }
@@ -102,7 +104,7 @@ try {
     // package-manager symlinks: an account without the symlink privilege cannot extract them, and nothing runs them
     rmSync(join(stage, "node_modules/.bin"), { recursive: true, force: true });
     writeFileSync(join(stage, "package.json"), JSON.stringify({ type: "module", version: REMOTE_BUNDLE_VERSION }));
-    writeFileSync(join(stage, "bundle.json"), JSON.stringify({ version: REMOTE_BUNDLE_VERSION, platform, herdr: null, bun: "1.4.2", node: null, native_smoke_tested: false }));
+    writeFileSync(join(stage, "bundle.json"), JSON.stringify({ version: REMOTE_BUNDLE_VERSION, revision: SOURCE_VERSION, platform, herdr: null, bun: "1.4.2", node: null, native_smoke_tested: false }));
   } else {
     // Use a reproducible LTS runtime instead of the builder's Node: newer local
     // binaries can require extra system libraries absent on an otherwise supported PC.
@@ -153,7 +155,7 @@ try {
       console.log(`${platform}: HERDR_BUNDLE_PTY_SIDECAR is not set, so this bundle has no Rust PTY host`);
     }
     writeFileSync(join(stage, "package.json"), JSON.stringify({ type: "module", version: REMOTE_BUNDLE_VERSION }));
-    writeFileSync(join(stage, "bundle.json"), JSON.stringify({ version: REMOTE_BUNDLE_VERSION, platform, herdr: "0.9.3", bun: bunVersion, node: nodeVersion, pty_sidecar: Boolean(ptySidecar), native_smoke_tested: platform === hostPlatform }));
+    writeFileSync(join(stage, "bundle.json"), JSON.stringify({ version: REMOTE_BUNDLE_VERSION, revision: SOURCE_VERSION, platform, herdr: "0.9.3", bun: bunVersion, node: nodeVersion, pty_sidecar: Boolean(ptySidecar), native_smoke_tested: platform === hostPlatform }));
     if (platform === hostPlatform) command([join(stage, "bin/node"), join(stage, "server/pty/smoke.mjs")], stage);
     else console.log(`${platform}: verified binary architecture and checksums; PTY execution is checked on the destination before activation`);
 

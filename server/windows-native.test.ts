@@ -21,7 +21,7 @@ import { descendantArgv, windowsProcessTable } from "./windows-processes.ts";
 import { windowsHost } from "./remote-host.ts";
 import type { SshConnection } from "./ssh.ts";
 import { psQuote } from "./powershell.ts";
-import { REMOTE_BUNDLE_VERSION } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
 import { isAgyProcessName, windowsHolders } from "./agy-store.ts";
 import { ancestorsToRepoRoot } from "./skills/walk.ts";
 import { startInteractiveWindowsHerdr } from "./windows-herdr-start.ts";

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, spyOn } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BRIDGE_PROTOCOL, REMOTE_BUNDLE_VERSION, type BridgeIdentity, type Machine, type SshTarget } from "../shared/machines.ts";
+import { BRIDGE_PROTOCOL, type BridgeIdentity, type Machine, type SshTarget } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
 import type { BridgeDescriptor } from "./bridge.ts";
 import type { CompletionTracker } from "./completion.ts";
 import { MachineManager } from "./machines.ts";
@@ -99,7 +100,7 @@ describe("independent bridge successor ownership", () => {
       return { endpoint: { url: "http://127.0.0.1:1", token: "fixture" }, identity: {
         pid: remote.pid + (mismatch === "pid" ? 1 : 0), managed_remote: true,
         bridge_protocol: BRIDGE_PROTOCOL,
-        bundle_version: mismatch === "newer" ? String(Number(REMOTE_BUNDLE_VERSION) + 1) : remote.version,
+        bundle_version: mismatch === "newer" ? String(parseInt(REMOTE_BUNDLE_VERSION, 10) + 1) : remote.version,
         socket_path: remote.socket, socket_id: "fixture-socket", herdr: { version: "0.9.5", protocol: 22 },
       } };
     });

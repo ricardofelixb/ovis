@@ -6,7 +6,8 @@ import { describeProgress } from "../src/lib/bridgeProgress.ts";
 import type { SetupJob } from "../shared/machines.ts";
 import type { PanePromptResponse } from "../shared/protocol.ts";
 import { paneNotificationTag } from "../shared/notify-policy.ts";
-import { BRIDGE_PROTOCOL, machinePath, paneStorageId, REMOTE_BUNDLE_VERSION } from "../shared/machines.ts";
+import { BRIDGE_PROTOCOL, machinePath, paneStorageId } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
 import { canSendSecret, sameOrigin, shellQuote, validateTarget } from "./machine-security.ts";
 import { handleMachineRequest, MACHINE_PROXY_PATH } from "./machine-api.ts";
 import type { BridgeDescriptor } from "./bridge.ts";
@@ -819,7 +820,7 @@ describe("a first connect that finds a bridge of another version", () => {
   });
 
   it("tells this app to update itself when an independently managed web server is newer", async () => {
-    const newer = String(Number(REMOTE_BUNDLE_VERSION) + 1);
+    const newer = String(parseInt(REMOTE_BUNDLE_VERSION, 10) + 1);
     const independent = { ...descriptor, bridge_protocol: BRIDGE_PROTOCOL, bundle_version: newer, managed_remote: false };
     SshConnection.prototype.start = async () => {};
     SshConnection.prototype.run = (async (script: string) => {
