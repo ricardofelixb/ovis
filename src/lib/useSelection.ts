@@ -6,7 +6,8 @@ import { machineGone, notificationLanding, notificationTargetFromSearch, sameLin
 import { pageSearch } from "./pageQuery.ts";
 import type { TerminalPeek } from "./terminalPeek.ts";
 import { markSelection, selectionStill, type SelectionMark } from "./selectionMark.ts";
-import { heirPane, type PanePlace } from "./snapshot.ts";
+import { paneAfterClose } from "./paneAfterClose.ts";
+import { lastViewedPane } from "./lastViewedPane.ts";
 import type { PaneView } from "./actions.ts";
 import type { Translate } from "./i18n.ts";
 import { storedSelection, storeSelection } from "./useSplitView.ts";
@@ -14,9 +15,9 @@ import { storedSelection, storeSelection } from "./useSplitView.ts";
 type SelectionHint = { machine: string; pane: string; workspace: string } | null;
 type SelectTarget = (machineId: string, paneId: string | null, view?: PaneView) => void;
 
-/** Whether the address the app opened with picks the pane, rather than this tab's last selection. */
+/** Whether the address the app opened with picks the PC or pane, rather than this tab's last selection. */
 export function linkSelects(initialLink: AppLink | null): boolean {
-  return initialLink !== null && Boolean(initialLink.pane || initialLink.workspace || fileFromLink(initialLink));
+  return initialLink !== null && Boolean(initialLink.pane || initialLink.workspace || fileFromLink(initialLink) || initialLink.create);
 }
 
 export function useSelectedMachine({ initialLink, machines }: { initialLink: AppLink | null; machines: Machine[] }) {
@@ -34,7 +35,10 @@ export function useSelectionState({ initialLink }: { initialLink: AppLink | null
     if (initialLink?.pane) return initialLink.pane;
     // a link to a workspace opens the pane its row opens, once the roster is in (below)
     if (initialLink && (initialLink.workspace || fileFromLink(initialLink))) return null;
-    return storedSelection()?.pane_id ?? null;
+    const stored = storedSelection();
+    // a creation link keeps this tab's pane when it names the same PC, and opens another PC's in front
+    if (initialLink?.create && stored?.machine_id !== initialLink.machine) return null;
+    return stored?.pane_id ?? null;
   });
   const [notificationViewTarget, setNotificationViewTarget] = useState<NotificationTarget | null>(
     () => notificationTargetFromSearch(pageSearch()),
@@ -170,17 +174,23 @@ export function useSelectTarget({ selectedMachineId, setConnected, setConnectedB
     selectionSince.current = rosterSeq.current;
   }, []);
   const selectTargetRef = useRef(selectTarget); selectTargetRef.current = selectTarget;
-  // where the selected pane sat in the last roster that listed it: once it closes, a pane beside it opens
-  const selectedPlace = useRef<{ machine: string; place: PanePlace } | null>(null);
+  // the selected pane, the roster it was last seen in and the pane selected before it (lib/paneAfterClose.ts)
+  const lastSeen = useRef<{ machine: string; pane: string; roster: NonNullable<typeof snapshot>; previous: string | null } | null>(null);
   useEffect(() => {
     // An offline PC's cached roster cannot invalidate a selection. Once connected,
     // a closed pane (including one remembered across reloads) must release its selection.
     if (!snapshot || selectedMachine?.state !== "connected") return;
     // a link lands once its PC's roster is in: its pane, the pane its workspace's row opens, or,
     // when nothing it named is open, the usual fallback below with a word in the header
-    const place = selectedPlace.current;
-    const gone = place?.machine === selectedMachineId && place.place.pane_id === selectedPaneId ? place.place : null;
-    const fallback = (current: typeof snapshot) => heirPane(current, gone);
+    const seen = lastSeen.current?.machine === selectedMachineId && lastSeen.current.pane === selectedPaneId ? lastSeen.current : null;
+    // a closed selection moves as herdr's TUI focus does; herdr's own focus is the last resort
+    const fallback = (current: typeof snapshot) => (seen && paneAfterClose(seen.roster, current, seen.pane, seen.previous, (scope, id) => lastViewedPane(scope, selectedMachineId, id)))
+      ?? current.panes.find((pane) => pane.pane_id === current.focused_pane_id)?.pane_id ?? current.panes[0]?.pane_id ?? null;
+    if (selectedPaneId !== null && snapshot.panes.some((pane) => pane.pane_id === selectedPaneId)) {
+      const last = lastSeen.current?.machine === selectedMachineId ? lastSeen.current : null;
+      const previous = last && last.pane !== selectedPaneId ? last.pane : (last?.previous ?? null);
+      lastSeen.current = { machine: selectedMachineId, pane: selectedPaneId, roster: snapshot, previous };
+    }
     const linked = pendingLink.current;
     if (linked && linked.machine === selectedMachineId) {
       const land = (landed: ReturnType<typeof resolveLink>): boolean => {
@@ -220,11 +230,7 @@ export function useSelectTarget({ selectedMachineId, setConnected, setConnectedB
         return () => { cancelled = true; };
       }
     }
-    const shown = snapshot.panes.find((pane) => pane.pane_id === selectedPaneId);
-    if (shown) {
-      selectedPlace.current = { machine: selectedMachineId, place: { pane_id: shown.pane_id, workspace_id: shown.workspace_id, tab_id: shown.tab_id } };
-      return;
-    }
+    if (snapshot.panes.some((pane) => pane.pane_id === selectedPaneId)) return;
     if (selectedPaneId === null) { setSelectedPaneId(fallback(snapshot)); return; }
     const moving = (): boolean => movingPanes.current.has(paneStorageId(selectedMachineId, selectedPaneId));
     if (moving()) return;
@@ -253,33 +259,6 @@ export function useSelectTarget({ selectedMachineId, setConnected, setConnectedB
     storeSelection(selectedMachineId, selectedPaneId);
   }, [selectedMachineId, selectedPaneId]);
   return { selectedMachineRef, selectTarget, selectTargetRef, picks };
-}
-
-/**
- * Opens a pane herdr just made once the roster holds it: selected sooner, the header and the canvas
- * would draw the empty PC until it came. Any event supersedes a fetch, so either may bring it.
- */
-export function useOpenWhenListed({ machines, machinesRef, selectionRef, selectTargetRef }: {
-  machines: Machine[];
-  machinesRef: RefObject<Machine[]>;
-  selectionRef: RefObject<SelectionMark>;
-  selectTargetRef: RefObject<SelectTarget>;
-}) {
-  const pendingOpen = useRef<{ machineId: string; paneId: string; asked: SelectionMark } | null>(null);
-  const openListed = useCallback(() => {
-    const pending = pendingOpen.current;
-    if (!pending || !machinesRef.current.find((m) => m.id === pending.machineId)?.snapshot?.panes.some((pane) => pane.pane_id === pending.paneId)) return;
-    pendingOpen.current = null;
-    // what the user went to while herdr answered is theirs to keep
-    if (selectionStill(pending.asked, selectionRef.current)) selectTargetRef.current(pending.machineId, pending.paneId);
-  }, [machinesRef, selectionRef, selectTargetRef]);
-  useEffect(openListed, [machines, openListed]);
-  return useCallback((machineId: string, paneId: string, asked: SelectionMark) => {
-    // asked from a selection the user has left: it would only push out a newer tab still on its way
-    if (!selectionStill(asked, selectionRef.current)) return;
-    pendingOpen.current = { machineId, paneId, asked };
-    openListed();
-  }, [openListed, selectionRef]);
 }
 
 export function useSelectPane({ pendingLink, pendingFile, setLinkLanded, selectionHint, setSelectedPaneId, setNotificationViewTarget, setTerminalPeek, setAutoSelected, setDrawerOpen, onPick }: {
@@ -365,7 +344,7 @@ export function useSelectedLayout({ selectedPane, snapshot, drawerOpen, selected
   const selectedLayout = snapshot?.layouts.find((layout) => layout.tab_id === selectedPane?.tab_id);
   // Selection can precede rendering: in a zoomed tab the layout effect below redirects it,
   // but the sidebar's passive effect can still see that first selection. Only the selected
-  // pane the canvas actually draws counts; paneInFront checks coverage at acknowledgement time.
+  // pane the canvas actually draws counts; panePresence checks coverage at acknowledgement time.
   const presentedPaneId = !drawerOpen && selectedPane && !selectedPane.restore_error
     && (!selectedLayout?.panes.length || selectedLayout.panes.some((pane) => pane.pane_id === selectedPane.pane_id))
     && (!selectedLayout?.zoomed || selectedLayout.focused_pane_id === selectedPane.pane_id)
@@ -381,10 +360,11 @@ export function useSelectedLayout({ selectedPane, snapshot, drawerOpen, selected
   return { selectedWorkspace, selectedLayout, presentedPaneId };
 }
 
-export function useMachineGone({ machines, pendingLink, pendingFile, selectedMachineRef, linkSince, selectionSince, rosterSeq, setLinkLanded, setHeaderNote, selectTargetRef, rosterTick, linkTick }: {
+export function useMachineGone({ machines, pendingLink, pendingFile, pendingCreate, selectedMachineRef, linkSince, selectionSince, rosterSeq, setLinkLanded, setHeaderNote, selectTargetRef, rosterTick, linkTick }: {
   machines: Machine[];
   pendingLink: RefObject<AppLink | null>;
   pendingFile: RefObject<string | null>;
+  pendingCreate: RefObject<import("./deepLink.ts").CreateDraft | null>;
   selectedMachineRef: RefObject<string>;
   linkSince: RefObject<number>;
   selectionSince: RefObject<number>;
@@ -404,10 +384,37 @@ export function useMachineGone({ machines, pendingLink, pendingFile, selectedMac
     const machineId = linked ? linked.machine : selectedMachineRef.current;
     const since = linked ? linkSince.current : selectionSince.current;
     if (!machineGone(machines, rosterSeq.current, since, machineId)) return;
-    pendingLink.current = null; pendingFile.current = null;
+    pendingLink.current = null; pendingFile.current = null; pendingCreate.current = null;
     setLinkLanded(true);
     setHeaderNote("machine-missing");
     // no pane: the link's pane id means nothing on another PC, so the pane herdr has in front opens
     selectTargetRef.current("local", null);
   }, [machines, rosterTick, linkTick]);
+}
+
+/**
+ * Opens a pane herdr just made once the roster holds it: selected sooner, the header and the canvas
+ * would draw the empty PC until it came. Any event supersedes a fetch, so either may bring it.
+ */
+export function useOpenWhenListed({ machines, machinesRef, selectionRef, selectTargetRef }: {
+  machines: Machine[];
+  machinesRef: RefObject<Machine[]>;
+  selectionRef: RefObject<SelectionMark>;
+  selectTargetRef: RefObject<SelectTarget>;
+}) {
+  const pendingOpen = useRef<{ machineId: string; paneId: string; asked: SelectionMark } | null>(null);
+  const openListed = useCallback(() => {
+    const pending = pendingOpen.current;
+    if (!pending || !machinesRef.current.find((m) => m.id === pending.machineId)?.snapshot?.panes.some((pane) => pane.pane_id === pending.paneId)) return;
+    pendingOpen.current = null;
+    // what the user went to while herdr answered is theirs to keep
+    if (selectionStill(pending.asked, selectionRef.current)) selectTargetRef.current(pending.machineId, pending.paneId);
+  }, [machinesRef, selectionRef, selectTargetRef]);
+  useEffect(openListed, [machines, openListed]);
+  return useCallback((machineId: string, paneId: string, asked: SelectionMark) => {
+    // asked from a selection the user has left: it would only push out a newer tab still on its way
+    if (!selectionStill(asked, selectionRef.current)) return;
+    pendingOpen.current = { machineId, paneId, asked };
+    openListed();
+  }, [openListed, selectionRef]);
 }

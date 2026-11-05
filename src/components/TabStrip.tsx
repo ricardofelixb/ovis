@@ -25,11 +25,12 @@ import { autoTabLabel, customTabLabel, tabLabel } from "../lib/tabName.ts";
 import { shownTabLabels, subscribeTabLabels } from "../lib/tabLabels.ts";
 import { STRIP_AT_REST, stripPlaced, stripScrolled, stripSelected, type StripScroll } from "../lib/tabStripScroll.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "../lib/paneRegion.ts";
-import { loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
-import { useCramped } from "../lib/useCramped.ts";
+import { CRAMPED_QUERY, loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
 import { rosterPanes } from "../lib/dagPane.ts";
+import { moveDestinations } from "../lib/layoutTargets.ts";
 import { useAppLayout, useMachineApi, useMachineId } from "../lib/machineContext.tsx";
 import { PanePressContext } from "../lib/paneSubmitContext.ts";
+import { usePaneLocked } from "../lib/paneLocks.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { DETACHED, usePaneBranch } from "../lib/paneBranch.ts";
 import { SHEET_QUERY } from "../lib/sheets.ts";
@@ -80,19 +81,22 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const branch = usePaneBranch(machineId, workspace.workspace_id);
   const place = branch === null ? workspace.label : `${workspace.label} · ${branch === DETACHED ? t("Detached HEAD") : branch}`;
   const sheet = useMediaQuery(SHEET_QUERY);
+  // a tab holding a locked pinned agent (lib/paneLocks.ts) is closed from no button, key or click here
+  const paneLocked = usePaneLocked(machineId);
   const pressPane = useContext(PanePressContext);
   const { closeTab, renameTab, moveTab } = useMachineApi();
   // the Herdr app's window owns this PC's tabs (lib/machineContext.tsx): no rename, no move, no other workspace
-  const appLayout = useAppLayout();
+  // what the PC's herdr answers for its tabs (lib/machineContext.tsx): herdr-core never reorders them
+  const { rename: renameOffered, move: moveOffered, arrange } = useAppLayout();
   const touchMenu = useMediaQuery("(pointer: coarse), (max-width: 768px)");
   // a mouse on a wide screen gets the same ellipsis, drawn while the strip is hovered or the tab
   // has keyboard focus (TabStrip.css): the tab's menu is never only behind a right-click
   const hoverMenu = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 769px)");
   const menuButton = touchMenu || hoverMenu;
   const soloPanes = useMediaQuery(SOLO_PANE_QUERY);
-  // a short phone screen (landscape, a small phone) has no height to spare: a lone tab is not
-  // drawn there, so an approval card keeps its options in reach; its actions stay in the header
-  const cramped = useCramped();
+  // a compact-height phone screen (a foldable's outer display, landscape or the keyboard) has no
+  // height to spare: a lone tab is not drawn there, so the pane and approval cards keep their room
+  const cramped = useMediaQuery(CRAMPED_QUERY);
   const strip = useRef<HTMLDivElement>(null);
   const [picker, setPicker] = useState<{ anchor: HTMLElement; tab: HerdrTab; point?: { x: number; y: number }; previousFocus: HTMLElement | null; touch: boolean; workspaces?: true } | null>(null);
   const [editing, setEditing] = useState<{ tabId: string; value: string } | null>(null);
@@ -123,7 +127,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const panes = rosterPanes(snapshot.panes.filter((pane) => pane.workspace_id === workspace.workspace_id), selectedPane.pane_id);
   // The snapshot order is authoritative; number identifies a tab and does not change on a move.
   const tabs = snapshot.tabs.filter((tab) => tab.workspace_id === workspace.workspace_id);
-  const reorder = useTabReorder({ owner: `${machineId}:${workspace.workspace_id}`, tabs, strip, moveTab, fixed: appLayout,
+  const reorder = useTabReorder({ owner: `${machineId}:${workspace.workspace_id}`, tabs, strip, moveTab, fixed: !arrange,
     failed: (reason) => setError(t("Move failed: {reason}", { reason: said(reason) })),
     stale: () => setError(t("Tab order did not refresh. Try again.")),
     // dragged down out of the strip, a tab opens its pane in half of the pane area (lib/split.ts)
@@ -282,11 +286,12 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     if (renameRequest === null) return;
     const tab = tabs.find((candidate) => candidate.tab_id === selectedPane.tab_id);
     // a second press while the field is open keeps what was typed in it
-    if (tab && shown && !loneTabHidden(cramped, tabs.length) && editing?.tabId !== tab.tab_id && !appLayout) beginRename(tab);
+    if (tab && shown && !loneTabHidden(cramped, tabs.length) && editing?.tabId !== tab.tab_id && renameOffered) beginRename(tab);
     onRenameHandled?.();
   }, [renameRequest]);
 
-  if (!shown || loneTabHidden(cramped, tabs.length)) return null;
+  // a name being typed keeps its row: a keyboard that shortens the screen past the cutoff leaves the field in place
+  if (!shown || (loneTabHidden(cramped, tabs.length) && editing === null)) return null;
 
   const panesOf = (tab: HerdrTab): PaneInfo[] => panes.filter((pane) => pane.tab_id === tab.tab_id);
   const paneFor = (tab: HerdrTab): PaneInfo | undefined => {
@@ -341,7 +346,12 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     if (latest.current.tabId === tab.tab_id && pane) onSelectPane(pane.pane_id);
     if (strip.current?.contains(document.activeElement) || document.activeElement === document.body) focusTab(beside.tab_id);
   };
+  // every pane of the tab by id, the ones the strip leaves out of its list (a DAG viewer's) included
+  const tabLocked = (tab: HerdrTab): boolean => snapshot.panes.some((pane) => pane.tab_id === tab.tab_id && paneLocked(pane.pane_id));
+  // a lock that lands while the confirmation is open (from another browser) takes the confirmation with it
+  if (confirm && tabLocked(confirm.tab)) setConfirm(null);
   const requestClose = (tab: HerdrTab): void => {
+    if (tabLocked(tab)) return;
     setError(null);
     // a turn that waits on its background work would lose that work too
     const busy = panesOf(tab).some((pane) => { const status = paneStatus(pane as HerdrPane); return status === "working" || status === "blocked" || status === "waiting"; });
@@ -376,7 +386,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       if (tab && !event.repeat) setPicker({ anchor, tab, previousFocus: anchor, touch: false });
       return;
     }
-    if (event.key === "F2" && appLayout) return;
+    if (event.key === "F2" && !renameOffered) return;
     if (event.key === "F2" || event.key === "Delete") {
       // a held key is one press: the focus moves to the tab beside a closed one
       if (event.repeat) { event.preventDefault(); return; }
@@ -425,135 +435,133 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     return groups.flatMap((group, at) => at === 0 ? group : group.map((item, index) => index === 0 ? { ...item, divider: true } : item));
   };
   // herdr moves a tab to another workspace only as its one pane: a split tab is not offered it
-  const otherWorkspaces = snapshot.workspaces.filter((entry) => entry.workspace_id !== workspace.workspace_id);
-  const canMoveOut = (tab: HerdrTab): boolean => onMoveToWorkspace !== undefined && !appLayout && otherWorkspaces.length > 0 && panesOf(tab).length === 1;
+  const destinations = (tab: HerdrTab) => moveDestinations(snapshot.workspaces, snapshot.panes.find((pane) => pane.tab_id === tab.tab_id), workspace.workspace_id);
+  const canMoveOut = (tab: HerdrTab): boolean => onMoveToWorkspace !== undefined && moveOffered && panesOf(tab).length === 1 && destinations(tab).length > 0;
   const moveToWorkspace = (tab: HerdrTab, workspaceId: string): void => {
     setError(null);
     void onMoveToWorkspace?.(tab.tab_id, workspaceId).catch((reason: unknown) => setError(routeMissing(reason) ? t("This PC's bridge does not offer this yet") : t("Move failed: {reason}", { reason: said(reason) })));
   };
   // the same menu, in place, lists where the tab can go
-  const workspaceItems = (tab: HerdrTab): RowMenuItem[] => otherWorkspaces.map((entry) => ({
+  const workspaceItems = (tab: HerdrTab): RowMenuItem[] => destinations(tab).map((entry) => ({
     id: `workspace:${entry.workspace_id}`, label: entry.label, icon: Folder, run: () => moveToWorkspace(tab, entry.workspace_id),
   }));
   // the strip's + opens a shell tab; the menu keeps the dialog, where an agent is picked
   const tabActions = (tab: HerdrTab): RowMenuItem[] => [
-    ...(!appLayout && !reorder.moving && tabs.findIndex((entry) => entry.tab_id === tab.tab_id) > 0
+    ...(arrange && !reorder.moving && tabs.findIndex((entry) => entry.tab_id === tab.tab_id) > 0
       ? [{ id: "move-left", label: t("Move tab left"), icon: ArrowLeft, run: () => reorder.moveAdjacent(tab.tab_id, -1) }] : []),
-    ...(!appLayout && !reorder.moving && tabs.findIndex((entry) => entry.tab_id === tab.tab_id) < tabs.length - 1
+    ...(arrange && !reorder.moving && tabs.findIndex((entry) => entry.tab_id === tab.tab_id) < tabs.length - 1
       ? [{ id: "move-right", label: t("Move tab right"), icon: ArrowRight, run: () => reorder.moveAdjacent(tab.tab_id, 1) }] : []),
     ...(canMoveOut(tab) ? [{ id: "move-workspace", label: t("Move to workspace…"), icon: FolderInput,
       // RowMenu closes before it runs an item: the picker is set again, not updated
       run: () => { if (picker) setPicker({ ...picker, workspaces: true }); } }] : []),
     { id: "new-agent-tab", label: t("New tab with agent…"), icon: Bot, run: onNewTab },
-    ...(appLayout ? [] : [{ id: "rename-tab", label: t("Rename tab"), icon: Pencil, run: () => beginRename(tab) }]),
-    { id: "close-tab", label: t("Close tab"), icon: X, danger: true, run: () => requestClose(tab) },
+    ...(!renameOffered ? [] : [{ id: "rename-tab", label: t("Rename tab"), icon: Pencil, run: () => beginRename(tab) }]),
+    ...(tabLocked(tab) ? [] : [{ id: "close-tab", label: t("Close tab"), icon: X, danger: true, run: () => requestClose(tab) }]),
   ];
 
   // the pane region every tab governs, as App names it. App gives that region the tabpanel role
   // only while the pane's own tab is in this snapshot (paneTabPanelLabel); the same call answers
   // here, so a tab never claims to control a panel that is not standing there as one.
   const panePanel = paneTabPanelLabel(snapshot, selectedPane, t) !== null ? panelId : undefined;
-  // the + and an error follow the tabs outside their scroller, on the row's surface: tabs that do
-  // not fit scroll before the +, never under it
-  return (
-    <>
-      <div className="tab-strip-row">
-        <div ref={strip} className="tab-strip" role="tablist" aria-label={t("Tabs of {workspace}", { workspace: workspace.label })} aria-busy={reorder.moving} onKeyDown={onKeyDown} onScroll={onScroll}
-          onFocus={(event) => { if (event.target.getAttribute("role") === "tab") focusedTab.current = event.target; }}
-          onBlur={(event) => { if (event.relatedTarget !== null) focusedTab.current = null; }}>
-          {tabs.map((tab, index) => {
-            const active = tab.tab_id === selectedPane.tab_id;
-            const own = panesOf(tab);
-            // Settle each pane's wait before rolling up, so a sibling's RUN or DONE stays visible.
-            const status = rollupStatus(own.map((pane) => paneStatus(pane as HerdrPane)));
-            const pickerOpen = picker?.tab.tab_id === tab.tab_id;
-            const name = nameOf(tab);
-            return (
-              <div className={`tab-strip-item${active ? " is-active" : ""}${own.length > 1 ? " has-panes" : ""}${editing?.tabId === tab.tab_id ? " is-editing" : ""}${reorder.drag?.tabId === tab.tab_id ? " is-dragging" : ""}${reorder.drag?.boundary === index ? " is-drop-before" : ""}${reorder.drag?.boundary === tabs.length && index === tabs.length - 1 ? " is-drop-after" : ""}`} key={tab.tab_id}>
-                {editing?.tabId === tab.tab_id ? (
-                  <input
-                    className="input tab-strip-rename"
-                    aria-label={t("Tab name")}
-                    autoFocus
-                    size={Math.max(8, editing.value.length + 1)}
-                    maxLength={MAX_LABEL_CHARS}
-                    placeholder={name}
-                    value={editing.value}
-                    onFocus={(event) => event.currentTarget.select()}
-                    onChange={(event) => setEditing({ tabId: tab.tab_id, value: event.target.value })}
-                    onBlur={() => setEditing(null)}
-                    onKeyDown={(event) => {
-                      event.stopPropagation();
-                      // an IME's Enter and Escape are the composition's, not the field's
-                      if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-                      if (event.key === "Enter") saveRename(tab);
-                      if (event.key === "Escape") { refocus.current = tab.tab_id; setEditing(null); }
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    role="tab"
-                    className="tab-strip-tab"
-                    data-tab-id={tab.tab_id}
-                    aria-selected={active}
-                    aria-haspopup="menu"
-                    aria-keyshortcuts={appLayout ? "Shift+F10" : "Shift+F10 Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"}
-                    aria-controls={panePanel}
-                    tabIndex={active ? 0 : -1}
-                    title={own.length === 1 && own[0] ? displayPaneTitle(own[0]) : t("{n} panes", { n: own.length })}
-                    onPointerDown={(event) => {
-                      reorder.onPointerDown(event, tab.tab_id);
-                      // the chat of the tab pressed starts reading before the click picks it
-                      const pane = event.button === 0 && !event.ctrlKey && !active ? paneFor(tab) : undefined;
-                      if (pane?.agent != null) pressPane?.(machineId, pane.pane_id);
-                    }}
-                    onPointerMove={reorder.onPointerMove}
-                    onPointerUp={reorder.onPointerUp}
-                    onPointerCancel={reorder.cancelDrag}
-                    onLostPointerCapture={reorder.cancelDrag}
-                    onDragStart={(event) => event.preventDefault()}
-                    onMouseDown={(event) => { if (event.button === 2 || (event.button === 0 && event.ctrlKey)) event.preventDefault(); }}
-                    onClick={(event) => {
-                      if (reorder.consumeClick(event.detail) || event.ctrlKey) return;
-                      event.currentTarget.focus({ preventScroll: true });
-                      const pane = paneFor(tab);
-                      if (pane && pane.pane_id !== selectedPane.pane_id) onSelectPane(pane.pane_id);
-                    }}
-                    onDoubleClick={appLayout ? undefined : () => beginRename(tab)}
-                    onContextMenu={(event) => { event.preventDefault(); openPicker(event, tab); }}
-                    // the middle button closes a tab, as it does a browser's
-                    onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); requestClose(tab); } }}
-                  >
-                    {/* a tab's agents show as their friends, which move with their state; a split shows two */}
-                    {own.some((pane) => pane.agent) ? <span className={`tab-strip-faces${own.filter((pane) => pane.agent).length > 1 ? " is-split" : ""}`} aria-hidden="true">
-                      {own.filter((pane) => pane.agent).slice(0, 2).map((pane) => {
-                        const friend = friends[friendKey(machineId, pane.pane_id)];
-                        const paneState = paneStatus(pane as HerdrPane);
-                        return friend
-                          ? <AgentFriend key={pane.pane_id} friend={friend} agent={pane.agent!} status={paneState === "waiting" ? "working" : paneState === "unknown" ? undefined : paneState} />
-                          : <AgentMark key={pane.pane_id} agent={pane.agent!} size={16} />;
-                      })}
-                    </span> : (status === "working" || status === "blocked" || status === "waiting" || status === "done") && (settings.statusIndicators === "classic"
-                      ? <span className="tab-strip-dot" data-status={status} aria-hidden="true" />
-                      : <span className="tab-strip-dot tab-strip-glyph" data-status={status} aria-hidden="true">{indicatorGlyph(status, settings.statusIndicators)}</span>)}
-                    <span className="tab-strip-label">{name}</span>
-                  </button>
-                )}
-                {menuButton && active && editing?.tabId !== tab.tab_id && <button type="button" className="tab-strip-menu" aria-label={t("Actions for {tab}", { tab: name })} title={t("Actions for {tab}", { tab: name })} aria-haspopup="menu" aria-expanded={pickerOpen} onClick={(event) => openPicker(event, tab)}>
-                  <Ellipsis aria-hidden="true" />
-                </button>}
-              </div>
-            );
-          })}
-        </div>
+  const row = (
+      <div ref={strip} className="tab-strip" role="tablist" aria-label={t("Tabs of {workspace}", { workspace: workspace.label })} aria-busy={reorder.moving} onKeyDown={onKeyDown} onScroll={onScroll}
+        onFocus={(event) => { if (event.target.getAttribute("role") === "tab") focusedTab.current = event.target; }}
+        onBlur={(event) => { if (event.relatedTarget !== null) focusedTab.current = null; }}>
+        {tabs.map((tab, index) => {
+          const active = tab.tab_id === selectedPane.tab_id;
+          const own = panesOf(tab);
+          // Settle each pane's wait before rolling up, so a sibling's RUN or DONE stays visible.
+          const status = rollupStatus(own.map((pane) => paneStatus(pane as HerdrPane)));
+          const pickerOpen = picker?.tab.tab_id === tab.tab_id;
+          const name = nameOf(tab);
+          return (
+            <div className={`tab-strip-item${active ? " is-active" : ""}${own.length > 1 ? " has-panes" : ""}${editing?.tabId === tab.tab_id ? " is-editing" : ""}${reorder.drag?.tabId === tab.tab_id ? " is-dragging" : ""}${reorder.drag?.boundary === index ? " is-drop-before" : ""}${reorder.drag?.boundary === tabs.length && index === tabs.length - 1 ? " is-drop-after" : ""}`} key={tab.tab_id}>
+              {editing?.tabId === tab.tab_id ? (
+                <input
+                  className="input tab-strip-rename"
+                  aria-label={t("Tab name")}
+                  autoFocus
+                  size={Math.max(8, editing.value.length + 1)}
+                  maxLength={MAX_LABEL_CHARS}
+                  placeholder={name}
+                  value={editing.value}
+                  onFocus={(event) => event.currentTarget.select()}
+                  onChange={(event) => setEditing({ tabId: tab.tab_id, value: event.target.value })}
+                  onBlur={() => setEditing(null)}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                    // an IME's Enter and Escape are the composition's, not the field's
+                    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+                    if (event.key === "Enter") saveRename(tab);
+                    if (event.key === "Escape") { refocus.current = tab.tab_id; setEditing(null); }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  role="tab"
+                  className="tab-strip-tab"
+                  data-tab-id={tab.tab_id}
+                  aria-selected={active}
+                  aria-haspopup="menu"
+                  aria-keyshortcuts={!arrange ? "Shift+F10" : "Shift+F10 Alt+Shift+ArrowLeft Alt+Shift+ArrowRight"}
+                  aria-controls={panePanel}
+                  tabIndex={active ? 0 : -1}
+                  title={own.length === 1 && own[0] ? displayPaneTitle(own[0]) : t("{n} panes", { n: own.length })}
+                  onPointerDown={(event) => {
+                    reorder.onPointerDown(event, tab.tab_id);
+                    // the chat of the tab pressed starts reading before the click picks it
+                    const pane = event.button === 0 && !event.ctrlKey && !active ? paneFor(tab) : undefined;
+                    if (pane?.agent != null) pressPane?.(machineId, pane.pane_id);
+                  }}
+                  onPointerMove={reorder.onPointerMove}
+                  onPointerUp={reorder.onPointerUp}
+                  onPointerCancel={reorder.cancelDrag}
+                  onLostPointerCapture={reorder.cancelDrag}
+                  onDragStart={(event) => event.preventDefault()}
+                  onMouseDown={(event) => { if (event.button === 2 || (event.button === 0 && event.ctrlKey)) event.preventDefault(); }}
+                  onClick={(event) => {
+                    if (reorder.consumeClick(event.detail) || event.ctrlKey) return;
+                    event.currentTarget.focus({ preventScroll: true });
+                    const pane = paneFor(tab);
+                    if (pane && pane.pane_id !== selectedPane.pane_id) onSelectPane(pane.pane_id);
+                  }}
+                  onDoubleClick={!renameOffered ? undefined : () => beginRename(tab)}
+                  onContextMenu={(event) => { event.preventDefault(); openPicker(event, tab); }}
+                  // the middle button closes a tab, as it does a browser's
+                  onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); requestClose(tab); } }}
+                >
+                  {/* a tab's agents show as their friends, which move with their state; a split shows two */}
+                  {own.some((pane) => pane.agent) ? <span className={`tab-strip-faces${own.filter((pane) => pane.agent).length > 1 ? " is-split" : ""}`} aria-hidden="true">
+                    {own.filter((pane) => pane.agent).slice(0, 2).map((pane) => {
+                      const friend = friends[friendKey(machineId, pane.pane_id)];
+                      const paneState = paneStatus(pane as HerdrPane);
+                      return friend
+                        ? <AgentFriend key={pane.pane_id} friend={friend} agent={pane.agent!} status={paneState === "waiting" ? "working" : paneState === "unknown" ? undefined : paneState} />
+                        : <AgentMark key={pane.pane_id} agent={pane.agent!} size={16} />;
+                    })}
+                  </span> : (status === "working" || status === "blocked" || status === "waiting" || status === "done") && (settings.statusIndicators === "classic"
+                    ? <span className="tab-strip-dot" data-status={status} aria-hidden="true" />
+                    : <span className="tab-strip-dot tab-strip-glyph" data-status={status} aria-hidden="true">{indicatorGlyph(status, settings.statusIndicators)}</span>)}
+                  <span className="tab-strip-label">{name}</span>
+                </button>
+              )}
+              {menuButton && active && editing?.tabId !== tab.tab_id && <button type="button" className="tab-strip-menu" aria-label={t("Actions for {tab}", { tab: name })} title={t("Actions for {tab}", { tab: name })} aria-haspopup="menu" aria-expanded={pickerOpen} onClick={(event) => openPicker(event, tab)}>
+                <Ellipsis aria-hidden="true" />
+              </button>}
+            </div>
+          );
+        })}
         <button type="button" className="tab-strip-add" aria-label={t("New terminal")} title={t("New terminal")}
           onClick={() => { setError(null); void onNewTerminal().catch((reason: unknown) => setError(t("New terminal failed: {reason}", { reason: said(reason) }))); }}>
           <Plus aria-hidden="true" />
         </button>
         {error && <span className="tab-strip-error" role="alert">{error}</span>}
-        {end !== undefined && <div className="tab-strip-end">{end}</div>}
       </div>
+    );
+  return (
+    <>
+      {end === undefined ? row : <div className="tab-strip-row">{row}<div className="tab-strip-end">{end}</div></div>}
       {picker && <RowMenu key={picker.workspaces ? "workspaces" : "tab"} anchor={picker.anchor} point={picker.point} restoreFocusTo={picker.previousFocus}
         title={picker.workspaces ? t("Move {tab} to", { tab: nameOf(picker.tab) }) : nameOf(picker.tab)}
         subtitle={picker.workspaces ? undefined : place}

@@ -18,13 +18,14 @@ export interface FilePanelsParams {
 export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId }: FilePanelsParams) {
   // the Files dialog, and the file open in the viewer (a path as the chat or the dialog gave it)
   const [filesOpen, setFilesOpen] = useState(false);
-  const filesDocked = filePanelAvailable && settings.fileBrowser === "panel";
-  useFocusReturn(filesOpen && filesDocked);
   const { viewing, openFile: openPreview, closeFile, setPresentation, releaseFile } = useFileViewer();
   // a repository diff from the Files dialog's Changes tab, an entry of its own like a file
   const { viewing: diffViewing, openDiff, closeDiff, releaseDiff } = useRepoDiffViewer();
   const presentation = viewing?.presentation ?? openPresentation(viewing?.path ?? "", settings.fileOpen);
   const fileDocked = filePanelAvailable && presentation === "panel";
+  // Files beside the pane (opt-in, wide windows) shares the docked file's place: a file docking there
+  // covers it, and closing the file shows Files again
+  const filesDocked = filePanelAvailable && settings.filesPanel;
   useEffect(() => {
     if (viewing !== null && fileDocked && !filesDocked) setFilesOpen(false);
   }, [viewing, fileDocked, filesDocked]);
@@ -41,6 +42,23 @@ export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, se
   useEffect(() => {
     if (viewing !== null && fileDocked && webPage !== null) closeWebPage(true);
   }, [viewing, fileDocked, webPage, closeWebPage]);
+  // a docked file or web page over Files beside the pane; opening Files again (its button, the palette) closes it
+  const filesCovered = (viewing !== null && fileDocked) || webPage !== null;
+  const revealFiles = useCallback(() => {
+    setFilesOpen(true);
+    if (!filesDocked) return;
+    if (viewing !== null && fileDocked) closeFile();
+    else if (webPage !== null) closeWebPage();
+  }, [filesDocked, viewing, fileDocked, closeFile, webPage, closeWebPage]);
+  // no dialog, so no trap gives the focus back when it closes: what opened it gets it, as for the docked file
+  useFocusReturn(filesOpen && filesDocked);
+  // Files closes with the dock it lived in when the window narrows: a dialog mounted then would come up
+  // under a popup file or web page already open and take their focus and Escape
+  const wasDocked = useRef(filesDocked);
+  useEffect(() => {
+    if (wasDocked.current && !filesDocked) setFilesOpen(false);
+    wasDocked.current = filesDocked;
+  }, [filesDocked]);
   // the panel is no dialog, so no trap gives the focus back when it closes: what opened the file
   // (a link in the chat, a row of Files) gets it, as it does from the popup
   useFocusReturn(viewing !== null && fileDocked);
@@ -112,5 +130,5 @@ export function useFilePanels({ settings, filePanelAvailable, selectedPaneId, se
     if (!filesDocked && filePanelAvailable && openPresentation(path, settings.fileOpen) === "panel") setFilesOpen(false);
     openFile({ path, paneId: selectedPaneId, machineId: selectedMachineId });
   }, [openFile, selectedPaneId, selectedMachineId, filePanelAvailable, settings.fileOpen, filesDocked]);
-  return { filesOpen, setFilesOpen, filesDocked, viewing, openFile, closeFile, setPresentation, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, closeWebPage, openWebPage, collapsing, presentFile, openDiffFile, reportFileKind, toggleFilePresentation, viewFile };
+  return { filesOpen, setFilesOpen, filesDocked, filesCovered, revealFiles, viewing, openFile, closeFile, setPresentation, releaseFile, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, closeWebPage, openWebPage, collapsing, presentFile, openDiffFile, reportFileKind, toggleFilePresentation, viewFile };
 }

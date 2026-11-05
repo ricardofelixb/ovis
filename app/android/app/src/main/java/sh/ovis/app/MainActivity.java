@@ -77,6 +77,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(HerdrShellPlugin.class);
+        registerPlugin(OvisAuthPlugin.class);
         // a window keeps its PC through reopen and the app's process being killed (its saved state),
         // so another window choosing a PC leaves it where it is; a window the launcher opens shows
         // the app's current PC
