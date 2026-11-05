@@ -1070,23 +1070,16 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   A lone pane beside such a `⋯` draws no second ellipsis (its actions are in the tab's menu), on a
   desktop as on touch. The pane's own context menu carries pane actions; it opens at the pointer
   without changing which pane is focused. The pane header's ellipsis opens the same menu on touch.
-  Unlike upstream's raw height query, a keyboard shortening a tall phone keeps the tab row and
-  its pane controls (`lib/useCramped.ts`): typing must not change the navigation layout. The value
-  from before typing holds until the keyboard closes or the screen width changes (rotation).
-  A lone tab with no row (a phone at most 700px tall, including the iPhone Duo's 678-point outer
-  display, or landscape) draws no pane ellipsis either: a second
-  `⋯` below the glass header would repeat the header's own. The header's `⋯` is then the one menu,
-  as an iPhone navigation bar (and the Claude iOS app) keeps one overflow button in the bar. After its
-  own items and a divider it carries what the missing row's menu would: a split tab's panes first,
-  then the pane's actions, then New terminal (the row's `+`), New tab with agent… (as Chrome for
-  iPhone keeps New Tab in its overflow menu) and Rename tab, in a dialog in place of the row's inline
-  field, which the palette's Rename tab and its shortcut open too. Move to workspace… (a one-pane
-  tab) lists the other workspaces in a second menu, where the row's menu lists them in place, and
-  Close tab asks first, as the row's does for a workspace's last tab: it closes the workspace too,
-  and is the one way to close a split tab whole there. Extending the compact-height state to the Duo follows
-  Apple's outer-display guidance to put chrome at the edge and preserve vertical room for content.
-  Wherever a lone pane's ellipsis shows to a finger, the pane's banners (View only and the rest)
-  start below it, so none covers it; with no row they start below the glass header.
+  Unlike upstream, this fork never hides a tab row because it has only one tab or the screen is
+  short: opening the keyboard must not remove navigation. The row, its `+` and tab actions remain
+  visible on a foldable's outer display and in landscape too. Rename tab from the palette or its
+  shortcut always uses the row's inline field.
+  A compact one-tab phone still folds the pane header into More to save a second header row, as
+  an iPhone navigation bar (and the Claude iOS app) keeps one overflow button in the bar. More
+  carries the pane and tab actions as well as its own items; the tab's menu remains available.
+  A keyboard shortening a tall phone holds that pane-menu layout from before typing until the
+  keyboard closes or the screen width changes (`lib/useCramped.ts`). View-only and other pane
+  banners stay below the app header.
 - On a PC whose terminals are the Herdr app's (`HerdrIdentity.runtime` `herdr-core`), the app's
   window owns the workspaces, tabs and splits, and herdr-core refuses to rename, reorder or move
   them, to split, swap, zoom or resize a pane, and the worktree actions. The browser then leaves

@@ -25,8 +25,7 @@ import { autoTabLabel, customTabLabel, tabLabel } from "../lib/tabName.ts";
 import { shownTabLabels, subscribeTabLabels } from "../lib/tabLabels.ts";
 import { STRIP_AT_REST, stripPlaced, stripScrolled, stripSelected, type StripScroll } from "../lib/tabStripScroll.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "../lib/paneRegion.ts";
-import { loneTabHidden, SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
-import { useCramped } from "../lib/useCramped.ts";
+import { SOLO_PANE_QUERY } from "../lib/paneCanvas.ts";
 import { rosterPanes } from "../lib/dagPane.ts";
 import { moveDestinations } from "../lib/layoutTargets.ts";
 import { useAppLayout, useMachineApi, useMachineId } from "../lib/machineContext.tsx";
@@ -95,9 +94,6 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const hoverMenu = useMediaQuery("(hover: hover) and (pointer: fine) and (min-width: 769px)");
   const menuButton = touchMenu || hoverMenu;
   const soloPanes = useMediaQuery(SOLO_PANE_QUERY);
-  // a compact-height phone screen (a foldable's outer display, landscape or the keyboard) has no
-  // height to spare: a lone tab is not drawn there, so the pane and approval cards keep their room
-  const cramped = useCramped();
   const strip = useRef<HTMLDivElement>(null);
   const [picker, setPicker] = useState<{ anchor: HTMLElement; tab: HerdrTab; point?: { x: number; y: number }; previousFocus: HTMLElement | null; touch: boolean; workspaces?: true } | null>(null);
   const [editing, setEditing] = useState<{ tabId: string; value: string } | null>(null);
@@ -248,7 +244,6 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   // Anything with sideways motion (a trackpad, even a mostly vertical diagonal swipe) is the
   // browser's: moved by deltaY alone, the strip would go against the swipe's sideways part (#2103).
   // React's own onWheel is passive, so the listener is the strip's own.
-  const tabsHidden = loneTabHidden(cramped, tabs.length);
   useEffect(() => {
     const row = strip.current;
     if (!row) return;
@@ -262,7 +257,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     };
     row.addEventListener("wheel", onWheel, { passive: false });
     return () => row.removeEventListener("wheel", onWheel);
-  }, [shown, tabsHidden]);
+  }, [shown]);
   // Header buttons can change the strip's width, and late fonts can resize the tabs without
   // resizing their scroller. Measure after either settles, unless the user scrolled elsewhere.
   useEffect(() => {
@@ -272,7 +267,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     observer.observe(row);
     row.querySelectorAll(".tab-strip-item").forEach((item) => observer.observe(item));
     return () => observer.disconnect();
-  }, [shown, tabsHidden, tabs.length]);
+  }, [shown, tabs.length]);
   const onScroll = (): void => {
     const row = strip.current;
     if (row) scroll.current = stripScrolled(scroll.current, row.scrollLeft, row.scrollWidth - row.clientWidth);
@@ -288,12 +283,12 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     if (renameRequest === null) return;
     const tab = tabs.find((candidate) => candidate.tab_id === selectedPane.tab_id);
     // a second press while the field is open keeps what was typed in it
-    if (tab && shown && !loneTabHidden(cramped, tabs.length) && editing?.tabId !== tab.tab_id && renameOffered) beginRename(tab);
+    if (tab && shown && editing?.tabId !== tab.tab_id && renameOffered) beginRename(tab);
     onRenameHandled?.();
   }, [renameRequest]);
 
-  // a name being typed keeps its row: a keyboard that shortens the screen past the cutoff leaves the field in place
-  if (!shown || (loneTabHidden(cramped, tabs.length) && editing === null)) return null;
+  // One tab is still navigation: neither a short screen nor its keyboard takes the row away.
+  if (!shown) return null;
 
   const panesOf = (tab: HerdrTab): PaneInfo[] => panes.filter((pane) => pane.tab_id === tab.tab_id);
   const paneFor = (tab: HerdrTab): PaneInfo | undefined => {
