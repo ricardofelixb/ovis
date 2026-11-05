@@ -142,6 +142,8 @@ jobs:
           for path in glob.glob('bundles/manifest-*.json'):
               data = json.load(open(path))
               assert data['version'] == version
+              revision = data['revision']
+              assert result.setdefault('revision', revision) == revision
               for platform, asset in data['assets'].items():
                   asset['url'] = 'https://github.com/' + os.environ['REPOSITORY'] + '/releases/download/' + os.environ['RELEASE_TAG'] + '/' + asset['url']
                   result['assets'][platform] = asset

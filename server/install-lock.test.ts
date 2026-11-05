@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REMOTE_BUNDLE_VERSION } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
 import { INSTALL_UPLOAD_TIMEOUT_S, installLockOwner, posixHost, POSIX_INSTALL_LOCK, POSIX_INSTALL_RELEASE, windowsHost, WINDOWS_INSTALL_LOCK, WINDOWS_INSTALL_RELEASE, withWindowsInstallAttempt } from "./remote-host.ts";
 import type { SshConnection } from "./ssh.ts";
 
@@ -121,7 +121,7 @@ it("keeps both reclaim ages beyond the actual SSH install timeouts", async () =>
   writeFileSync(join(base, "bundle.tgz"), bytes);
   const manifest = join(base, "manifest.json");
   const asset = { url: "bundle.tgz", sha256 };
-  writeFileSync(manifest, JSON.stringify({ version: REMOTE_BUNDLE_VERSION, assets: { "win32-x64": asset, "linux-x64": asset } }));
+  writeFileSync(manifest, JSON.stringify({ version: REMOTE_BUNDLE_VERSION.split("+")[0], revision: REMOTE_BUNDLE_VERSION, assets: { "win32-x64": asset, "linux-x64": asset } }));
   const previous = process.env["OVIS_BUNDLE_MANIFEST"];
   process.env["OVIS_BUNDLE_MANIFEST"] = manifest;
   let uploadTimeout: number | undefined;

@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { REMOTE_BUNDLE_VERSION } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION as RELEASE_VERSION } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
 import { bundleFile, bundleManifestSource } from "./remote-bundle.ts";
 import { RemoteResponseTooLarge } from "./remote-json.ts";
 
@@ -15,7 +16,7 @@ function fixture(platform: string) {
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   writeFileSync(join(directory, "bundle.tgz"), bytes);
   const manifest = join(directory, `manifest-${platform}.json`);
-  writeFileSync(manifest, JSON.stringify({ version: REMOTE_BUNDLE_VERSION, assets: { [platform]: { url: "bundle.tgz", sha256 } } }));
+  writeFileSync(manifest, JSON.stringify({ version: RELEASE_VERSION, revision: REMOTE_BUNDLE_VERSION, assets: { [platform]: { url: "bundle.tgz", sha256 } } }));
   return { directory, manifest, bytes, sha256 };
 }
 
@@ -42,7 +43,7 @@ describe("remote bundle sources", () => {
     const { bytes, sha256, directory } = fixture("linux-x64");
     const cacheDir = join(directory, "cache"); mkdirSync(cacheDir);
     writeFileSync(join(cacheDir, `${sha256}.tgz`), bytes);
-    const manifest = { version: REMOTE_BUNDLE_VERSION, assets: { "linux-x64": { url: "https://bundles.invalid/bundle.tgz", sha256 } } };
+    const manifest = { version: RELEASE_VERSION, revision: REMOTE_BUNDLE_VERSION, assets: { "linux-x64": { url: "https://bundles.invalid/bundle.tgz", sha256 } } };
     const options = { manifest: "https://releases.invalid/manifest.json", cacheDir };
     let next = served(manifest, 1024 * 1024);
     const release = spyOn(globalThis, "fetch").mockImplementation(Object.assign(async () => next.response, { preconnect: fetch.preconnect }));
@@ -79,7 +80,7 @@ describe("remote bundle sources", () => {
 
   it("uses the release only when the requested platform has no local manifest", async () => {
     const { directory } = fixture("linux-x64");
-    expect(await bundleManifestSource("darwin-arm64", { directory, manifest: "" })).toBe(`https://github.com/ricardofelixb/ovis/releases/download/remote-v${REMOTE_BUNDLE_VERSION}/manifest.json`);
+    expect(await bundleManifestSource("darwin-arm64", { directory, manifest: "" })).toBe(`https://github.com/ricardofelixb/ovis/releases/download/remote-v${RELEASE_VERSION}/manifest.json`);
     await expect(bundleManifestSource("../linux-x64", { directory })).rejects.toThrow("Unsupported bundle platform");
   });
 
@@ -94,7 +95,7 @@ describe("remote bundle sources", () => {
     const options = { directory, manifest: "" };
     writeFileSync(manifest, JSON.stringify({ version: "incompatible", assets: {} }));
     await expect(bundleFile("darwin-arm64", new AbortController().signal, options)).rejects.toThrow("version mismatch");
-    writeFileSync(manifest, JSON.stringify({ version: REMOTE_BUNDLE_VERSION, assets: { "darwin-arm64": { url: "../bundle.tgz", sha256 } } }));
+    writeFileSync(manifest, JSON.stringify({ version: RELEASE_VERSION, revision: REMOTE_BUNDLE_VERSION, assets: { "darwin-arm64": { url: "../bundle.tgz", sha256 } } }));
     await expect(bundleFile("darwin-arm64", new AbortController().signal, options)).rejects.toThrow("Bundle URL must use HTTPS");
     const controller = new AbortController(); controller.abort(new Error("test cancelled"));
     await expect(bundleFile("darwin-arm64", controller.signal, options)).rejects.toThrow("test cancelled");
@@ -103,7 +104,7 @@ describe("remote bundle sources", () => {
   it("reuses a cached release bundle by checksum and never trusts a changed one", async () => {
     const { directory, manifest, bytes, sha256 } = fixture("linux-x64");
     // an unreachable release URL: only the cache can answer
-    writeFileSync(manifest, JSON.stringify({ version: REMOTE_BUNDLE_VERSION, assets: { "linux-x64": { url: "https://bundles.invalid/bundle.tgz", sha256 } } }));
+    writeFileSync(manifest, JSON.stringify({ version: RELEASE_VERSION, revision: REMOTE_BUNDLE_VERSION, assets: { "linux-x64": { url: "https://bundles.invalid/bundle.tgz", sha256 } } }));
     const cacheDir = join(directory, "cache"); mkdirSync(cacheDir);
     writeFileSync(join(cacheDir, `${sha256}.tgz`), bytes);
     const options = { directory, manifest: "", cacheDir };

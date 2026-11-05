@@ -3,7 +3,8 @@ import { chmodSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync,
 import { isIP } from "node:net";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { BRIDGE_PROTOCOL, REMOTE_BUNDLE_VERSION, type BridgeIdentity } from "../shared/machines.ts";
+import { BRIDGE_PROTOCOL, type BridgeIdentity } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
 import { HerdrError, herdrSocketPath, ping } from "./herdr/client.ts";
 import { OwnerGuardUnavailable, withOwnerGuard } from "./owner-guard.ts";
 import { newOwnerRecord, ownerGone, probeProcess, type ProcessBirth } from "./process-owner.ts";

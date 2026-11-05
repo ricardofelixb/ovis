@@ -17,6 +17,8 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { releaseNotes } from "./release-notes.ts";
+import { BUNDLE_PATHSPECS, bundleInput, BUNDLE_WORKFLOW, bunPins, dependencies } from "../server/bundle-version.ts";
+export { BUNDLE_PATHSPECS, bundleInput, BUNDLE_WORKFLOW, bunPins, dependencies } from "../server/bundle-version.ts";
 import { SUMMARIES_FILE } from "../server/release-notes.ts";
 import { discard, readCappedJson, REMOTE_LIMITS, RemoteResponseInvalid, RemoteResponseTooLarge } from "../server/remote-json.ts";
 
@@ -28,18 +30,7 @@ const MACHINES = "shared/machines.ts";
  * node_modules (bun.lock, patches/) and the builder's own pins. dist/ is left out: a bridge's page
  * is never opened, the connection server's is. Docs and test fixtures are copied but never run.
  */
-export const BUNDLE_PATHSPECS = ["server", "shared", "integrations", "patches", "bun.lock", "scripts/build-remote-bundle.ts", "scripts/install-gjc-integration.ts", "scripts/install-pi-integration.ts", "scripts/pty-sidecar.ts", "crates/pty-sidecar"];
-export const bundleInput = (path: string): boolean => BUNDLE_PATHSPECS.some((spec) => path === spec || path.startsWith(`${spec}/`))
-  && !path.endsWith(".test.ts") && !path.endsWith(".md") && !path.startsWith("server/fixtures/");
-/** The Linux bundles carry the bun that builds them (process.execPath), so its pin in this workflow is a bundle input too. */
-export const BUNDLE_WORKFLOW = ".github/workflows/remote-bundles.yml";
-export const bunPins = (workflow: string): string => [...workflow.matchAll(/bun-version:\s*(\S+)/g)].map((match) => match[1]).join(" ");
-/** package.json's fields that decide node_modules; its version changes in every release and decides nothing */
-const DEPENDENCY_FIELDS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies", "patchedDependencies", "overrides", "trustedDependencies"];
-export const dependencies = (packageJson: string): string => {
-  const parsed = JSON.parse(packageJson) as Record<string, unknown>;
-  return JSON.stringify(DEPENDENCY_FIELDS.map((field) => parsed[field] ?? null));
-};
+// Runtime identity and release validation use the same bundle inputs.
 
 export const bundleVersion = (machines: string): string => {
   const version = /^export const REMOTE_BUNDLE_VERSION = "(\d+)";$/m.exec(machines)?.[1];

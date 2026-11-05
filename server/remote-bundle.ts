@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { join, dirname } from "node:path";
-import { REMOTE_BUNDLE_VERSION } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
+import { REMOTE_BUNDLE_VERSION as RELEASE_VERSION } from "../shared/machines.ts";
+import { ensureSourceBundle } from "./source-bundle.ts";
 import { discard, readCappedJson, REMOTE_LIMITS } from "./remote-json.ts";
 
 export interface BundleManifest {
   version: string;
+  revision?: string;
   assets: Record<string, { url: string; sha256: string }>;
 }
 interface BundleSourceOptions { manifest?: string; directory?: string }
@@ -16,9 +19,11 @@ export async function bundleManifestSource(platform: string, options: BundleSour
   // Development installs can distribute locally built runtimes without publishing
   // a release. Resolve beside this server, never against its launch directory.
   const local = join(options.directory ?? join(import.meta.dir, "..", "remote-bundles"), `manifest-${platform}.json`);
+  // Only this source checkout may build; explicit manifests and test directories stay read-only.
+  if (options.directory === undefined) await ensureSourceBundle(platform);
   try { await access(local); return local; }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-  return `https://github.com/ricardofelixb/ovis/releases/download/remote-v${REMOTE_BUNDLE_VERSION}/manifest.json`;
+  return `https://github.com/ricardofelixb/ovis/releases/download/remote-v${RELEASE_VERSION}/manifest.json`;
 }
 export interface BundleFile { path: string; sha256: string; size: number }
 interface BundleFileOptions extends BundleSourceOptions {
@@ -94,7 +99,7 @@ export async function bundleFile(platform: string, signal: AbortSignal, options:
       return readCappedJson<BundleManifest>(r, REMOTE_LIMITS.bundleManifest);
     })
     : JSON.parse(await readFile(source, { encoding: "utf8", signal }));
-  if (manifest.version !== REMOTE_BUNDLE_VERSION) throw new Error("Remote bundle version mismatch");
+  if (manifest.revision !== REMOTE_BUNDLE_VERSION) throw new Error("Remote bundle version mismatch");
   const asset = manifest.assets[platform];
   if (!asset || !/^[a-f0-9]{64}$/.test(asset.sha256)) throw new Error(`No verified bundle for ${platform}`);
   let path: string;

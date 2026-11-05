@@ -14,7 +14,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { win32 } from "node:path";
-import { REMOTE_BUNDLE_VERSION, type SshTarget } from "../shared/machines.ts";
+import type { SshTarget } from "../shared/machines.ts";
+import { REMOTE_BUNDLE_VERSION } from "./bundle-version.ts";
 import type { BridgeDescriptor } from "./bridge.ts";
 import { shellQuote } from "./machine-security.ts";
 import { bundleFile, type InstallStage } from "./remote-bundle.ts";
