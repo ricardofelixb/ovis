@@ -2131,7 +2131,10 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   available width without covering the pane. Its left edge uses the file viewer's resize grip:
   drag or use arrows, Home and End; double-click to reset. Width is kept on this device separately
   from the preview (`ovis:files-browser-width`), between 220px and 600px where space permits.
-  Both panels shrink as needed to leave the pane at least 320px. Unlike Zed's default left dock,
+  Both panels shrink as needed to leave the pane at least 320px. The browser spans the window's
+  full height; its Close replaces the redundant Files and More controls above it while docked.
+  Browse and Changes lists fill the remaining height and scroll inside their toolbar and footer,
+  following VS Code's Explorer instead of keeping the popup's row cap. Unlike Zed's default left dock,
   it stays on the right to match Ovis's existing file viewer.
   A file opens in the popup unless Settings → Chat → Open files is Beside the pane (`fileOpen`,
   per device), which docks text and code from 980px; the header button moves the open file either way.

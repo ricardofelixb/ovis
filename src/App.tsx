@@ -629,6 +629,7 @@ export function App() {
       onBrowseFolders={(path) => actions.openPalette(folderQueryFor(path, null))}
       onClose={() => setFilesOpen(false)} />
   ) : null;
+  const dockedBrowser = filesDocked && filesBrowser !== null && screenMachineId === null;
 
   if (locked === null) {
     // the auth state is unknown until /api/health or /api/session answers (ten seconds when
@@ -698,7 +699,7 @@ export function App() {
         {selectedPane && !splitOn && <div ref={setHeaderTabs} className="header-tabs" hidden={screenMachineId !== null} />}
         {screenMachineId !== null && <span className="machine-context-name header-screen-name">{machineName(screenMachineId)}</span>}
         {/* a PC's desktop is the host's alone: the pane's own controls step aside with its tabs */}
-        {selectedPane && screenMachineId === null && wideScreen && (
+        {selectedPane && screenMachineId === null && wideScreen && !dockedBrowser && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
             <span className="header-divider" aria-hidden="true" />
@@ -722,7 +723,7 @@ export function App() {
             : localFreshness === "unknown"
               ? <span className="pill pill-stale" title={health ? t("The last health check failed. Last seen: herdr {version} · protocol {protocol}", { version: health.herdr.version, protocol: health.herdr.protocol }) : t("The health check failed")}>{t("Status unknown")}</span>
               : localFreshness === "unavailable" && <span className="pill pill-offline" title={t("Start herdr on this PC, or check HERDR_SOCKET.")}>{t("herdr unavailable")}</span>}
-          <span className="header-more">
+          {!dockedBrowser && <span className="header-more">
             <button
               type="button"
               className="icon-button header-more-button"
@@ -740,7 +741,7 @@ export function App() {
               <Ellipsis />
             </button>
             {alertsOffDot && <span className="header-more-dot" aria-hidden="true" />}
-          </span>
+          </span>}
         </div>
         {more && (
           <RowMenu

@@ -550,6 +550,21 @@ try {
   await openFiles(page);
   const browserPanel = page.getByRole("region", { name: "Files", exact: true });
   await browserPanel.waitFor();
+  const assertDockedListFills = async (selector: string) => {
+    const layout = await browserPanel.locator(selector).evaluate((element) => ({
+      height: element.getBoundingClientRect().height,
+      max: getComputedStyle(element).maxHeight,
+      viewport: innerHeight,
+      bottom: element.parentElement!.getBoundingClientRect().bottom,
+      bodyBottom: element.closest(".modal-body")!.getBoundingClientRect().bottom,
+    }));
+    assert.equal(layout.max, "none", "a docked list has no popup height cap");
+    assert.ok(layout.height > layout.viewport / 2, `${selector}: the list uses the available height`);
+    assert.ok(layout.bodyBottom - layout.bottom <= 16, `${selector}: the browser reaches the bottom padding`);
+  };
+  await assertDockedListFills(".dir-browser-list");
+  assert.equal(await page.locator(".header-files-button, .header-more-button").count(), 0, "the docked browser replaces redundant header controls with its own Close");
+  assert.equal(await browserPanel.getByRole("button", { name: "Close files", exact: true }).count(), 1);
   assert.equal(await page.locator('.modal-scrim, [aria-modal="true"]').count(), 0, "the browser sidebar is not modal");
   await browserPanel.locator(".dir-browser-item.is-file").filter({ hasText: "notes.txt" }).click();
   await panel.getByText("File preview history regression", { exact: true }).waitFor();
@@ -578,6 +593,11 @@ try {
   for (const width of [980, 1280, 1440]) {
     await page.setViewportSize({ width, height: 800 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px: the two panels do not widen the page`);
+    const browserBounds = await browserPanel.boundingBox();
+    const appBounds = await page.locator(".app").boundingBox();
+    assert.ok(browserBounds && appBounds && Math.abs(browserBounds.y - appBounds.y) <= 1 && Math.abs(browserBounds.y + browserBounds.height - appBounds.y - appBounds.height) <= 1, `${width}px: the browser uses the app's full height`);
+    const headerBounds = await page.locator(".app-header").boundingBox();
+    assert.ok(headerBounds && browserBounds && headerBounds.x + headerBounds.width <= browserBounds.x + 1, `${width}px: the pane header does not extend behind the browser or preview`);
     const paneBounds = await page.locator(".pane-column").boundingBox();
     assert.ok(paneBounds && paneBounds.width >= 279, `${width}px: the pane retains room beside both panels`);
     if (process.env.UI_EVIDENCE_DIR) await page.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, `files-browser-and-preview-${width}.png`) });
@@ -590,6 +610,10 @@ try {
   await panel.getByRole("button", { name: "Close file", exact: true }).click();
   await panel.waitFor({ state: "detached" });
   await browserPanel.getByRole("button", { name: "Changes", exact: true }).click();
+  await browserPanel.locator(".repo-change").filter({ hasText: "notes.txt" }).waitFor();
+  assert.equal(await browserPanel.locator(".dir-browser").isVisible(), false, "the inactive Browse tab stays hidden");
+  await assertDockedListFills(".repo-changes-list");
+  if (process.env.UI_EVIDENCE_DIR) await page.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, "file-browser-full-height.png") });
   await browserPanel.locator(".repo-change").filter({ hasText: "notes.txt" }).click();
   await page.getByRole("button", { name: "Close diff", exact: true }).click();
   assert.ok(await browserPanel.isVisible(), "closing a diff keeps the Changes sidebar");
@@ -597,6 +621,7 @@ try {
   const browserPopup = page.getByRole("dialog", { name: "Files", exact: true });
   await browserPopup.waitFor();
   assert.equal(await browserPanel.count(), 0, "a narrow window uses the original modal browser");
+  assert.equal(await page.locator(".header-more-button").isVisible(), true, "the popup keeps the ordinary header controls");
   await browserPopup.getByRole("button", { name: "Close files", exact: true }).click();
   await browserPopup.waitFor({ state: "detached" });
   await page.setViewportSize({ width: 1280, height: 800 });
