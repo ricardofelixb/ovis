@@ -264,7 +264,7 @@ it.skipIf(!onWindows)("installs with native tar when PATH shadows tar, and prese
     writeFileSync(join(home, "shadow", "tar.exe"), "not a Windows executable");
     await runPowerShell(`& "$env:SystemRoot\\System32\\tar.exe" -czf ${psQuote(join(home, "bundle.tgz"))} -C ${psQuote(join(home, "input"))} .; if ($LASTEXITCODE -ne 0) { throw 'fixture archive failed' }`);
     const manifest = join(home, "manifest.json");
-    const writeManifest = async () => writeFileSync(manifest, JSON.stringify({ version: REMOTE_BUNDLE_VERSION, assets: { "win32-x64": { url: "bundle.tgz", sha256: createHash("sha256").update(new Uint8Array(await Bun.file(join(home, "bundle.tgz")).arrayBuffer())).digest("hex") } } }));
+    const writeManifest = async () => writeFileSync(manifest, JSON.stringify({ version: REMOTE_BUNDLE_VERSION.split("+")[0], revision: REMOTE_BUNDLE_VERSION, assets: { "win32-x64": { url: "bundle.tgz", sha256: createHash("sha256").update(new Uint8Array(await Bun.file(join(home, "bundle.tgz")).arrayBuffer())).digest("hex") } } }));
     await writeManifest();
     process.env["OVIS_BUNDLE_MANIFEST"] = manifest;
     await windowsHost.installBundle(ssh, "win32-x64", AbortSignal.timeout(60_000));
