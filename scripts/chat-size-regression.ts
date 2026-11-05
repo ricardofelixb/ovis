@@ -9,7 +9,7 @@ import { createServer } from "../server/index.ts";
 import { PtySession } from "../server/pty/session.ts";
 import { herdrRpc, herdrSocketPath, type WorkspaceCreateResult, paneRead, paneSendKeys, paneSendText, tabCreate, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
-import { pickLens } from "./view-toggle.ts";
+import { pickLens, VIEW_BUTTON } from "./view-toggle.ts";
 
 /** how long a resize that should not happen gets to show up */
 const NO_RESIZE_WAIT_MS = 400;
@@ -206,8 +206,13 @@ export async function checkChatKeepsTerminalSize(browser: Browser, origin: strin
       }
       socket.addEventListener("message", receive);
     }, desktopSize.split(" ").map(Number));
-    const chatAt = Date.now();
-    await pickLens(phone, "chat", { tap: true });
+    // the budget runs from the switch itself: the click on the toggle, not the tap that opens More or the menu settling
+    await phone.locator(VIEW_BUTTON).tap();
+    const toggle = phone.locator(".row-menu, .row-sheet").locator("button:has(.row-menu-switch-track)");
+    await toggle.evaluate((node) => node.addEventListener("click", () => Object.assign(window, { switchedAt_: Date.now() }), { capture: true, once: true }));
+    await toggle.tap();
+    await phone.locator(`${VIEW_BUTTON}[data-view="chat"]`).waitFor();
+    const chatAt = await phone.evaluate(() => (window as unknown as { switchedAt_: number }).switchedAt_);
     const restoredAt = await desktop.evaluate(() => (window as unknown as { gridRestored_: Promise<number> }).gridRestored_);
     assert.ok(restoredAt - chatAt <= 1_000, "phone Chat restores the visible desktop grid within 1 s");
     // pane-geometry announces the resize before the sidecar applies it to herdr's pty.

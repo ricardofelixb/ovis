@@ -20,7 +20,8 @@ if (evidence) mkdirSync(evidence, { recursive: true });
 const paneMenu = async (page: Page, width: number): Promise<void> => {
   if (width >= 640) await page.locator(".pane-frame.is-current .chat-view").click({ button: "right", position: { x: 300, y: 200 } });
   else await page.locator(".tab-strip-menu").first().click();
-  await page.getByText("Close pane", { exact: true }).first().waitFor();
+  // a one-pane tab's phone menu acts on the tab alone, so it closes the tab, not the pane
+  await page.getByText(/^Close (pane|tab)$/).first().waitFor();
 };
 const paletteActions = async (page: Page): Promise<string[]> => {
   await page.keyboard.press("Control+Shift+K");
