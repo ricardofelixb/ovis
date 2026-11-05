@@ -718,7 +718,8 @@ export function sanitizeSettings(raw: unknown): Settings {
     markdownWidth: MARKDOWN_WIDTHS.find((width) => width === record["markdownWidth"]) ?? DEFAULT_SETTINGS.markdownWidth,
     diffStyle: DIFF_STYLES.find((style) => style === record["diffStyle"]) ?? DEFAULT_SETTINGS.diffStyle,
     fileOpen: FILE_OPEN_TARGETS.find((target) => target === record["fileOpen"]) ?? DEFAULT_SETTINGS.fileOpen,
-    filesPanel: typeof record["filesPanel"] === "boolean" ? record["filesPanel"] : DEFAULT_SETTINGS.filesPanel,
+    filesPanel: typeof record["filesPanel"] === "boolean" ? record["filesPanel"]
+      : record["filesPanel"] === undefined && record["fileBrowser"] === "panel" ? true : DEFAULT_SETTINGS.filesPanel,
     webLinks: WEB_LINK_TARGETS.find((target) => target === record["webLinks"]) ?? DEFAULT_SETTINGS.webLinks,
     reuseExternalLinkTab: typeof record["reuseExternalLinkTab"] === "boolean" ? record["reuseExternalLinkTab"] : DEFAULT_SETTINGS.reuseExternalLinkTab,
     claudeLaunchMode: CLAUDE_LAUNCH_MODES.find((mode) => mode === record["claudeLaunchMode"]) ?? DEFAULT_SETTINGS.claudeLaunchMode,
@@ -937,16 +938,32 @@ export function loadSettings(): Settings {
   const stored = readStoredAppearance(() => window.localStorage);
   const settings = stored.main === null ? DEFAULT_SETTINGS : sanitizeSettings(stored.main.value);
   const merged = stored.themes === null ? settings : sanitizeSettings({ ...settings, ...stored.themes });
-  return { ...merged, enterSends: readEnterSends(merged.enterSends, legacyEnterSends(stored.main?.value)), uiFontFamily: readUiFontFamily(), terminalMirrorWrap: readMirrorWrap(), sidebarFilter: readSidebarFilter(), voiceEngine: readVoiceEngine(), ...readAgentGroups(), historyPrompts: readHistoryPrompts(), ...readFileFont(), composerArtifacts: readComposerArtifacts(),
-    expandThinking: readChatFold(EXPAND_THINKING_STORAGE_KEY, DEFAULT_SETTINGS.expandThinking), foldWork: readChatFold(FOLD_WORK_STORAGE_KEY, DEFAULT_SETTINGS.foldWork),
-    reuseExternalLinkTab: readChatFold(REUSE_EXTERNAL_LINK_TAB_STORAGE_KEY, DEFAULT_SETTINGS.reuseExternalLinkTab),
-    filesPanel: readChatFold(FILES_PANEL_STORAGE_KEY, DEFAULT_SETTINGS.filesPanel),
-    composerPasteSend: readChatFold(COMPOSER_PASTE_SEND_STORAGE_KEY, DEFAULT_SETTINGS.composerPasteSend),
-    terminalImages: readChatFold(TERMINAL_IMAGES_STORAGE_KEY, DEFAULT_SETTINGS.terminalImages),
-    terminalGhostty: readChatFold(TERMINAL_GHOSTTY_STORAGE_KEY, DEFAULT_SETTINGS.terminalGhostty),
-    terminalAttachButton: readChatFold(TERMINAL_ATTACH_BUTTON_STORAGE_KEY, DEFAULT_SETTINGS.terminalAttachButton),
-    terminalKeyboardOnRequest: readChatFold(TERMINAL_KEYBOARD_ON_REQUEST_STORAGE_KEY, DEFAULT_SETTINGS.terminalKeyboardOnRequest),
-    terminalFoldKeyBar: readChatFold(TERMINAL_FOLD_KEY_BAR_STORAGE_KEY, DEFAULT_SETTINGS.terminalFoldKeyBar) };
+  // A key of its own wins only once it exists. Earlier fork versions kept these choices in
+  // the main record; an absent new key must not replace a saved choice with today's default.
+  const device = <T,>(key: string, fallback: T, read: () => T): T => {
+    try { if (window.localStorage.getItem(key) === null) return fallback; }
+    catch { return fallback; }
+    return read();
+  };
+  return { ...merged, enterSends: readEnterSends(merged.enterSends, legacyEnterSends(stored.main?.value)),
+    uiFontFamily: device(UI_FONT_STORAGE_KEY, merged.uiFontFamily, readUiFontFamily),
+    terminalMirrorWrap: device(MIRROR_WRAP_STORAGE_KEY, merged.terminalMirrorWrap, readMirrorWrap),
+    sidebarFilter: device(SIDEBAR_FILTER_STORAGE_KEY, merged.sidebarFilter, readSidebarFilter),
+    voiceEngine: device(VOICE_ENGINE_STORAGE_KEY, merged.voiceEngine, readVoiceEngine),
+    agentGroups: device(AGENT_GROUPS_STORAGE_KEY, merged.agentGroups, () => readAgentGroups().agentGroups),
+    agentGroupSort: device(AGENT_GROUP_SORT_STORAGE_KEY, merged.agentGroupSort, () => readAgentGroups().agentGroupSort),
+    historyPrompts: device(HISTORY_PROMPTS_STORAGE_KEY, merged.historyPrompts, readHistoryPrompts),
+    ...device(FILE_FONT_SIZE_STORAGE_KEY, { fileFontSize: merged.fileFontSize, fileFontBase: merged.fileFontBase }, readFileFont),
+    composerArtifacts: device(COMPOSER_ARTIFACTS_STORAGE_KEY, merged.composerArtifacts, readComposerArtifacts),
+    expandThinking: readChatFold(EXPAND_THINKING_STORAGE_KEY, merged.expandThinking), foldWork: readChatFold(FOLD_WORK_STORAGE_KEY, merged.foldWork),
+    reuseExternalLinkTab: readChatFold(REUSE_EXTERNAL_LINK_TAB_STORAGE_KEY, merged.reuseExternalLinkTab),
+    filesPanel: readChatFold(FILES_PANEL_STORAGE_KEY, merged.filesPanel),
+    composerPasteSend: readChatFold(COMPOSER_PASTE_SEND_STORAGE_KEY, merged.composerPasteSend),
+    terminalImages: readChatFold(TERMINAL_IMAGES_STORAGE_KEY, merged.terminalImages),
+    terminalGhostty: readChatFold(TERMINAL_GHOSTTY_STORAGE_KEY, merged.terminalGhostty),
+    terminalAttachButton: readChatFold(TERMINAL_ATTACH_BUTTON_STORAGE_KEY, merged.terminalAttachButton),
+    terminalKeyboardOnRequest: readChatFold(TERMINAL_KEYBOARD_ON_REQUEST_STORAGE_KEY, merged.terminalKeyboardOnRequest),
+    terminalFoldKeyBar: readChatFold(TERMINAL_FOLD_KEY_BAR_STORAGE_KEY, merged.terminalFoldKeyBar) };
 }
 
 /** false where storage refused the write (private mode, a full quota) */

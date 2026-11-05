@@ -6,6 +6,7 @@ import { type ServerMessage, STREAM_COOKIE_PREFIX } from "../shared/protocol.ts"
 import { DEVICE_COOKIE } from "./auth.ts";
 import { createServer } from "./index.ts";
 import { authenticatedWebSocket } from "./remote-websocket.ts";
+import { OMARCHY_COLOR_KEYS, omarchyTheme } from "../shared/omarchy-theme.ts";
 
 async function connection(base: string, open?: (url: string) => WebSocket) {
   const frames: ServerMessage[] = [];
@@ -61,6 +62,36 @@ it("multiplexes initial documents and live updates onto the existing authenticat
     client.socket.send(JSON.stringify({ type: "machine-events", enabled: "yes" }));
     await client.wait((frame) => frame.type === "error" && frame.code === "invalid_subscription");
   } finally { client.socket.close(); server.stop(); rmSync(stateDir, { recursive: true, force: true }); }
+});
+
+it("delivers only the browser device's initial and live Omarchy theme over WebSocket", async () => {
+  const stateDir = mkdtempSync(join(tmpdir(), "ovis-machine-events-omarchy-"));
+  const server = createServer({ port: 0, hostname: "127.0.0.1", stateDir, token: "test-token", tailscaleOwner: null });
+  const base = `http://127.0.0.1:${server.port}`;
+  const theme = omarchyTheme(Object.fromEntries(OMARCHY_COLOR_KEYS.map((key) => [key, "#a1b2c3"])), "kanagawa")!;
+  server.context.services.omarchyThemes.set("100.96.150.40", theme);
+  const clients: Awaited<ReturnType<typeof connection>>[] = [];
+  const from = (address: string) => withHeaders({ authorization: "Bearer test-token", "x-forwarded-for": address });
+  const themes = (client: Awaited<ReturnType<typeof connection>>) => client.frames.filter((frame) => frame.type === "machine-event" && frame.event.type === "omarchy-theme");
+  try {
+    const laptop = await connection(base, from("100.96.150.40, 127.0.0.1")); clients.push(laptop);
+    const phone = await connection(base, from("100.101.250.35")); clients.push(phone);
+    for (const client of clients) client.socket.send(JSON.stringify({ type: "machine-events", enabled: true }));
+    expect(await laptop.wait((frame) => frame.type === "machine-event" && frame.event.type === "omarchy-theme")).toMatchObject({ event: { theme } });
+    expect(await phone.wait((frame) => frame.type === "machine-event" && frame.event.type === "omarchy-theme")).toMatchObject({ event: { theme: null } });
+    server.context.services.omarchyThemes.set("100.96.150.40", { ...theme, name: "tokyo-night" });
+    await laptop.wait((frame) => frame.type === "machine-event" && frame.event.type === "omarchy-theme" && frame.event.theme?.name === "tokyo-night");
+    await phone.fence();
+    expect(themes(phone)).toHaveLength(1);
+    laptop.socket.send(JSON.stringify({ type: "machine-events", enabled: false }));
+    await laptop.fence();
+    const before = themes(laptop).length;
+    server.context.services.omarchyThemes.set("100.96.150.40", { ...theme, name: "miasma" });
+    await laptop.fence();
+    expect(themes(laptop)).toHaveLength(before);
+    laptop.socket.send(JSON.stringify({ type: "machine-events", enabled: true }));
+    await laptop.wait((frame) => frame.type === "machine-event" && frame.event.type === "omarchy-theme" && frame.event.theme?.name === "miasma");
+  } finally { for (const client of clients) client.socket.close(); server.stop(); rmSync(stateDir, { recursive: true, force: true }); }
 });
 
 it("keeps SSE available when the server's transport rollback switch disables the capability", async () => {

@@ -415,8 +415,14 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     const openAccess = access.level === "full" && access.via === "open";
     // relay pairings waiting for approval reach only a window that may approve one, as on /api/machines/events
     const approver = access.level === "full" && access.role === "drive" && access.via !== "open" && access.via !== "relay" && access.via !== "portal";
+    // Match SSE's device key: the theme hook and its browser share the forwarded address.
+    const themeDevice = forwardedFor?.split(",")[0]?.trim() ?? "";
     const machineEvents = useMachineEvents ? {
       manager: machines, preferences, herdrSidebar, seen,
+      ...(ctx.peer.kind === "relay" ? {} : { omarchyTheme: {
+        get: () => omarchyThemes.get(themeDevice),
+        subscribe: (listener: Parameters<OmarchyThemeStore["subscribe"]>[1]) => omarchyThemes.subscribe(themeDevice, listener),
+      } }),
       pairings: { subscribe: (listener: (event: DevicePairedEvent | DeviceRemovedEvent | RelayPairingsEvent | RemotePairingsEvent) => void) => {
         const stopPaired = devices.onPaired((event, origin) => {
           if (!openAccess && event.device_id !== deviceId && !sameBrowser(origin, keys)) listener(event);

@@ -49,6 +49,33 @@ describe("saved theme migration", () => {
     expect(themeFor(settings, "light").id).toBe(light);
   });
 
+  it("migrates the fork's saved device preferences without writing defaults over them", () => {
+    const legacy = { followOmarchy: true, fileBrowser: "panel", uiFontFamily: "system-ui", sidebarFilter: false,
+      terminalMirrorWrap: false, historyPrompts: 50, foldWork: true, expandThinking: true, composerArtifacts: true,
+      terminalFontSize: 20, theme: "dark", palette: "catppuccin" };
+    putOld(legacy);
+    const before = records.get(main);
+    const settings = loadSettings();
+    expect(settings).toMatchObject({ followOmarchy: true, filesPanel: true, uiFontFamily: "system-ui",
+      sidebarFilter: false, terminalMirrorWrap: false, historyPrompts: 50, foldWork: true, expandThinking: true,
+      composerArtifacts: true, terminalFontSize: 20, theme: "dark", palette: "catppuccin" });
+    expect(records.get(main)).toBe(before);
+    expect(saveSettings(settings)).toBe(true);
+    expect(loadSettings()).toEqual(settings);
+    expect(JSON.parse(records.get("ovis:files-panel")!)).toBe(true);
+  });
+
+  it("keeps newer device choices ahead of the fork's old main-record settings", () => {
+    saveSettings(sanitizeSettings({ uiFontFamily: "", sidebarFilter: true, terminalMirrorWrap: null,
+      historyPrompts: 10, filesPanel: false, foldWork: false, expandThinking: false, composerArtifacts: false }));
+    putOld({ uiFontFamily: "system-ui", sidebarFilter: false, terminalMirrorWrap: false, historyPrompts: 50,
+      fileBrowser: "panel", foldWork: true, expandThinking: true, composerArtifacts: true, followOmarchy: true });
+    expect(loadSettings()).toMatchObject({ uiFontFamily: "", sidebarFilter: true, terminalMirrorWrap: null,
+      historyPrompts: 10, filesPanel: false, foldWork: false, expandThinking: false, composerArtifacts: false,
+      followOmarchy: true });
+    expect(sanitizeSettings({ fileBrowser: "panel", filesPanel: false }).filesPanel).toBe(false);
+  });
+
   it("keeps every legacy look readable by the pinned old sanitizer (e)", () => {
     for (const palette of ["amber", "charcoal", "catppuccin"] as const) {
       for (const theme of ["dark", "light", "system"] as const) {

@@ -3,6 +3,7 @@ import type { DevicePairedEvent, DeviceRemovedEvent, Machine, MachineEvent, Rela
 import type { AgentRowTokens } from "../shared/pane-tokens.ts";
 import type { SharedPreferences } from "../shared/preferences.ts";
 import type { SeenFinish } from "../shared/seen.ts";
+import type { OmarchyTheme } from "../shared/omarchy-theme.ts";
 import type { hiddenEvents } from "./hidden-events.ts";
 import type { MachineManager } from "./machines.ts";
 import { decidedRowTokens, reportedTokenValues, snapshotWithoutHiddenTokens, withoutHiddenTokens } from "./herdr-sidebar.ts";
@@ -14,12 +15,14 @@ export interface MachineEventDocument {
   seen?: { list(): SeenFinish[]; subscribe(listener: (finish: SeenFinish) => void): () => void };
   /** Filtered for the authenticated device and browser at the transport's admission boundary. */
   pairings?: { subscribe(listener: (event: DevicePairedEvent | DeviceRemovedEvent | RelayPairingsEvent | RemotePairingsEvent) => void): () => void };
+  /** Bound to this browser's device address at admission, never another PC's theme. */
+  omarchyTheme?: { get(): OmarchyTheme | null; subscribe(listener: (theme: OmarchyTheme | null) => void): () => void };
   /** A page nobody sees takes only what an in-app alert reads (server/hidden-events.ts). */
   hidden?: ReturnType<typeof hiddenEvents>;
 }
 
 /** Initial documents and subsequent invalidations use exactly the same redaction on either transport. */
-export function subscribeMachineEvents({ manager, preferences, herdrSidebar, seen, pairings, hidden }: MachineEventDocument, send: (event: MachineEvent) => void): () => void {
+export function subscribeMachineEvents({ manager, preferences, herdrSidebar, seen, pairings, omarchyTheme, hidden }: MachineEventDocument, send: (event: MachineEvent) => void): () => void {
   const stops: Array<() => void> = [];
   let active = true;
   const tell = (event: MachineEvent) => { if (active) send(event); };
@@ -63,6 +66,11 @@ export function subscribeMachineEvents({ manager, preferences, herdrSidebar, see
     if (seen) {
       tell({ type: "seen", finishes: seen.list() });
       stops.push(seen.subscribe((finish) => tell({ type: "seen", finishes: [finish] })));
+    }
+    if (omarchyTheme) {
+      const sendTheme = (theme: OmarchyTheme | null) => tell({ type: "omarchy-theme", theme });
+      stops.push(omarchyTheme.subscribe(sendTheme));
+      sendTheme(omarchyTheme.get());
     }
     if (pairings) stops.push(pairings.subscribe(tell));
     return stop;
