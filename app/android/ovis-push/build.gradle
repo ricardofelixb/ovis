@@ -19,12 +19,17 @@ if (googleServices.isFile()) {
     ]
 }
 
+// The push relay (push-relay/ in the repository): a self-hosted relay is named by OVIS_PUSH_RELAY,
+// and must hold a service account of the same Firebase project.
+def pushRelay = System.getenv('OVIS_PUSH_RELAY') ?: 'https://push.ovis.sh'
+
 android {
     namespace = "sh.ovis.push"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
         minSdkVersion rootProject.ext.minSdkVersion
         firebaseValues.each { name, value -> resValue "string", name, String.valueOf(value) }
+        resValue "string", "ovis_push_relay", pushRelay
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_21
