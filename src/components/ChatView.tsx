@@ -20,7 +20,6 @@ import { RenderBoundary } from "./RenderBoundary.tsx";
 import { loadChatTimeline, loadedChatTimeline, useChatTimeline } from "./chatTimelineLoader.ts";
 import { ChatMinimap } from "./ChatMinimap.tsx";
 import { minimapTurns } from "../lib/chatMinimap.ts";
-import { traceChatLayout, watchChatLayout } from "../lib/chatLayoutTrace.ts";
 import type { LegendListRef } from "@legendapp/list/react";
 import { appendChatRowSlots, continuesHistory, createChatRowSlots, growChatRowSlots, prependChatRowSlots } from "../lib/chatRows.ts";
 import { ChatDetails, ChatRowMemoryContext, useChatRowToggle, useRowFocus, type ChatRowMemory } from "../lib/chatRowState.tsx";
@@ -2168,7 +2167,6 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       stickToBottom.current = following;
     }
     setAway(!stickToBottom.current);
-    traceChatLayout(node, "scroll", { following: stickToBottom.current, manual: manualLayout.current, selecting: selecting.current, reader: byReader, up, shrunkAbove, shrunk, footerShrank, leftEnd });
     measureEnd();
     if (loaded && restoring.current === null && state.source === "conversation") rememberPlace(node);
     if (node.scrollTop < LOAD_OLDER_PX && olderState === "idle") void loadOlder();
@@ -2553,14 +2551,6 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       {loaded && empty && error === null && prompt === null && activity === "idle" && !(greeted && blank) && sentWaiting.length === 0 && <div className="chat-empty"><AgentMark agent={agent ?? "agent"} size={32} /><p>{t("No conversation yet — say something below")}</p></div>}
       {ended && <p className="chat-endcap">{t("terminal ended")}</p>}
   </>;
-  useEffect(() => watchChatLayout(scroller.current), [state.source, ChatTimeline]);
-  useLayoutEffect(() => {
-    traceChatLayout(scroller.current, "commit", {
-      following: stickToBottom.current, manual: manualLayout.current, selecting: selecting.current,
-      working: workStatus === "working", streaming: streamingLast, revealing, workBlockLive,
-      answerOnlyLive, reserved: activityReserved, turns: shownTurns.length, liveParts: live?.parts.length ?? 0,
-    });
-  });
   const jump = newMessages ? <button type="button" className="btn chat-new-messages chat-virtual-jump" onClick={scrollToBottom}>{t("New messages")} <ArrowDown aria-hidden="true" /></button>
     : away && <button type="button" className="btn chat-new-messages chat-virtual-jump is-icon" aria-label={t("Jump to latest")} title={t("Jump to latest")} onClick={scrollToBottom}><ArrowDown aria-hidden="true" /></button>;
   return <ChatMarkdownImages paneId={paneId} cwd={cwd} connected={connected} onOpen={openMarkdownImage}><ChatPaneContext.Provider value={paneId}><ChatHistoryContext.Provider value={historyId ?? ""}><ImageViewerContext.Provider value={openViewer}><ToolPathRootContext.Provider value={toolPathRoot(cwd)}>
