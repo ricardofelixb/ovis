@@ -2767,7 +2767,12 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   // turn's words, or the pending head). The change is committed before the frame's scroll events,
   // where the footer's own size observer fires after them, so the shrink is stamped here for onScroll.
   const footerHead = !(connected && loaded && !ended && activity !== "idle" && agentStatus !== "blocked" && prompt === null && !(greeted && blank) && (activity === "thinking" || !workBlockLive)) ? "none" : workBlockLive ? "thinking" : answerOnlyLive ? "line" : "pending";
-  useLayoutEffect(() => { footerShrunkAt.current = performance.now(); }, [footerHead]);
+  // A head appearing grows the footer: only one that was there leaves or changes it shorter.
+  const lastFooterHead = useRef(footerHead);
+  useLayoutEffect(() => {
+    if (lastFooterHead.current !== "none") footerShrunkAt.current = performance.now();
+    lastFooterHead.current = footerHead;
+  }, [footerHead]);
   const footer = <>
       <p className={waitWords === null ? "visually-hidden" : "chat-inline-state"} role="status">{waitWords}</p>
       {sentWaiting.length > 0 && state.source === "conversation" && <SentWaitingList sends={sentWaiting} />}

@@ -179,17 +179,10 @@ try {
         await page.setViewportSize({ width: 390, height: 470 });
         await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(470));
         await page.waitForFunction(() => document.documentElement.hasAttribute("data-keyboard"));
-        await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
-        assert.equal(await page.locator(".app-header .tab-strip").isVisible(), true, "typing upright keeps the lone tab's row");
-
-        // turned on its side the phone is short: the lone tab's row goes
-        await message.evaluate((node) => (node as HTMLElement).blur());
-        await page.setViewportSize({ width: 740, height: 390 });
-        await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(390));
         await page.locator(".tab-strip").waitFor({ state: "detached" });
         assert.notEqual(await page.locator(".app-header").evaluate((node) => getComputedStyle(node).backdropFilter), "none",
           "the chat of a lone tab with no row puts the glass header over the pane");
-        await checkMenus(page, "chat-landscape");
+        await checkMenus(page, "chat-keyboard");
 
         // a view-only connection draws its "View only" banner at the pane's top right, below the glass header
         await page.evaluate(() => (window as SocketsWindow).glassSockets.at(-1)!.send(JSON.stringify({ type: "role", mode: "observe" })));

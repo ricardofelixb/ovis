@@ -764,7 +764,9 @@ try {
           const log = page.getByRole("log");
           const room = await log.evaluate((node) => [node.scrollHeight, node.clientHeight, node.className, document.querySelectorAll(".chat-turn").length]);
           assert.ok((room[0] as number) - (room[1] as number) > 200, `the fixture chat must be long enough to scroll away: ${JSON.stringify(room)}`);
-          await log.evaluate((node) => { node.scrollTop = 0; });
+          // the reader's own wheel, as a person scrolls: a bare scrollTop is the layout's move while the Working head has just changed
+          await log.hover();
+          await page.mouse.wheel(0, -1_000_000);
           await page.getByRole("button", { name: "Jump to latest", exact: true }).waitFor();
           if (arrival === "restore") {
             const height = await log.evaluate((node) => node.scrollHeight * 3 + 2000);
