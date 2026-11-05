@@ -2128,8 +2128,11 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   and VS Code's Source Control sidebar, the list remains visible while opening a file or diff.
   It is a non-modal region with no scrim, focus trap or phone Back entry. Escape closes it only
   from inside; narrow windows use the original dialog. The browser and a docked file share the
-  available width without covering the pane. Unlike Zed's default left dock, it stays on the
-  right to match Ovis's existing file viewer.
+  available width without covering the pane. Its left edge uses the file viewer's resize grip:
+  drag or use arrows, Home and End; double-click to reset. Width is kept on this device separately
+  from the preview (`ovis:files-browser-width`), between 220px and 600px where space permits.
+  Both panels shrink as needed to leave the pane at least 320px. Unlike Zed's default left dock,
+  it stays on the right to match Ovis's existing file viewer.
   A file opens in the popup unless Settings → Chat → Open files is Beside the pane (`fileOpen`,
   per device), which docks text and code from 980px; the header button moves the open file either way.
   This differs from t3code's and paseo's docked file panels, whose look the docked viewer keeps: a

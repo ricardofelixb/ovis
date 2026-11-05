@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { FolderSearch, X } from "lucide-react";
 
 import "./FilesDialog.css";
@@ -15,6 +15,7 @@ import { useMediaQuery } from "../lib/useMediaQuery.ts";
 export interface FilesDialogProps {
   /** A non-modal sidebar on wide windows; the same list falls back to a dialog on phones. */
   docked?: boolean;
+  panelStart?: ReactNode;
   /** the folder to open at: the pane's own */
   start: string;
   /** the pane whose repository's changes are listed */
@@ -31,7 +32,7 @@ export interface FilesDialogProps {
 type Tab = "browse" | "changes";
 
 /** The files of the pane's folder (and any other), each opened in the file viewer, and the changes of its repository, each opened as a diff. */
-export function FilesDialog({ docked = false, start, paneId, viewing, onOpenFile, onOpenDiff, onBrowseFolders, onClose }: FilesDialogProps) {
+export function FilesDialog({ docked = false, panelStart, start, paneId, viewing, onOpenFile, onOpenDiff, onBrowseFolders, onClose }: FilesDialogProps) {
   const t = useT();
   const phone = useMediaQuery("(max-width: 480px)");
   const surface = useFocusTrap<HTMLElement>(!docked);
@@ -62,6 +63,7 @@ export function FilesDialog({ docked = false, start, paneId, viewing, onOpenFile
   const browseFolders = (): void => onBrowseFolders(folder.current?.pane === paneId ? folder.current.path : (start || "~"));
   const content = (
       <section ref={surface} id="files-browser" className={docked ? "files-panel" : "modal files-dialog"} role={docked ? "region" : "dialog"} aria-modal={docked ? undefined : true} aria-labelledby="files-dialog-title" tabIndex={-1}>
+        {docked && panelStart}
         <header className="modal-header">
           <h2 className="modal-title" id="files-dialog-title">{t("Files")}</h2>
           <div className="segmented files-dialog-tabs" role="group" aria-label={t("Show")}>

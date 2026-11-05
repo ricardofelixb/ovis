@@ -30,6 +30,21 @@ describe("clampFilePanelWidth", () => {
   });
 });
 
+describe("browser panel width", () => {
+  it("keeps its narrower limits separate from the file preview", () => {
+    expect(clampFilePanelWidth(100, undefined, undefined, "browser")).toBe(220);
+    expect(clampFilePanelWidth(1000, undefined, undefined, "browser")).toBe(600);
+    expect(filePanelMaxWidth(980, 300, "browser")).toBe(360);
+    expect(filePanelMaxWidth(980, 800, "browser")).toBe(0);
+    expect(parseFilePanelWidth("270", "browser")).toBe(270);
+  });
+  it("supports the same keyboard resizing and limits", () => {
+    expect(keyedFilePanelWidth(280, "ArrowLeft", 1440, 300, "browser")).toBe(296);
+    expect(keyedFilePanelWidth(280, "Home", 1440, 300, "browser")).toBe(220);
+    expect(keyedFilePanelWidth(280, "End", 1440, 300, "browser")).toBe(600);
+  });
+});
+
 describe("keyedFilePanelWidth", () => {
   it("widens with ArrowLeft and narrows with ArrowRight, as the edge is on the left", () => {
     expect(keyedFilePanelWidth(400, "ArrowLeft")).toBe(400 + FILE_PANEL_WIDTH_STEP);

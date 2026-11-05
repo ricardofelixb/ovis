@@ -204,7 +204,7 @@ export function App() {
   const [headerTabs, setHeaderTabs] = useState<HTMLDivElement | null>(null);
   const { otherRecheck, otherRosterTick, setOtherRosterTick } = useSplitRecheck();
   const { rosterIn, pendingFile, selectionHint, setHeaderNote, note, autoSelected, setAutoSelected } = useLinkLanding({ initialLink, otherRecheck, setOtherRosterTick, pendingLink, rosterSeq, setRosterTick, linkLanded, t });
-  const { drawerOpen, setDrawerOpen, drawerOpenRef, wideScreen, sidebarCollapsed, setSidebarCollapsed, sidebarWidth, setSidebarWidth, filePanelAvailable, filePanelWidth, setFilePanelWidth, sidebarFilterRequest, openSidebarFilter } = useSidebarLayout({ initialLink });
+  const { drawerOpen, setDrawerOpen, drawerOpenRef, wideScreen, sidebarCollapsed, setSidebarCollapsed, sidebarWidth, setSidebarWidth, filePanelAvailable, filePanelWidth, setFilePanelWidth, filesBrowserWidth, setFilesBrowserWidth, sidebarFilterRequest, openSidebarFilter } = useSidebarLayout({ initialLink });
   const { selectionRef, movingPanes } = useSelectionMark({ selectedMachineId, selectedPaneId });
   const { lens, setLens, viewPicks, setViewPicks } = usePaneLensState();
   const { split, setSplit, soloSlot, endSplit, splitRef, splitShownRef, lastKeyAtRef, paneDragging, setPaneDragging, dropTarget, dropTargetRef, showDropTarget, clearDropPreview, paneAreaRef, tabDrag, draggedPaneRef, markSwap } = useSplitState();
@@ -624,7 +624,7 @@ export function App() {
   // take it (from 769px). A pane herdr could not restore draws a placeholder, not the chat.
   const chatShown = showsChat(selectedPane, view);
   const filesBrowser = filesOpen && selectedPane ? (
-    <FilesDialog docked={filesDocked} start={selectedPane.foreground_cwd ?? selectedPane.cwd ?? ""} paneId={selectedPane.pane_id} viewing={(viewing !== null && !fileDocked) || diffViewing !== null} onOpenFile={viewFile}
+    <FilesDialog docked={filesDocked} panelStart={<FilePanelResizer kind="browser" width={filesBrowserWidth} onResize={setFilesBrowserWidth} />} start={selectedPane.foreground_cwd ?? selectedPane.cwd ?? ""} paneId={selectedPane.pane_id} viewing={(viewing !== null && !fileDocked) || diffViewing !== null} onOpenFile={viewFile}
       onOpenDiff={(comparison, file) => openDiff({ machineId: selectedMachineId, paneId: selectedPane.pane_id, directory: selectedPane.foreground_cwd ?? selectedPane.cwd ?? null, ...comparison, path: file.path, oldPath: file.old_path })}
       onBrowseFolders={(path) => actions.openPalette(folderQueryFor(path, null))}
       onClose={() => setFilesOpen(false)} />
@@ -657,9 +657,10 @@ export function App() {
   if (locked) return <AccessGate reason={lockReason} initialCode={pairCode} consumePairCode={consumePairCode} pairingUnconfirmed={pairingUnconfirmed} onPaired={onPaired} onUnlocked={unlock} />;
 
   return (
-    <MachineSessionsProvider machineIds={machines.map((machine) => machine.id)}><MachineContext.Provider value={selectedMachineId}><AppLayoutContext.Provider value={appLayout}><div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`} style={sidebarWidth === null && filePanelWidth === null ? undefined : {
+    <MachineSessionsProvider machineIds={machines.map((machine) => machine.id)}><MachineContext.Provider value={selectedMachineId}><AppLayoutContext.Provider value={appLayout}><div className={`app${sidebarCollapsed ? " sidebar-collapsed" : ""}`} style={sidebarWidth === null && filePanelWidth === null && filesBrowserWidth === null ? undefined : {
       ...(sidebarWidth === null ? {} : { "--sidebar-user-w": `${sidebarWidth}px` }),
       ...(filePanelWidth === null ? {} : { "--file-panel-user-w": `${filePanelWidth}px` }),
+      ...(filesBrowserWidth === null ? {} : { "--files-browser-user-w": `${filesBrowserWidth}px` }),
     } as CSSProperties}>
       <header className={`app-header is-zoned${chatShown ? " is-chat" : ""}`}>
         {/* is-zoned tells this header from the connecting shell's, which has no zones to draw.

@@ -554,6 +554,27 @@ try {
   await browserPanel.locator(".dir-browser-item.is-file").filter({ hasText: "notes.txt" }).click();
   await panel.getByText("File preview history regression", { exact: true }).waitFor();
   assert.ok(await browserPanel.isVisible(), "opening a docked file leaves the browser beside it");
+  const browserWidth = () => browserPanel.evaluate((element) => element.getBoundingClientRect().width);
+  const browserBefore = await browserWidth();
+  const previewWidthBefore = await page.evaluate(() => localStorage.getItem("ovis:file-panel-width"));
+  const browserGrip = browserPanel.getByRole("separator", { name: "Resize file panel" });
+  const browserGripBox = await browserGrip.boundingBox();
+  assert.ok(browserGripBox, "the browser has its own resize edge");
+  await page.mouse.move(browserGripBox.x + browserGripBox.width / 2, browserGripBox.y + browserGripBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(browserGripBox.x + browserGripBox.width / 2 - 80, browserGripBox.y + browserGripBox.height / 2, { steps: 5 });
+  await page.mouse.up();
+  const browserStored = Number(await (await page.waitForFunction(() => localStorage.getItem("ovis:files-browser-width"))).jsonValue());
+  assert.ok(Math.abs(browserStored - browserBefore - 80) <= 2, "dragging widens the browser independently");
+  await browserGrip.focus();
+  await page.keyboard.press("ArrowLeft");
+  await page.waitForFunction((want) => Number(localStorage.getItem("ovis:files-browser-width")) === want, browserStored + 16);
+  assert.equal(await page.evaluate(() => localStorage.getItem("ovis:file-panel-width")), previewWidthBefore, "resizing the browser never changes the preview's stored width");
+  await page.reload();
+  await openFiles(page);
+  await browserPanel.waitFor();
+  await panel.getByText("File preview history regression", { exact: true }).waitFor();
+  assert.ok(Math.abs(await browserWidth() - browserStored - 16) <= 2, "the browser width survives a reload");
   for (const width of [980, 1280, 1440]) {
     await page.setViewportSize({ width, height: 800 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${width}px: the two panels do not widen the page`);
@@ -561,6 +582,8 @@ try {
     assert.ok(paneBounds && paneBounds.width >= 279, `${width}px: the pane retains room beside both panels`);
     if (process.env.UI_EVIDENCE_DIR) await page.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, `files-browser-and-preview-${width}.png`) });
   }
+  await browserGrip.dblclick();
+  await page.waitForFunction(() => localStorage.getItem("ovis:files-browser-width") === null);
   await composer.click();
   await page.keyboard.press("Escape");
   assert.ok(await browserPanel.isVisible(), "Escape in the pane leaves the browser open");
@@ -582,7 +605,7 @@ try {
     localStorage.setItem("ovis:settings", JSON.stringify({ ...settings, fileBrowser: "popup" }));
   });
   await page.reload();
-  console.log("PASS independent Browse/Changes sidebar, live pane, file and diff opens, 980/1280/1440px fit and phone popup fallback");
+  console.log("PASS independent Browse/Changes sidebar: drag and keyboard resize, reload persistence, reset, live pane, file and diff opens, 980/1280/1440px fit and phone popup fallback");
 
   // with Open files at its default, even text opens in the popup; Beside the pane is a choice
   await setFileOpen(null);

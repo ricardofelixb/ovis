@@ -1,5 +1,6 @@
 /* Browse | Changes can stay beside the chat, independently of file previews. */
 .files-panel {
+  position: relative;
   width: var(--files-panel-w);
   flex: 0 0 var(--files-panel-w);
   min-width: 0;
@@ -7,7 +8,6 @@
   flex-direction: column;
   border-left: var(--hairline) solid var(--border);
   background: var(--bg);
-  overflow: hidden;
 }
 
 .files-panel .modal-header {
@@ -37,8 +37,13 @@
 
 /* A file preview may sit beside the browser too; leave room for the pane. */
 .app-body:has(.files-panel) {
-  --files-panel-w: clamp(220px, 22vw, 300px);
-  --file-panel-shown-w: min(max(220px, min(var(--file-panel-user-w, min(42vw, 560px)), 60vw)), calc(100vw - var(--sidebar-shown-w) - var(--files-panel-w) - clamp(280px, 25vw, 440px)));
+  --files-panel-reserve: 0px;
+  --files-panel-w: max(0px, min(clamp(220px, var(--files-browser-user-w, min(22vw, 300px)), 600px), calc(100vw - var(--sidebar-shown-w) - 320px - var(--files-panel-reserve))));
+  --file-panel-shown-w: max(0px, min(max(220px, min(var(--file-panel-user-w, min(42vw, 560px)), 60vw)), calc(100vw - var(--sidebar-shown-w) - var(--files-panel-w) - 320px)));
+}
+
+.app-body:has(.files-panel):has(.file-panel) {
+  --files-panel-reserve: min(220px, max(0px, calc((100vw - var(--sidebar-shown-w) - 320px) / 2)));
 }
 
 /* Browse | Changes in the Files header, between the title and Close */

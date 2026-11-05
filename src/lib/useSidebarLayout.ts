@@ -41,6 +41,7 @@ export function useSidebarLayout({ initialLink }: SidebarLayoutParams) {
   const [sidebarWidth, setSidebarWidth] = useState(storedSidebarWidth);
   const filePanelAvailable = useMediaQuery(FILE_PANEL_DOCK_QUERY);
   const [filePanelWidth, setFilePanelWidth] = useState(storedFilePanelWidth);
+  const [filesBrowserWidth, setFilesBrowserWidth] = useState(() => storedFilePanelWidth("browser"));
   // the palette's Filter workspaces and agents: the drawer or the sidebar comes out, and the sidebar shows its
   // field and focuses it on each new count (components/MachineSidebar.tsx)
   const [sidebarFilterRequest, setSidebarFilterRequest] = useState(0);
@@ -49,5 +50,5 @@ export function useSidebarLayout({ initialLink }: SidebarLayoutParams) {
     else setSidebarCollapsed(false);
     setSidebarFilterRequest((count) => count + 1);
   }, []);
-  return { drawerOpen, setDrawerOpen, drawerOpenRef, wideScreen, sidebarCollapsed, setSidebarCollapsed, sidebarWidth, setSidebarWidth, filePanelAvailable, filePanelWidth, setFilePanelWidth, sidebarFilterRequest, openSidebarFilter };
+  return { drawerOpen, setDrawerOpen, drawerOpenRef, wideScreen, sidebarCollapsed, setSidebarCollapsed, sidebarWidth, setSidebarWidth, filePanelAvailable, filePanelWidth, setFilePanelWidth, filesBrowserWidth, setFilesBrowserWidth, sidebarFilterRequest, openSidebarFilter };
 }
