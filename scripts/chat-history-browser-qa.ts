@@ -407,7 +407,16 @@ try {
   terminalText = Array.from({ length: 100 }, (_, i) => `Fictional terminal line ${i}`).join("\n");
   await refresh();
   await page.getByText(/Fictional terminal line 99/).waitFor();
-  await page.getByRole("log").evaluate((node) => { node.scrollTop = 0; node.dispatchEvent(new Event("scroll")); });
+  // a wheel up, not a bare scrollTop: a move up without input right after the footer got shorter is the layout's (FOOTER_SHRINK_MS)
+  const log = page.getByRole("log");
+  const logBox = (await log.boundingBox())!;
+  await page.mouse.move(logBox.x + logBox.width / 2, logBox.y + logBox.height / 2);
+  await page.mouse.wheel(0, -100_000);
+  await log.evaluate((node) => new Promise<void>((resolve, reject) => {
+    const started = performance.now();
+    const check = () => node.scrollTop === 0 ? resolve() : performance.now() - started > 5_000 ? reject(new Error(`the wheel left the chat at ${node.scrollTop}`)) : requestAnimationFrame(check);
+    check();
+  }));
   terminalText += "\nFictional terminal appended line";
   await refresh();
   await page.getByText(/Fictional terminal appended line/).waitFor();

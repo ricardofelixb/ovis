@@ -182,7 +182,7 @@ try {
     () => page.locator(paneSelector(other.paneId)).click(), "selecting the split workspace shows its strip");
   assert.equal(await page.locator('.tab-strip [role="tab"]').textContent(), "Tab 1", "a tab herdr named by its number reads as Tab 1");
   // at this width the header over the pane is the pane's surface, and the strip under it is
-  // the same one, not a band of the panel's colour between header and pane
+  // the same one (the strip is transparent over the header), not a band of the panel's colour between header and pane
   const surfaces = await page.evaluate(() => {
     const header = document.querySelector(".app-header")!;
     const column = document.querySelector(".pane-column")!;
@@ -193,7 +193,7 @@ try {
     };
   });
   assert.equal(surfaces.columnChat, surfaces.headerChat, "the header and the pane column agree on the lens");
-  assert.equal(surfaces.strip, surfaces.header, "the strip is the header's surface");
+  assert.ok(surfaces.strip === surfaces.header || surfaces.strip === "rgba(0, 0, 0, 0)", "the strip is the header's surface, or transparent over it");
   if (surfaces.headerChat) assert.equal(surfaces.chat, surfaces.header, "which under the chat lens is the transcript's");
   await page.getByRole("tab", { name: "Tab 1", exact: true }).click({ button: "right" });
   const tabMenu = page.getByRole("menu", { name: "Tab 1", exact: true });

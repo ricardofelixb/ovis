@@ -215,9 +215,9 @@ try {
         await holdSendLock();
         await pressSend();
         await greeting.waitFor({ state: "detached" });
-        await page.getByTitle("Live terminal (⌘⇧J)", { exact: true }).click();
+        await pickLens(page, "terminal");
         await page.locator(".pane-frame.is-current .terminal-stack:not(.is-chat)").waitFor();
-        await page.getByTitle("Chat transcript (⌘⇧J)", { exact: true }).click();
+        await pickLens(page, "chat");
         await greeting.waitFor({ timeout: 5_000 });
         await page.evaluate(() => (window as unknown as { releaseSendLock: () => void }).releaseSendLock());
         // the lock taken after it queues behind the left claim: once it is granted, that claim has run (and sent nothing)
