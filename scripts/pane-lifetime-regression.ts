@@ -188,7 +188,7 @@ try {
   await page.waitForFunction((was) => { const now = localStorage.getItem("ovis:pane-lifetime:local"); return now !== null && now !== was; },
     before["ovis:pane-lifetime:local"] ?? null, { timeout: 60_000 });
   // Then the page shows each pane as the new herdr has it: its default lens, and an empty box.
-  await page.waitForFunction(() => document.querySelector(".app-header .view-toggle")?.getAttribute("data-view") === "terminal",
+  await page.waitForFunction(() => document.querySelector(".app-header .header-more-button")?.getAttribute("data-view") === "terminal",
     undefined, { timeout: 20_000 }).catch(async (error: unknown) => {
     const roster = await (await fetch(`${origin}/api/machines`)).json() as { machines: { id: string; state: string; snapshot: { herdr_lifetime?: string; panes: { pane_id: string; agent?: string }[] } | null }[] };
     console.log("After the herdr restart", JSON.stringify({

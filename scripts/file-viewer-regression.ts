@@ -28,6 +28,7 @@ import { routeDrained } from "./drained-route.ts";
 import { openWorkRuns } from "./work-runs.ts";
 
 const openFiles = async (page: import("playwright-core").Page) => {
+  await page.locator(".header-more-button[data-view]").waitFor();
   const headerButton = page.locator(".header-files-button");
   if (await headerButton.isVisible()) await headerButton.click();
   else await runMoreItem(page, "Browse files");
@@ -540,7 +541,6 @@ try {
     }, fileOpen);
     await page.reload();
   };
-  // with Open files at its default, even text opens in the popup; Beside the pane is a choice
   // Browse/Changes placement is independent from the file viewer, and never blocks the pane.
   await page.evaluate(() => {
     const settings = JSON.parse(localStorage.getItem("ovis:settings") ?? "{}");
@@ -584,6 +584,7 @@ try {
   await page.reload();
   console.log("PASS independent Browse/Changes sidebar, live pane, file and diff opens, 980/1280/1440px fit and phone popup fallback");
 
+  // with Open files at its default, even text opens in the popup; Beside the pane is a choice
   await setFileOpen(null);
   await activateInTranscript(page, notesLink);
   await textPopup.getByText("File preview history regression", { exact: true }).waitFor();

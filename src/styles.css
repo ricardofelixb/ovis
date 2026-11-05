@@ -2090,32 +2090,6 @@ button {
   .header-tabs .tab-strip-row { --strip-bg: transparent; }
 }
 
-/* the open pane's lens: its icon, a tap flips to the other (ViewToggle) */
-.view-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  height: var(--control-h);
-  min-width: var(--control-h);
-  padding: 0 var(--space-2);
-  border: var(--hairline) solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--accent-tint);
-  color: var(--accent);
-  cursor: pointer;
-}
-
-.view-toggle svg {
-  width: 16px;
-  height: 16px;
-}
-
-.view-toggle:hover,
-.view-toggle:focus-visible {
-  border-color: var(--border-strong);
-}
-
 .header-divider {
   flex: 0 0 auto;
   width: var(--hairline);
@@ -3036,17 +3010,6 @@ button {
     height: var(--touch-target-header);
   }
 
-  /* drawn at the bar's control height, tapped at the full target through an invisible expander */
-  .view-toggle {
-    position: relative;
-    min-width: var(--touch-target-header);
-  }
-
-  .view-toggle::before {
-    content: "";
-    position: absolute;
-    inset: calc((var(--control-h) - var(--touch-target-header)) / 2) 0;
-  }
 }
 
 /* ---------- phone: an app, not a page ---------- */

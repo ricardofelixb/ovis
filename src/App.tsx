@@ -45,7 +45,6 @@ import { FilePanelResizer } from "./components/FilePanelResizer.tsx";
 import { openPresentation } from "./lib/filePresentation.ts";
 import { MachineDialog } from "./components/MachineDialog.tsx";
 import { RowMenu, type RowMenuItem } from "./components/RowMenu.tsx";
-import { ViewToggle } from "./components/ViewToggle.tsx";
 import { headerCrumb, showsChat } from "./lib/headerCrumb.ts";
 import { paneStorageId } from "../shared/machines.ts";
 import { usePairedNotices } from "./lib/usePairedNotices.ts";
@@ -611,6 +610,7 @@ export function App() {
   const moreItems: RowMenuItem[] = [
     // first at every width: a phone's header has no palette button, and a touch screen no shortcut
     { id: "palette", label: t("Search panes and actions"), icon: Search, ...(paletteKeys ? { hint: paletteKeys } : {}), run: () => openPalette() },
+    ...(selectedPane && screenMachineId === null ? [{ id: "view", label: t("Terminal"), checked: (terminalPeek !== null ? "terminal" : view) === "terminal", switch: true, title: terminalPeek !== null || view === "terminal" ? t("Switch to chat (⌘⇧J)") : terminalAttach ? t("Switch to terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there"), icon: SquareTerminal, run: actions.toggleView }] : []),
     ...(selectedPane && !selectedPane.restore_error ? [{ id: "find", label: t("Find in terminal"), icon: Search, run: actions.openFind }] : []),
     // from 769px Files has its own button beside the lens switch; a phone keeps it here
     ...(selectedPane && !wideScreen ? [{ id: "files", label: t("Browse files"), icon: FolderOpen, run: () => setFilesOpen(true) }] : []),
@@ -697,8 +697,6 @@ export function App() {
         {selectedPane && !splitOn && <div ref={setHeaderTabs} className="header-tabs" hidden={screenMachineId !== null} />}
         {screenMachineId !== null && <span className="machine-context-name header-screen-name">{machineName(screenMachineId)}</span>}
         {/* a PC's desktop is the host's alone: the pane's own controls step aside with its tabs */}
-        {selectedPane && screenMachineId === null && <ViewToggle view={terminalPeek !== null ? "terminal" : view}
-          terminalAttach={terminalAttach} onToggle={actions.toggleView} />}
         {selectedPane && screenMachineId === null && wideScreen && (
           <>
             {/* opens Files, it is no third lens: set apart from the switch by a hairline */}
@@ -727,6 +725,8 @@ export function App() {
             <button
               type="button"
               className="icon-button header-more-button"
+              data-view={selectedPane && screenMachineId === null ? terminalPeek !== null ? "terminal" : view : undefined}
+              data-terminal-soon={selectedPane && !terminalAttach || undefined}
               aria-label={alertsOffDot ? t("More · alerts are off") : t("More")}
               title={alertsOffDot ? t("More · alerts are off") : t("More")}
               aria-haspopup="menu"

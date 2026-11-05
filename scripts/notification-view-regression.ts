@@ -34,7 +34,7 @@ export async function checkNotificationView(browser: Browser, origin: string): P
     /** the selected row and the lens drawn with it, both from the page: the stored selection is written before the render */
     const shows = (pane: string, lens: Lens) => page.waitForFunction(([id, view]) =>
       document.querySelector(".pane-select[aria-current='true']")?.getAttribute("title")?.startsWith(`${id} —`) === true
-      && document.querySelector(".app-header .view-toggle")?.getAttribute("data-view") === view, [pane, lens]);
+      && document.querySelector(".app-header .header-more-button")?.getAttribute("data-view") === view, [pane, lens]);
     /** what public/sw.js posts to an open window when a pane's alert is tapped */
     const tapAlert = (pane: string, workspace?: string) => page.evaluate(([id, ws]) => {
       navigator.serviceWorker.dispatchEvent(new MessageEvent("message", { data: { type: "select-pane", machine_id: "local", pane_id: id, view: "chat", ...(ws ? { workspace_id: ws } : {}) } }));

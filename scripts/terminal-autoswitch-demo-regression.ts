@@ -140,7 +140,7 @@ const typed = async (page: Page) => (await frames(page)).filter((frame) => frame
 const lens = (page: Page) => page.evaluate((pane) => ({
   stored: localStorage.getItem(`ovis:view:${pane}`),
   address: new URL(location.href).searchParams.get("view"),
-  chatPressed: ((view) => view ? String(view === "chat") : null)(document.querySelector(".app-header .view-toggle")?.getAttribute("data-view")),
+  chatPressed: ((view) => view ? String(view === "chat") : null)(document.querySelector(".app-header .header-more-button")?.getAttribute("data-view")),
 }), owner);
 /** what a peek must not write: the stored lens and the address (the header's button shows the grid on screen) */
 const written = ({ stored, address }: { stored: string | null; address: string | null }) => ({ stored, address });

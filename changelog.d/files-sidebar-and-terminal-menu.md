@@ -1,0 +1,6 @@
+### Added
+- Browse and Changes can stay beside the pane. Choose File browser placement independently from
+  individual files in Settings → Chat → File viewer; narrow windows still use a popup.
+### Changed
+- Chat/Terminal now lives in More as a Terminal switch. Per-pane choices and the keyboard shortcut
+  are unchanged.
