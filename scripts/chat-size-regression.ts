@@ -10,6 +10,7 @@ import { PtySession } from "../server/pty/session.ts";
 import { herdrRpc, herdrSocketPath, type WorkspaceCreateResult, paneRead, paneSendKeys, paneSendText, tabCreate, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens, VIEW_BUTTON } from "./view-toggle.ts";
+import { shownRow, shownRows } from "./shown-rows.ts";
 
 /** how long a resize that should not happen gets to show up */
 const NO_RESIZE_WAIT_MS = 400;
@@ -231,7 +232,7 @@ export async function checkChatKeepsTerminalSize(browser: Browser, origin: strin
     // the desktop's terminal lens ignored that resize: it drives the grid itself. Entering the chat
     // lens, its hidden screen takes the grid the pty has now, since what the chat reads there (a
     // masked prompt) is drawn for the phone's grid. xterm's DOM renderer keeps one element a row.
-    const hiddenRows = () => desktop.locator(".pane-terminal .xterm-rows > div").count();
+    const hiddenRows = () => desktop.locator(shownRow()).count();
     const phoneRows = Number(phoneSize.split(" ")[0]);
     assert.notEqual(await hiddenRows(), phoneRows, "the desktop's terminal lens kept its own grid");
     await pickLens(desktop, "chat");
@@ -782,7 +783,7 @@ export async function checkInactiveAttachLifecycle(browser: Browser, origin: str
             // the command line does not spell the prompt: only the prompt itself puts "Password:" on screen
             await paneSendText(first, "read -s -p \"$(printf 'Pass%s: ' word)\" x");
             await paneSendKeys(first, ["Enter"]);
-            const drawn = (): Promise<boolean> => idlePage.evaluate(() => document.querySelector(".xterm-rows")?.textContent?.includes("Password:") ?? false);
+            const drawn = (): Promise<boolean> => idlePage.evaluate((shown) => document.querySelector(shown)?.textContent?.includes("Password:") ?? false, shownRows());
             const promptDeadline = Date.now() + 10_000;
             // the paused clock lets the watched view parse and draw only as it is advanced (no resume has started yet)
             while (!(await drawn()) && Date.now() < promptDeadline) await page.clock.runFor(100);
@@ -1077,7 +1078,7 @@ export async function checkInactiveAttachLifecycle(browser: Browser, origin: str
             });
             await waitWire("in", "input-ready", 2);
             await page.clock.runFor(50);
-            assert.equal((await page.locator(".xterm-rows").textContent() ?? "").includes("STALE-SUBSCRIPTION"), false,
+            assert.equal((await page.locator(shownRows()).textContent() ?? "").includes("STALE-SUBSCRIPTION"), false,
               "resume resets after pending writes, before the new attachment stream");
             holdOutput = false;
             for (const deliver of heldOutput) deliver();

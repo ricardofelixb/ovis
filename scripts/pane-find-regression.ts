@@ -9,6 +9,7 @@ import { createServer } from "../server/index.ts";
 import { herdrRpc, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens } from "./view-toggle.ts";
+import { shownRows } from "./shown-rows.ts";
 
 /** GUI searches stay in herdr's history, never in browser scrollback or terminal input. */
 export async function checkPaneFind(browser: Browser, origin: string): Promise<void> {
@@ -73,7 +74,7 @@ export async function checkPaneFind(browser: Browser, origin: string): Promise<v
       signal.addEventListener("abort", aborted, { once: true });
     });
     await page.goto(`${origin}/?pane=${encodeURIComponent(pane)}`);
-    await page.locator(".xterm-rows", { hasText: "find_browser_ready" }).waitFor();
+    await page.locator(shownRows(), { hasText: "find_browser_ready" }).waitFor();
     const openedGeometry = resized();
     await page.keyboard.press("ControlOrMeta+Shift+F");
     await openedGeometry;
@@ -89,7 +90,7 @@ export async function checkPaneFind(browser: Browser, origin: string): Promise<v
     const first = await search(() => page.keyboard.press("Enter"));
     assert.equal(first.total, 2);
     assert.equal(first.current, 2);
-    await page.locator(".xterm-rows", { hasText: "find_browser_marker" }).waitFor();
+    await page.locator(shownRows(), { hasText: "find_browser_marker" }).waitFor();
     await page.locator(".find-bar-count", { hasText: "2 of 2" }).waitFor();
     const next = await search(() => page.keyboard.press("Enter"));
     assert.equal(next.current, 1);
@@ -206,7 +207,7 @@ export async function checkPaneFind(browser: Browser, origin: string): Promise<v
     await phoneGeometry;
     await field.fill("find_browser_marker");
     assert.equal((await search(() => field.press("Enter"))).total, 2);
-    await page.locator(".xterm-rows", { hasText: "find_browser_marker" }).waitFor();
+    await page.locator(shownRows(), { hasText: "find_browser_marker" }).waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     await staleNavigation("phone");
     console.log("PASS pane find: history jump, count, next/previous, stale range clearing and retry, no match, Escape, touch menu, no find input, deferred-upload focus");

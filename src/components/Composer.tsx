@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { flushSync, createPortal } from "react-dom";
-import { ArrowUp, ClipboardPaste, FileText, FolderGit2, LoaderCircle, MessageSquarePlus, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon, AudioLines, ChevronDown, Cpu } from "lucide-react";
+import { ArrowUp, ClipboardPaste, FileText, FolderGit2, LoaderCircle, Minimize2, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon, AudioLines, ChevronDown, Cpu } from "lucide-react";
 
 import "./Composer.css";
 
@@ -63,6 +63,7 @@ import { resolveComposerMenuActiveItemId } from "../lib/composerMenuHighlight.ts
 import { enterSendsOn, quickReplyButtons, useSettings } from "../lib/settings.ts";
 import { composerUsage, formatPercent, formatResetIn, HIGH_PERCENT, meterPercent, meterText, providerForAgent, statusWindows, usageName, useUsage, windowLabel } from "../lib/usage.ts";
 import { Artifacts } from "./Artifacts.tsx";
+import { OmpBtw } from "./OmpBtw.tsx";
 import { BackgroundTasks } from "./BackgroundTasks.tsx";
 import { AgentMark, modelMark } from "./AgentMark.tsx";
 import { RowMenu } from "./RowMenu.tsx";
@@ -110,9 +111,6 @@ export interface ComposerProps {
   inert?: boolean;
   /** opens the folder's earlier sessions instead of submitting /resume */
   onOpenHistory?: () => void;
-  /** opens the New tab dialog on this pane's workspace, to start another agent with its model, effort, skills
-   * and first message (NewSessionDialog); none: the pane has no workspace to add a tab to */
-  onOpenNewSession?: () => void;
   /** the pane's working folder: a live voice call is named after it */
   cwd?: string | null;
   /** true: sent, clear the box; a string: keep the text and say why; a DraftRefusal: the same, and the
@@ -278,7 +276,6 @@ export function Composer({
   role = "interact",
   inert = false,
   onOpenHistory,
-  onOpenNewSession,
   cwd = null,
   onSend,
   onClaim,
@@ -1562,22 +1559,9 @@ export function Composer({
             </button>
           )}
           {dictation.shown && <MicButton dictation={dictation} />}
-          {/* only once this device turned it on (Settings → Chat → Composer; the composer's row stays minimal, and
-              the tab menu opens the same dialog), and in a mouse-driven window only, like the usage glance: a phone's
-              card has no row to spare beside the mic and the tasks chip, and its tab menu carries New tab with agent… already */}
-          {onOpenNewSession && settings.composerNewTabButton && role !== "observe" && !mobile && (
-            <button
-              type="button"
-              className="icon-button composer-new-session"
-              aria-label={t("New tab with an agent…")}
-              title={t("New tab with an agent…")}
-              onClick={onOpenNewSession}
-            >
-              <MessageSquarePlus aria-hidden="true" />
-            </button>
-          )}
           <BackgroundTasks paneId={paneId} count={backgroundTasks} omo={agent === "omo"} subagents={agent === "claude" || agent === "opencode"} plan={plan} />
           {agent === "claude" && <Artifacts paneId={paneId} status={agentStatus} />}
+          {agent === "omp" && <OmpBtw paneId={paneId} />}
         </div>
         {/* between the two control groups of the card's last row. The agent's name, its separator and the
             state word are read, not drawn: the mark and the header name the agent, and Stop, the live row and

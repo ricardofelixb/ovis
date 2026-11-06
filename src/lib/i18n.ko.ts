@@ -1,5 +1,7 @@
 import { SETTINGS_KO } from "./i18n/settings.ko.ts";
 import { SETTINGS_ACCESS_KO } from "./i18n/settings-access.ko.ts";
+import { SETTINGS_COMPOSER_KO } from "./i18n/settings-composer.ko.ts";
+import { SETTINGS_LAYOUT_KO } from "./i18n/settings-layout.ko.ts";
 import { TERMINAL_KO } from "./i18n/terminal.ko.ts";
 import { COMPOSER_KO } from "./i18n/composer.ko.ts";
 import { CHAT_KO } from "./i18n/chat.ko.ts";
@@ -111,6 +113,8 @@ const BASE: Record<string, string> = {
   "Show the terminal": "터미널 보기",
   "Show the chat": "채팅 보기",
   "Close this half": "이쪽 화면 닫기",
+  "Remove from the split": "분할에서 빼기",
+  "Resize the split": "분할 크기 조절",
   "Toggle sidebar (⌘⇧B)": "사이드바 토글 (⌘⇧B)",
   "Switch to chat (⌘⇧J)": "채팅으로 전환 (⌘⇧J)",
   "Switch to terminal (⌘⇧J)": "터미널로 전환 (⌘⇧J)",
@@ -271,6 +275,7 @@ const BASE: Record<string, string> = {
   "Submit": "제출",
   "Recommended": "추천",
   "Agents": "에이전트",
+  "Show {name}": "{name} 표시",
   "Check again": "다시 확인",
   "Setup guide": "설정 안내",
   "Could not confirm this browser is paired. Check that cookies are enabled, then try again.": "이 브라우저의 페어링을 확인할 수 없습니다. 쿠키가 허용되어 있는지 확인한 뒤 다시 시도하세요.",
@@ -400,9 +405,6 @@ const BASE: Record<string, string> = {
   "Copy details": "자세한 내용 복사",
   "This pane can't be shown.": "이 패널을 표시할 수 없습니다.",
   "The sidebar can't be shown.": "사이드바를 표시할 수 없습니다.",
-  "Diff layout": "비교 보기 방식",
-  "Unified": "한 열",
-  "Split": "나란히",
   // t3code ports (a)
   // t3code ports (d)
   "Change PC": "PC 바꾸기",
@@ -467,7 +469,7 @@ const BASE: Record<string, string> = {
 /** The parts KO is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */
 export const KO_PARTS: Record<string, Record<string, string>> = {
   base: BASE,
-  settings: { ...SETTINGS_KO, ...SETTINGS_ACCESS_KO },
+  settings: { ...SETTINGS_KO, ...SETTINGS_ACCESS_KO, ...SETTINGS_COMPOSER_KO, ...SETTINGS_LAYOUT_KO },
   terminal: TERMINAL_KO,
   composer: COMPOSER_KO,
   chat: CHAT_KO,

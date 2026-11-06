@@ -1,5 +1,7 @@
 import { SETTINGS_ZH } from "./i18n/settings.zh.ts";
 import { SETTINGS_ACCESS_ZH } from "./i18n/settings-access.zh.ts";
+import { SETTINGS_COMPOSER_ZH } from "./i18n/settings-composer.zh.ts";
+import { SETTINGS_LAYOUT_ZH } from "./i18n/settings-layout.zh.ts";
 import { TERMINAL_ZH } from "./i18n/terminal.zh.ts";
 import { COMPOSER_ZH } from "./i18n/composer.zh.ts";
 import { CHAT_ZH } from "./i18n/chat.zh.ts";
@@ -115,6 +117,8 @@ const BASE: Record<string, string> = {
   "Show the terminal": "显示终端",
   "Show the chat": "显示聊天",
   "Close this half": "关闭这一半",
+  "Remove from the split": "从拆分中移除",
+  "Resize the split": "调整拆分大小",
   "Toggle sidebar (⌘⇧B)": "切换侧边栏 (⌘⇧B)",
   "Switch to chat (⌘⇧J)": "切换到聊天 (⌘⇧J)",
   "Switch to terminal (⌘⇧J)": "切换到终端 (⌘⇧J)",
@@ -275,6 +279,7 @@ const BASE: Record<string, string> = {
   "Submit": "提交",
   "Recommended": "推荐",
   "Agents": "代理",
+  "Show {name}": "显示 {name}",
   "Check again": "重新检查",
   "Setup guide": "设置向导",
   "Could not confirm this browser is paired. Check that cookies are enabled, then try again.": "无法确认此浏览器已配对。请检查是否允许 Cookie，然后重试。",
@@ -404,9 +409,6 @@ const BASE: Record<string, string> = {
   "Copy details": "复制详细信息",
   "This pane can't be shown.": "无法显示此窗格。",
   "The sidebar can't be shown.": "无法显示侧边栏。",
-  "Diff layout": "差异布局",
-  "Unified": "单栏",
-  "Split": "并排",
   // t3code ports (a)
   // t3code ports (d)
   "Change PC": "切换电脑",
@@ -471,7 +473,7 @@ const BASE: Record<string, string> = {
 /** The parts ZH is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */
 export const ZH_PARTS: Record<string, Record<string, string>> = {
   base: BASE,
-  settings: { ...SETTINGS_ZH, ...SETTINGS_ACCESS_ZH },
+  settings: { ...SETTINGS_ZH, ...SETTINGS_ACCESS_ZH, ...SETTINGS_COMPOSER_ZH, ...SETTINGS_LAYOUT_ZH },
   terminal: TERMINAL_ZH,
   composer: COMPOSER_ZH,
   chat: CHAT_ZH,
