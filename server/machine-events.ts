@@ -17,12 +17,14 @@ export interface MachineEventDocument {
   pairings?: { subscribe(listener: (event: DevicePairedEvent | DeviceRemovedEvent | RelayPairingsEvent | RemotePairingsEvent) => void): () => void };
   /** Bound to this browser's device address at admission, never another PC's theme. */
   omarchyTheme?: { get(): OmarchyTheme | null; subscribe(listener: (theme: OmarchyTheme | null) => void): () => void };
+  /** Bound to this browser's device address at admission: POST /api/machines/open reaches only the windows on the device that asks. */
+  open?: { subscribe(listener: (event: MachineEvent) => void): () => void };
   /** A page nobody sees takes only what an in-app alert reads (server/hidden-events.ts). */
   hidden?: ReturnType<typeof hiddenEvents>;
 }
 
 /** Initial documents and subsequent invalidations use exactly the same redaction on either transport. */
-export function subscribeMachineEvents({ manager, preferences, herdrSidebar, seen, pairings, omarchyTheme, hidden }: MachineEventDocument, send: (event: MachineEvent) => void): () => void {
+export function subscribeMachineEvents({ manager, preferences, herdrSidebar, seen, pairings, omarchyTheme, open, hidden }: MachineEventDocument, send: (event: MachineEvent) => void): () => void {
   const stops: Array<() => void> = [];
   let active = true;
   const tell = (event: MachineEvent) => { if (active) send(event); };
@@ -73,6 +75,7 @@ export function subscribeMachineEvents({ manager, preferences, herdrSidebar, see
       sendTheme(omarchyTheme.get());
     }
     if (pairings) stops.push(pairings.subscribe(tell));
+    if (open) stops.push(open.subscribe(tell));
     return stop;
   } catch (error) { stop(); throw error; }
 }
