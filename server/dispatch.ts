@@ -60,9 +60,9 @@ import { USER_FONTS_PATH } from "../shared/user-fonts.ts";
 import type { UsageAccountList } from "./usage-account-list.ts";
 import { handleVoiceRequest } from "./voice.ts";
 import { handleSpeechRequest, type SpeechService } from "./speech.ts";
-import { BRIDGE_PROTOCOL } from "../shared/machines.ts";
+import { BRIDGE_PROTOCOL, type MachineEvent } from "../shared/machines.ts";
 import { bridgeIdentity } from "./bridge.ts";
-import { handleMachineRequest, nonCanonicalPath, slowMachinePath, type EventStreamBudget } from "./machine-api.ts";
+import { handleMachineRequest, nonCanonicalPath, slowMachinePath, subscribeOpen, type EventStreamBudget } from "./machine-api.ts";
 import { handleSessionHistoryRequest, handleSessionResumeRequest, SESSION_HISTORY_PATH, SESSION_RESUME_PATH } from "./session-history-routes.ts";
 import type { PiSessionReader } from "./pi-session-metadata.ts";
 import type { HerdrSidebarConfig } from "./herdr-sidebar.ts";
@@ -440,11 +440,11 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     const openAccess = access.level === "full" && access.via === "open";
     // relay pairings waiting for approval reach only a window that may approve one, as on /api/machines/events
     const approver = access.level === "full" && access.role === "drive" && access.via !== "open" && access.via !== "relay" && access.via !== "portal";
-    // Match SSE's device key: the theme hook and its browser share the forwarded address.
+    // Match SSE's device key: the theme hook, an `open` request and its browser share the forwarded address.
     const themeDevice = forwardedFor?.split(",")[0]?.trim() ?? "";
     const machineEvents = useMachineEvents ? {
       manager: machines, preferences, herdrSidebar, seen,
-      ...(ctx.peer.kind === "relay" ? {} : { omarchyTheme: {
+      ...(ctx.peer.kind === "relay" ? {} : { open: { subscribe: (listener: (event: MachineEvent) => void) => subscribeOpen(themeDevice, listener) }, omarchyTheme: {
         get: () => omarchyThemes.get(themeDevice),
         subscribe: (listener: Parameters<OmarchyThemeStore["subscribe"]>[1]) => omarchyThemes.subscribe(themeDevice, listener),
       } }),

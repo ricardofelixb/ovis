@@ -102,6 +102,12 @@ export const machineEventsQueuedBytes = (): number => {
  * when the laptop's Touch Bar opens one.
  */
 const openListeners = new Set<{ device: string; send: (event: MachineEvent) => void }>();
+/** A window's wish to hear `open`, for the device it runs on: the SSE route and the terminal socket's machine events both take it. */
+export function subscribeOpen(device: string, send: (event: MachineEvent) => void): () => void {
+  const listener = { device, send };
+  openListeners.add(listener);
+  return () => { openListeners.delete(listener); };
+}
 const deviceOf = (request: Request) => request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "";
 /** A host as the title and an SSH config name it: its first DNS label, lower-cased */
 // a name compares on its first label, an address whole: every tailnet address starts `100.`
@@ -190,7 +196,6 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       // the page is in the background: it takes what an in-app alert reads, not every roster (server/hidden-events.ts)
       const hidden = url.searchParams.get("hidden") === "1" ? hiddenEvents() : undefined;
       let stop: (() => void) | undefined;
-      let stopOpen: (() => void) | undefined;
       let stopOmarchy: (() => void) | undefined;
       let unwatchDevice: (() => void) | undefined;
       let heartbeat: ReturnType<typeof setInterval> | undefined;
@@ -202,7 +207,7 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       // the browser went away: what still waits for it is dropped, not kept for a reader that is gone
       const aborted = () => drop();
       const cleanup = () => {
-        stop?.(); stopOpen?.(); stopOmarchy?.(); unwatchDevice?.(); clearInterval(heartbeat);
+        stop?.(); stopOmarchy?.(); unwatchDevice?.(); clearInterval(heartbeat);
         request.signal.removeEventListener("abort", aborted);
         if (queue) forgetQueue(queue);
         relayBudget?.release(charged);
@@ -274,16 +279,14 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
             if (bytes.byteLength > MACHINE_EVENTS_QUEUE_BYTES) large.push({ end: written, bytes: bytes.byteLength });
             retell();
           };
-          stop = subscribeMachineEvents({ manager, preferences, herdrSidebar, seen, pairings, hidden },
+          const device = deviceOf(request);
+          stop = subscribeMachineEvents({ manager, preferences, herdrSidebar, seen, pairings, hidden, open: { subscribe: (listener) => subscribeOpen(device, listener) } },
             (event) => send(`data: ${JSON.stringify(event)}\n\n`));
-          const listener = { device: deviceOf(request), send: (event: MachineEvent) => send(`data: ${JSON.stringify(event)}\n\n`) };
-          openListeners.add(listener);
-          stopOpen = () => { openListeners.delete(listener); };
           // the Omarchy theme of the device this browser runs on, when that device's hook sent one; none over a relay
           if (omarchyThemes) {
             const sendTheme = (theme: ReturnType<OmarchyThemeStore["get"]>) => send(`data: ${JSON.stringify({ type: "omarchy-theme", theme } satisfies MachineEvent)}\n\n`);
-            stopOmarchy = omarchyThemes.subscribe(listener.device, sendTheme);
-            sendTheme(omarchyThemes.get(listener.device));
+            stopOmarchy = omarchyThemes.subscribe(device, sendTheme);
+            sendTheme(omarchyThemes.get(device));
           }
           if (closed) { cleanup(); return; }
           heartbeat = machineEventsClock.heartbeat(() => send(": heartbeat\n\n"), hidden ? HIDDEN_HEARTBEAT_MS : undefined);
