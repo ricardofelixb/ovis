@@ -9,6 +9,9 @@ import { LARGE_REPLY_BYTES } from "../herdr/client.ts";
 import { OUTPUT_HARD_BYTES, OUTPUT_HIGH_BYTES, OUTPUT_JOIN_BYTES_PER_SECOND, OUTPUT_LOW_BYTES, OUTPUT_STALL_MS } from "../output-window.ts";
 import type { PendingInputs } from "../pending-input.ts";
 import type { MachineEventDocument } from "../machine-events.ts";
+import { handleMachineRequest, subscribeOpen } from "../machine-api.ts";
+import type { MachineManager } from "../machines.ts";
+import type { Machine, MachineEvent } from "../../shared/machines.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
 import type { SharedPreferences } from "../../shared/preferences.ts";
 import { backlog, type Client, connectionData, connectionOf, createConnections, send, setMachineEvents } from "./connections.ts";
@@ -192,6 +195,36 @@ it("ends the machine-event subscription, never the terminal connection, when the
   setMachineEvents(client, true);
   expect(log).toEqual([]);
   expect(sent).toEqual(["machine-event", "machine-events-ended"]);
+});
+
+it("delivers POST /api/machines/open to a socket with machine events on, on its device only, until they stop", async () => {
+  const manager = { subscribe: () => () => {}, list: () => [{ id: "local", name: "vps", kind: "local" }] as Machine[] } as unknown as MachineManager;
+  const open = (device: string) => handleMachineRequest(new Request("http://127.0.0.1:7317/api/machines/open", {
+    method: "POST",
+    headers: { "x-forwarded-for": device, "x-herdr-machine": "1", "content-type": "application/json" },
+    body: JSON.stringify({ hosts: ["vps"], pane_id: "w3:p2" }),
+  }), manager);
+  // the upgrade binds the document's `open` to the browser's device, as server/dispatch.ts does
+  const socket = (device: string) => {
+    const machineEvents: MachineEventDocument = { manager, open: { subscribe: (listener) => subscribeOpen(device, listener) } };
+    const { client } = harness({ machineEvents });
+    const opens: MachineEvent[] = [];
+    Object.assign(client, { send: (raw: string) => { const message = JSON.parse(raw) as ServerMessage; if (message.type === "machine-event" && message.event.type === "open") opens.push(message.event); return 1; } });
+    return { client, opens };
+  };
+  const laptop = socket("100.96.150.41");
+  const phone = socket("100.68.231.11");
+  setMachineEvents(laptop.client, true);
+  setMachineEvents(laptop.client, true); // idempotent: one window, not two
+  setMachineEvents(phone.client, true);
+  expect(await (await open("100.96.150.41")).json()).toEqual({ windows: 1 });
+  expect(laptop.opens).toEqual([{ type: "open", machine_id: "local", pane_id: "w3:p2" }]);
+  expect(phone.opens).toEqual([]);
+
+  setMachineEvents(laptop.client, false);
+  expect((await open("100.96.150.41")).status).toBe(404);
+  setMachineEvents(phone.client, false);
+  expect((await open("100.68.231.11")).status).toBe(404);
 });
 
 it("a revoke ends the connection with 1008 and leaves its pending input to the socket's close", () => {

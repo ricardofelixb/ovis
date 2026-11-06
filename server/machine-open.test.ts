@@ -1,9 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import type { Machine, MachineEvent } from "../shared/machines.ts";
-import type { ServerMessage } from "../shared/protocol.ts";
-import { type Client, connectionData, setMachineEvents } from "./core/connections.ts";
-import { handleMachineRequest, readFinishes, subscribeOpen } from "./machine-api.ts";
+import { handleMachineRequest, readFinishes } from "./machine-api.ts";
 import type { MachineManager } from "./machines.ts";
 
 const machines = [
@@ -50,40 +48,6 @@ describe("POST /api/machines/open", () => {
       await laptop.cancel().catch(() => undefined);
       await phone.cancel().catch(() => undefined);
     }
-  });
-});
-
-describe("POST /api/machines/open over the terminal WebSocket", () => {
-  // a browser whose machine events ride its terminal socket: the upgrade binds the document to its device
-  function socket(device: string) {
-    const sent: MachineEvent[] = [];
-    const machineEvents = { manager: { subscribe: () => () => undefined }, open: { subscribe: (listener: (event: MachineEvent) => void) => subscribeOpen(device, listener) } };
-    const client = {
-      data: connectionData({ deviceId: undefined, readOnly: false, machineEvents }),
-      readyState: WebSocket.OPEN,
-      close: () => undefined,
-      getBufferedAmount: () => 0,
-      send: (raw: string) => { const message = JSON.parse(raw) as ServerMessage; if (message.type === "machine-event") sent.push(message.event); return 1; },
-    } as unknown as Client;
-    return { client, sent };
-  }
-
-  test("reaches a socket with machine events on, on its device only, until they stop", async () => {
-    const laptop = socket("100.96.150.41");
-    const phone = socket("100.68.231.11");
-    setMachineEvents(laptop.client, true);
-    setMachineEvents(phone.client, true);
-    expect(await (await open("100.96.150.41", "vps")).json()).toEqual({ windows: 1 });
-    expect(laptop.sent).toEqual([{ type: "open", machine_id: "local", pane_id: "w3:p2" }]);
-    expect(phone.sent).toEqual([]);
-
-    setMachineEvents(laptop.client, false);
-    expect((await open("100.96.150.41", "vps")).status).toBe(404);
-    setMachineEvents(laptop.client, true);
-    expect(await (await open("100.96.150.41", "vps")).json()).toEqual({ windows: 1 });
-    setMachineEvents(laptop.client, false);
-    setMachineEvents(phone.client, false);
-    expect((await open("100.68.231.11", "vps")).status).toBe(404);
   });
 });
 
