@@ -4,6 +4,7 @@ import type { Browser } from "playwright-core";
 import { openSettingsPage } from "./settings-page.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens } from "./view-toggle.ts";
+import { shownRows } from "./shown-rows.ts";
 
 export async function checkTerminalInput(browser: Browser, origin: string, pane: string, otherPane: string): Promise<void> {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
@@ -864,11 +865,11 @@ async function checkCanonicalSubmit(browser: Browser): Promise<void> {
         const line = page.getByRole("textbox", { name: "Terminal input line", exact: true });
         await line.waitFor();
         // the input line holds the program's prompt once the pane is drawn: the mode the program asked for came before it
-        await page.locator(".xterm-rows", { hasText: "$" }).waitFor();
+        await page.locator(shownRows(), { hasText: "$" }).waitFor();
         await page.waitForFunction(() => document.querySelector(".terminal-banner") === null);
         // with the browser attached, the program asks for its mode again; its "ready$" comes after that request
         process.kill(recorder, "SIGUSR2");
-        await page.locator(".xterm-rows", { hasText: "ready$" }).waitFor();
+        await page.locator(shownRows(), { hasText: "ready$" }).waitFor();
         if (item.server === "attached") {
           const mode = browserMode();
           if (mode !== item.mode) {
