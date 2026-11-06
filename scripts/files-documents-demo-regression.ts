@@ -78,7 +78,7 @@ async function exercise(page: Page, surface: string, theme: string): Promise<voi
   const overflow = await page.locator(".md-docs").evaluate((list) => list.scrollWidth - list.clientWidth);
   assert.ok(overflow <= 1, `the list does not scroll sideways (${overflow}px)`);
   // the tabs fade their background: the picture waits for the pressed one to land
-  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
+  await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity));
   await shot(page, `files-documents-${surface}-${theme}`);
   const filter = page.getByRole("searchbox", { name: "Filter documents" });
   await filter.fill("plan");
@@ -141,7 +141,7 @@ async function phone(browser: Browser, theme: "light" | "dark"): Promise<void> {
     await page.getByText("Browse files", { exact: true }).click();
     await page.locator(".modal-scrim .files-dialog").waitFor();
     // the menu's sheet drops while the Files sheet rises: the picture waits for both to land
-    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running"));
+    await page.waitForFunction(() => document.getAnimations().every((animation) => animation.playState !== "running" || animation.effect?.getComputedTiming().iterations === Infinity));
     await exercise(page, "390", theme);
     assert.deepEqual(errors, []);
     console.log(`PASS 390px ${theme}: the setting is off by default; on, the four tabs fit and the list works on the sheet`);
