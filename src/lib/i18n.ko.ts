@@ -305,6 +305,8 @@ const BASE: Record<string, string> = {
   "Submit": "제출",
   "Recommended": "추천",
   "Agents": "에이전트",
+  "Tab {index} of {count}": "탭 {count}개 중 {index}번째",
+  "Tabs of {workspace}": "{workspace}의 탭",
   "Show {name}": "{name} 표시",
   "Check again": "다시 확인",
   "Setup guide": "설정 안내",

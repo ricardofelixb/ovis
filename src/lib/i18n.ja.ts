@@ -307,6 +307,8 @@ const BASE: Record<string, string> = {
   "Submit": "送信",
   "Recommended": "推奨",
   "Agents": "エージェント",
+  "Tab {index} of {count}": "タブ {index}/{count}",
+  "Tabs of {workspace}": "{workspace} のタブ",
   "Show {name}": "{name} を表示",
   "Check again": "再確認",
   "Setup guide": "セットアップガイド",
