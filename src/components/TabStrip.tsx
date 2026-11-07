@@ -340,6 +340,16 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     row.addEventListener("wheel", onWheel, { passive: false });
     return () => row.removeEventListener("wheel", onWheel);
   }, [shown, tabsHidden, end === undefined]);
+  // Header buttons can change the strip's width, and late fonts can resize the tabs without
+  // resizing their scroller. Measure after either settles, unless the user scrolled elsewhere.
+  useEffect(() => {
+    const row = strip.current;
+    if (!row || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => { if (!scroll.current.moved) bringOpenTab(); });
+    observer.observe(row);
+    row.querySelectorAll(".tab-strip-item").forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, [shown, tabs.length, tabsHidden]);
   const onScroll = (): void => {
     const row = strip.current;
     if (row) scroll.current = stripScrolled(scroll.current, row.scrollLeft, row.scrollWidth - row.clientWidth);

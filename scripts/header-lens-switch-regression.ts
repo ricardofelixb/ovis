@@ -8,12 +8,26 @@ import { workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens, shownLens, VIEW_BUTTON } from "./view-toggle.ts";
 
-async function checkTabSurface(page: Page): Promise<void> {
+async function checkTabSurface(page: Page, width: number): Promise<void> {
+  if (width <= 640) {
+    // a phone's header title lists the tabs in place of the row
+    await page.locator(".app-header .context-tabs").waitFor();
+    assert.equal(await page.locator(".header-tabs").count(), 0, "a phone has no tab row in its header");
+    return;
+  }
+  // the header takes the tabs from 769px; a tablet below that keeps its row over the pane
+  if (width < 769) {
+    await page.locator(".tab-strip .tab-strip-add").waitFor();
+    assert.equal(await page.locator(".header-tabs").count(), 0, "a tablet keeps the tabs out of its header");
+    return;
+  }
   await page.locator(".header-tabs .tab-strip-add").waitFor();
   const backgrounds = await page.locator(".header-tabs .tab-strip-row, .header-tabs .tab-strip, .header-tabs .tab-strip-add")
     .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).backgroundColor));
-  assert.deepEqual(backgrounds, Array(3).fill("rgba(0, 0, 0, 0)"), "the tabs and + share the header's surface, without an opaque band");
-  assert.equal(await page.locator(".header-tabs .tab-strip .tab-strip-add").count(), 0, "the + sits outside the scrolling tabs so it needs no opaque cover");
+  assert.ok(backgrounds.length >= 2, "the strip and the + are in the header");
+  assert.deepEqual(backgrounds, backgrounds.map(() => "rgba(0, 0, 0, 0)"), "the tabs and + share the header's surface, without an opaque band");
+  // the header's row lists what does not fit behind More instead of scrolling, so the + needs no opaque cover
+  assert.equal(await page.locator(".header-tabs .tab-strip").evaluate((node) => node.scrollWidth <= node.clientWidth), true, "the header's tabs do not scroll under the +");
 }
 
 export async function checkHeaderLensSwitch(browser: Browser, origin: string, evidence?: string): Promise<void> {
@@ -35,7 +49,7 @@ export async function checkHeaderLensSwitch(browser: Browser, origin: string, ev
         await page.locator(VIEW_BUTTON).waitFor();
         assert.equal(await page.locator(".app-header .view-toggle").count(), 0, "the old header toggle is removed");
         await pickLens(page, "chat", { tap: touch });
-        await checkTabSurface(page);
+        await checkTabSurface(page, width);
         if (touch) await page.locator(".drawer-toggle").click();
         const sidebarMenu = page.locator(".sidebar-row-action.row-menu-toggle").first();
         await sidebarMenu.waitFor({ state: "attached" });
@@ -59,7 +73,7 @@ export async function checkHeaderLensSwitch(browser: Browser, origin: string, ev
         await menu.waitFor({ state: "detached" });
         await page.locator(`${VIEW_BUTTON}[data-view="terminal"]`).waitFor();
         assert.equal(await shownLens(page), "terminal");
-        await checkTabSurface(page);
+        await checkTabSurface(page, width);
         await page.reload();
         await page.locator(`${VIEW_BUTTON}[data-view="terminal"]`).waitFor();
         await page.locator(VIEW_BUTTON).click();

@@ -2301,8 +2301,9 @@ button {
   padding-right: var(--space-4);
 }
 
+/* the header's own surface in either lens, a phone's glass header included: no tinted band behind the tabs */
 .header-tabs .tab-strip {
-  --strip-bg: var(--strip-tint);
+  --strip-bg: transparent;
   align-items: flex-end;
   gap: 0;
   flex: 1 1 auto;
