@@ -1,3 +1,4 @@
+import type { HerdrKeys } from "./herdr-keys.ts";
 import type { MachineEvent } from "./machines.ts";
 /**
  * Ovis's own HTTP/WebSocket contract, shared by the Bun server and the React client.
@@ -37,6 +38,8 @@ import type { AgentStatus, PaneInfo, SessionSnapshot as HerdrSnapshot, TabInfo, 
 /** GET /api/herdr-ui: the herdr client preferences of the PC serving the web UI, never the rest of its config. */
 export interface HerdrUiConfig {
   copy_on_select: boolean;
+  /** its `[keys]` prefix bindings the app can run (shared/herdr-keys.ts); absent from an older server */
+  keys?: HerdrKeys;
 }
 
 /** Friendly aliases used across the UI. */
@@ -141,8 +144,8 @@ export type { DevicePairedEvent, DeviceRemovedEvent, PairingIntent, RelayPairing
  *         a driving owner only (not watch, not an open install's stranger): saves the choice (runtime-<port>.json) and has
  *         the launcher restart the server on it (server/herdr-core/runtime-choice.ts); 409 runtime_locked (OVIS_RUNTIME,
  *         no launcher, the OS), runtime_unavailable (this PC lacks it, or serves it already), runtime_switching
- *  GET    /api/herdr-ui                  -> HerdrUiConfig (this server PC's herdr [ui] copy_on_select,
- *         for local and remote panes alike), no-store
+ *  GET    /api/herdr-ui                  -> HerdrUiConfig (this server PC's herdr [ui] copy_on_select and
+ *         [keys] prefix bindings, for local and remote panes alike), no-store
  *  GET    /api/access                    -> RemoteAccess (how a phone can reach this server: what
  *         Tailscale on this PC already serves, or the command to run), no-store
  *  GET    /api/portal                    -> PortalStatus (an optional public HTTPS address through
@@ -172,6 +175,8 @@ export type { DevicePairedEvent, DeviceRemovedEvent, PairingIntent, RelayPairing
  *  POST   /api/relay/pairing             -> { ok: true }; JSON { id, decision: "approve" | "decline" } for a phone
  *         waiting with the same digits (`relay-pairings` on /api/machines/events); 400 invalid_relay_pairing,
  *         404 relay_pairing_gone once it left, was decided or ran out of time
+ *  POST   /api/relay/direct              -> RelayStatus; JSON { on: boolean }: direct connections on this PC's
+ *         networks while the relay is on (on unless turned off; off ends every direct session); 400 invalid_relay_direct, 409 direct_unavailable on a server without them
  *  POST   /api/relay/reset-identity      -> RelayStatus; revokes relay devices and reconnects if enabled
  *         Relay mutations require drive role, same origin and X-Herdr-Update: 1, and a direct connection
  *         (403 local_required over the relay); a Portal visitor gets 403 owner_only (see Access).
@@ -447,6 +452,9 @@ export type { DevicePairedEvent, DeviceRemovedEvent, PairingIntent, RelayPairing
  *         409 repository_without_commits when no base is named and the repository has no commit yet;
  *         both worktree routes refuse a label over MAX_LABEL_CHARS with 400 label_too_long)
  *  GET    /api/worktree/list?workspace_id= -> WorktreeListing (worktree.list: the repo's checkouts)
+ *  GET    /api/worktree/inventory?workspace_id=&workspace_id=... -> WorktreeInventory (the same listing for up to
+ *         MAX_INVENTORY_WORKSPACES workspaces in one read, each with its listing or the error the list route would give;
+ *         400 missing_workspace_id, too_many_workspaces; a bridge from before it answers 404 not_found)
  *  POST   /api/worktree/open   { workspace_id, path | branch, label? } -> WorktreeOpened
  *         (worktree.open: an existing checkout as a workspace; already_open names the one it has)
  *  GET    /api/worktree/pull-requests?workspace_id= -> PullRequestListing (gh: the repo's open pull requests)
@@ -456,7 +464,8 @@ export type { DevicePairedEvent, DeviceRemovedEvent, PairingIntent, RelayPairing
  *         dirty_worktree_requires_force)
  *  POST   /api/auth        { token }     -> 204 + Set-Cookie ovis_token (401 invalid_token on mismatch)
  *  DELETE /api/auth                      -> 204, clears the token and the device cookies
- *  GET    /api/devices                   -> { devices: PairedDevice[] } (the paired devices; `current` marks the caller's)
+ *  GET    /api/devices                   -> { devices: PairedDevice[] } (the paired devices; `current` marks the caller's,
+ *         `connection` how one with an encrypted session up reaches the PC; `?check=1` measures their round trips first, within 3 s)
  *  POST   /api/devices/pair/start        -> PairingCode: a six-digit code good for ten minutes, replacing any pending one
  *         (X-Herdr-Machine: 1 + same origin, from a client with full access)
  *  POST   /api/devices/pair { code, label? } -> 204 + Set-Cookie ovis_device (public, like /api/auth;
@@ -510,7 +519,7 @@ export type { UsageProviderId, UsageWindow, UsageResets, UsageCredits, UsageProb
 
 export type { CLIProxyStatus, CLIProxyProvider, CLIProxyLogin, CLIProxyLoginStatus } from "./cliproxy.ts";
 
-export type { AccessVia, AccessRefusal, DeviceRole, HealthAuth, LanExposure, BindScope, ObservedIngress, SecuritySummary, PairedDevice, PairingCode, PortalLogin, TailscaleAccess } from "./access.ts";
+export type { AccessVia, AccessRefusal, DeviceRole, HealthAuth, LanExposure, DirectExposure, BindScope, ObservedIngress, SecuritySummary, PairedDevice, DeviceConnection, DeviceRoute, PairingCode, PortalLogin, TailscaleAccess } from "./access.ts";
 /** Older servers and the Tailscale-only builder omit relay state. */
 export type RemoteAccess = import("./access.ts").RemoteAccess & { readonly relay?: RelayStatus };
 
@@ -550,6 +559,11 @@ export interface RelayStatus {
   readonly sessions: number;
   readonly blocked: null | "serve_only" | "identity_unreadable";
   readonly error: string | null;
+  /**
+   * Direct connections on this PC's networks (docs/relay.md): whether they are on, and the carriers
+   * listened on now (none while the relay is off). Absent from a server without them.
+   */
+  readonly direct?: { readonly on: boolean; readonly carriers: readonly string[] };
 }
 
 /** POST /api/devices/pair's answer to a request that accepts JSON: the device's own credential. */
@@ -682,6 +696,11 @@ export interface ConversationMetadata {
    * "provider/id", `levels` the thinking levels that model takes. Absent without the extension.
    */
   models?: { id: string; name: string; window: number; levels: string[]; current: boolean }[];
+  /**
+   * The provider the conversation runs at, as omp, omo, gjc and pi name it (`anthropic`,
+   * `openai-codex`): set by a model change and by each answer, absent when none is named.
+   */
+  provider?: string;
 }
 
 export type { OmoTask, OmoRunNode, OmoRun, OmoActivity, PaneBackgroundAgentDetail } from "./tasks.ts";
@@ -806,6 +825,7 @@ export type { AgentKind } from "./agents.ts";
 export type { AgentIntegration, IntegrationsResponse } from "./integrations.ts";
 
 export type { CreateWorkspaceRequest, MoveTabRequest, TabMoved, MoveTabToWorkspaceRequest, TabMovedToWorkspace, CreateTabRequest, CreateWorktreeRequest, OpenWorktreeRequest, WorktreeOpened, RemoveWorktreeRequest, WorktreeRemoved, WorktreeEntry, WorktreeListing, PullRequestChecks, PullRequestEntry, PullRequestListing, WorkspaceCreated, TabCreated } from "./workspace-lifecycle.ts";
+export type { WorktreeInventory, WorktreeInventoryEntry } from "./workspace-lifecycle.ts";
 
 /** POST /api/agent/rename: the live name of the agent in the pane; null clears it. */
 export interface AgentRenameRequest {
@@ -1246,8 +1266,10 @@ export type ServerMessage =
   /** the first frame of a connection, before the snapshot that can wait seconds on herdr: what this server
    * supports and this socket's `connection` id (the snapshot names the same), and the herdr it reads now
    * (`herdr_lifetime` as a snapshot names it; absent when unproven). A page acts on it before the snapshot only
-   * when that herdr is the one it already knows. Older bridges never send it: their features come with the snapshot */
-  | { type: "features"; features: ServerFeature[]; connection: string; herdr_lifetime?: string }
+   * when that herdr is the one it already knows. Older bridges never send it: their features come with the snapshot.
+   * `paste_dir`: the absolute folder `OVIS_PASTE_DIR` sends this PC's uploads to, so the page reads an upload's
+   * path whole through it (src/lib/pasteFolders.ts, #2771); absent when uploads go to each pane's `<cwd>/.ovis` */
+  | { type: "features"; features: ServerFeature[]; connection: string; herdr_lifetime?: string; paste_dir?: string }
   /** `connection`: this socket's id on the PC, for a create request's `first_message_connection`; older bridges send none */
   | { type: "snapshot"; snapshot: SessionSnapshot; features?: ServerFeature[]; connection?: string }
   /** raw PTY bytes: append to the terminal, never repaint over it. A mirrored pane (HerdrIdentity.terminal_mirror) sends whole screens the same way. */
@@ -1278,8 +1300,11 @@ export type ServerMessage =
    * `typed_now`: on a queued send, this request typed the message at once (the turn had ended
    * before it arrived); on a held copy's resend (`resend_id`), this request typed it. A replayed id, a
    * row sent or discarded since, or a copy another connection sent answers ok without it; an older
-   * server never sends it. */
-  | { type: "submit-result"; id: number; pane_id: string; ok: boolean; pending?: PendingMessage; typed_now?: true; code?: string; message?: string; draft?: string; box?: string }
+   * server never sends it.
+   * `sending_at`: on an ok for a message this request typed (an immediate send, or one with
+   * `typed_now`), the PC's clock (ISO 8601) before it typed anything, as a queued row's `sending_at`:
+   * the message's turn is written after it on that clock. An older server never sends it. */
+  | { type: "submit-result"; id: number; pane_id: string; ok: boolean; pending?: PendingMessage; typed_now?: true; sending_at?: string; code?: string; message?: string; draft?: string; box?: string }
   | { type: "pending-result"; id: number; pane_id: string; pending_id: string; ok: boolean; code?: string; message?: string }
   /** ok once herdr accepted the inserted bytes (`pane.send_text` answered), never that the program
    * took or ran them; a refusal names why and nothing was typed, except `insert_failed`, whose bytes

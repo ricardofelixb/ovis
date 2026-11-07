@@ -626,16 +626,16 @@ export async function relayShellQa(tree: RelayServerTree): Promise<void> {
       // A same-carrier relay API round trip is a barrier after the rename, not a timed absence check.
       const statusesBefore = await relayStatuses();
       await page.keyboard.press("ControlOrMeta+Shift+Comma");
-      await openSettingsPage(page, "Phone & devices");
+      await openSettingsPage(page, "Devices and PCs");
       await page.getByRole("button", { name: "Rename Renamed QA phone", exact: true }).waitFor();
       // the hosted shell offers no relay at all (a relayed phone can neither pair nor reset there:
-      // relayOffered in components/ConnectPhoneDialog.tsx): no relay state in the Connect a phone row, checked once the page consumed the relay status the group would follow,
+      // relayOffered in components/ConnectPhoneDialog.tsx): no Ovis relay group in More settings, checked once the page consumed the relay status the group would follow,
       // plus two frames for its render
       await page.waitForFunction((seen) => ((window as unknown as { qaRelayStatuses?: number }).qaRelayStatuses ?? 0) > seen, statusesBefore);
       await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const settings = page.locator(".settings-dialog");
-      assert.equal(await settings.locator('[data-section="devices"]').count(), 1, "the shell's Phone & devices lists the devices");
-      assert.equal(await settings.locator('[data-section="phone"] .relay-status').count(), 0, "the hosted shell's Connect a phone row names no relay state");
+      assert.equal(await settings.locator('[data-section="devices"]').count(), 1, "the shell's Devices and PCs lists the devices");
+      assert.equal(await settings.locator('[data-section="relay"]').count(), 0, "the hosted shell's Devices and PCs has no Ovis relay group");
       assert.equal(await settings.getByRole("switch", { name: "Ovis relay", exact: true }).count(), 0, "no relay switch under the shell");
       note(`settings: Phone & devices in the shell lists the phone and has no relay group (relay statuses consumed: ${await relayStatuses()})`);
       await inApp(page);
@@ -772,12 +772,13 @@ export async function relayShellQa(tree: RelayServerTree): Promise<void> {
     {
       const { context, page, bridge } = await open({ theme: "light" });
       const forged: RelayOffer = { ...(await serverOffer()), server_public_key: exportPublicKey(generateKeyPair().publicKey) };
-      const refused = async (attempt: string): Promise<void> => {
+      /** `from`: sockets before the link, such as the front page's check of the saved PC, which are not the link's */
+      const refused = async (attempt: string, from = 0): Promise<void> => {
         await state(page, "identity-changed").waitFor();
         await page.getByRole("heading", { name: "This link is not Desk PC's" }).waitFor();
         assert.equal(await page.getByRole("button", { name: "Pair", exact: true }).count(), 0, `no Pair on a forged link (${attempt})`);
         assert.equal(await page.getByRole("button", { name: "Forget this PC" }).count(), 0, `nothing to forget on a forged link (${attempt})`);
-        assert.deepEqual(bridge.sockets, [], `a forged link opens no socket (${attempt})`);
+        assert.deepEqual(bridge.sockets.slice(from), [], `a forged link opens no socket (${attempt})`);
       };
       await page.goto(offerUrl(forged));
       await refused("opened");
@@ -793,15 +794,18 @@ export async function relayShellQa(tree: RelayServerTree): Promise<void> {
       // from another page, so the link is a fresh load and not a hash change on this one
       await page.goto(`${origin}/`);
       await state(page, "list").waitFor();
+      // the front page checks the saved PC once, with no session (pcStatus.ts): its socket is the list's, not the link's
+      await page.locator('[data-connection]:not([data-connection="checking"])').first().waitFor();
+      const listed = bridge.sockets.length;
       await page.goto(offerUrl(forged));
-      await refused("with the PC's key saved");
+      await refused("with the PC's key saved", listed);
       assert.notEqual(await saved(page, ID), null, "the key saved from the PC's own pairing stays");
       // a key saved from a forged link by an earlier build: this PC's page warns instead of connecting, and Forget removes it
       await seed(page, [{ server_id: ID, server_public_key: forged.server_public_key, name: "Desk PC", device_id: "forged-device" }]);
       await page.goto(scope);
       await state(page, "identity-changed").waitFor();
       await page.getByRole("heading", { name: "Desk PC has a new identity" }).waitFor();
-      assert.deepEqual(bridge.sockets, [], "a forged saved key never connects");
+      assert.deepEqual(bridge.sockets.slice(listed), [], "a forged saved key never connects");
       await page.getByRole("button", { name: "Forget this PC" }).click();
       await state(page, "forgotten").waitFor();
       assert.equal(await saved(page, ID), null, "Forget removed the forged saved key");

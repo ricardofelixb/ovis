@@ -10,6 +10,7 @@ import type { SeenFinish } from "../shared/seen.ts";
 import { MachineManager } from "./machines.ts";
 import { TypedCodeError, type TypedCodeFailure } from "../shared/relay-code-offer.ts";
 import type { OmarchyThemeStore } from "./omarchy-themes.ts";
+import { TailnetPcError } from "./tailnet-pcs.ts";
 import { canSendSecret, sameOrigin } from "./machine-security.ts";
 import { isJsonObject, jsonResponse, setRequestRoute } from "./http.ts";
 import { crossSiteFileRead } from "./file-view.ts";
@@ -124,7 +125,7 @@ export const slowMachinePath = (path: string): boolean => path === "worktree/cre
  * forwards, so such a path must be no route at all rather than "some other route".
  */
 export const nonCanonicalPath = (pathname: string): boolean => pathname.includes("//") || (pathname.length > 1 && pathname.endsWith("/")) || /%2f|%5c/i.test(pathname);
-export const MACHINE_PROXY_PATH = /^(?:session|sessions\/(?:history|resume)|agents|agent-catalog(?:\/(?:install|sign-in))?|integrations|system|usage\/statusline|pane\/(?:read|scroll|find|selection|conversation(?:\/image|\/tool-output)?|commands|files|docs|omo-tasks|background-agent|plan|artifacts|btw|prompt|prompt\/answer|pi-voice|input|keys|close|rename|image|split|zoom|swap|move|resize|clear|focus)|workspace\/(?:create|rename|move|close|directories|diff\/files|diff\/file|diff\/refs|git\/log|git\/branches|git\/show|pr|pr\/log|pr\/merge)|worktree\/(?:create|list|open|remove|pull-requests|pull-request-fetch)|tab\/(?:create|rename|close|move|move-to-workspace)|layout\/ratio|agent\/(?:rename|commands)|plugins\/actions|plugin\/action|fs\/(?:stat|file|favicon|text))$/;
+export const MACHINE_PROXY_PATH = /^(?:session|sessions\/(?:history|resume)|agents|agent-catalog(?:\/(?:install|sign-in))?|integrations|system|usage\/statusline|pane\/(?:read|scroll|find|selection|conversation(?:\/image|\/tool-output)?|commands|files|docs|omo-tasks|background-agent|plan|artifacts|btw|prompt|prompt\/answer|pi-voice|input|keys|close|rename|image|split|zoom|swap|move|resize|clear|focus)|workspace\/(?:create|rename|move|close|directories|diff\/files|diff\/file|diff\/refs|git\/log|git\/branches|git\/show|pr|pr\/log|pr\/merge)|worktree\/(?:create|list|inventory|open|remove|pull-requests|pull-request-fetch)|tab\/(?:create|rename|close|move|move-to-workspace)|layout\/ratio|agent\/(?:rename|commands)|plugins\/actions|plugin\/action|fs\/(?:stat|file|favicon|text))$/;
 
 
 /**
@@ -349,6 +350,24 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       setRequestRoute("/api/machines/read");
       return readFeed(request, manager, seen);
     }
+    if (parts[0] === "tailnet" && parts.length === 1) {
+      setRequestRoute("/api/machines/tailnet");
+      // adding a PC is a driving device's; a watching one is not told which PCs are there either
+      if (readOnly) return fail("read_only", "this device can only watch", 403);
+      if (request.method === "GET") return jsonResponse({ pcs: await manager.listTailnet() }, 200, { "cache-control": "no-store" });
+      if (request.method !== "POST") return fail("method_not_allowed", "Use GET or POST", 405);
+      const body: unknown = await request.json().catch(() => null);
+      if (!isJsonObject(body)) return fail("invalid_body", "Expected the address of a PC found on Tailscale", 400);
+      try { return jsonResponse({ machine: await manager.addTailnet(body.url) }, 201); }
+      catch (error) {
+        if (error instanceof TypedCodeError) {
+          const [message, status] = CODE_FAILURES[error.failure];
+          return fail(`typed_code_${error.failure}`, message, status);
+        }
+        if (!(error instanceof TailnetPcError)) throw error;
+        return fail(`tailnet_${error.failure}`, error.message, error.failure === "not_found" ? 404 : error.failure === "unreachable" ? 502 : 409);
+      }
+    }
     if (parts[0] === "setup") {
       if (parts.length === 1 && request.method === "POST") { setRequestRoute("/api/machines/setup"); return jsonResponse(manager.setup(await request.json() as SetupRequest), 202); }
       if (parts.length === 2) {
@@ -388,6 +407,7 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
     // output, and a repository's checkouts: never asked for a watching device with the PC's credential
     if (readOnly && path === "pane/docs") return fail("read_only", "this device can only watch", 403);
     if (readOnly && (path === "sessions/history" || path === "agent/commands" || path === "pane/commands" || path === "pane/files" || path === "plugin/action" || path === "worktree/list" || path === "worktree/pull-requests")) return fail("read_only", "this device can only watch", 403);
+    if (readOnly && path === "worktree/inventory") return fail("read_only", "this device can only watch", 403);
     if (MACHINE_PROXY_PATH.test(path)) {
       // `path` is a finite endpoint literal, never the machine id or an arbitrary suffix.
       setRequestRoute(`/api/machines/:machine_id/${path}`);
