@@ -1800,7 +1800,9 @@ try {
   await strip.waitFor();
   assert.deepEqual(await strip.getByRole("tab").allTextContents(), ["Tab 1", "second"]);
   assert.equal(await strip.getByRole("tab", { selected: true }).textContent(), "second");
-  assert.equal(await strip.locator(".tab-strip-close, .tab-strip-panes").count(), 0, "tab close buttons and chevrons are removed");
+  assert.equal(await strip.locator(".tab-strip-panes").count(), 0, "tab chevrons are removed");
+  // the header's row is a browser's tab strip: the open tab carries its close, a tab at rest only while hovered
+  assert.equal(await strip.locator(".tab-strip-close:visible").count(), 1, "only the open tab shows its close at rest");
   assert.equal(await strip.locator(".tab-strip-menu:visible").count(), 0, "desktop tabs show no menu button at rest");
   // the selected tab's actions button waits hidden in its place: the pointer over the strip or the
   // tab's keyboard focus brings it into view, and no other tab draws one
@@ -1948,7 +1950,8 @@ try {
   await herdrRpc("pane.focus", { pane_id: createdTab.pane_id });
   const neighbour = await herdrRpc<{ tab: { tab_id: string } }>("tab.create", { workspace_id: created.workspace_id, label: "neighbour", focus: false });
   await until(async () => (await tabsInHerdr()).length === 3, "build has two neighbours");
-  const tabPhone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  // a touch screen wider than a phone keeps the row (a phone's header title lists the tabs: mobile-tabs-regression.ts)
+  const tabPhone = await browser.newContext({ viewport: { width: 700, height: 900 }, isMobile: true, hasTouch: true });
   const tabPhonePage = await tabPhone.newPage();
   const tabPhoneEvidence = evidenceDirectory ? await watchBrowserEvidence(tabPhone, tabPhonePage, "touch-tab-menu") : undefined;
   csp.push(await watchCsp(tabPhonePage));
@@ -1959,12 +1962,13 @@ try {
   assert.equal(await phoneStrip.locator(".tab-strip-close, .tab-strip-panes").count(), 0, "no close button or chevron is rendered");
   assert.equal(await phoneStrip.locator(".tab-strip-menu:visible").count(), 1, "only the open tab has the touch menu button");
   await phoneStrip.getByRole("button", { name: "Actions for build", exact: true }).tap();
-  const tabSheet = tabPhonePage.getByRole("dialog", { name: "build", exact: true });
+  // wider than a phone's sheets, the touch menu is a popover at its button
+  const tabSheet = tabPhonePage.getByRole("menu", { name: "build", exact: true });
   await tabSheet.waitFor();
-  const touchTabItems = await tabSheet.locator(".row-sheet-item").allTextContents();
+  const touchTabItems = await tabSheet.getByRole("menuitem").allTextContents();
   assert.deepEqual(touchTabItems.slice(-6), ["Move tab left", "Move tab right", "Move to workspace…", "New tab with agent…", "Rename tab", "Close tab"], "a tab between siblings offers both adjacent moves on touch");
   assert.ok(!touchTabItems.includes("Rename pane") && !touchTabItems.includes("Close pane"), "a one-pane tab's touch menu acts on the tab alone");
-  await tabSheet.getByRole("button", { name: "Cancel", exact: true }).tap();
+  await tabPhonePage.keyboard.press("Escape");
   await tabSheet.waitFor({ state: "detached" });
   if (tabPhoneEvidence) await tabPhoneEvidence.finish();
   await tabPhone.close();

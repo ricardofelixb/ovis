@@ -8,7 +8,8 @@ import { buildDemoApp } from "./demo-build.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens } from "./view-toggle.ts";
 
-// A compact phone keeps the tab strip, even with only one tab or with its keyboard open. The
+// #1457: a compact-height phone (including the iPhone Duo's outer display, or a phone with its
+// keyboard up) drops a lone tab's row, and the chat then puts the glass header over the pane. The
 // pane then draws no ellipsis under the header's own: the header's More menu carries the pane's and
 // the tab's actions (#2622), and a banner (View only) starts below the header.
 type SocketsWindow = Window & { glassSockets: WebSocket[] };
@@ -57,8 +58,6 @@ try {
       const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: "en-US" });
       try {
         await context.addInitScript(() => {
-          // The native app previously drew an extra Change PC row above Settings.
-          Object.defineProperty(globalThis, "Capacitor", { value: { isNativePlatform: () => true } });
           localStorage.setItem("ovis:settings", JSON.stringify({ language: "en" }));
           const viewport = window.visualViewport!;
           let height = 795;
@@ -73,9 +72,7 @@ try {
         page.on("pageerror", (error) => errors.push(error.message));
         await page.goto(`http://127.0.0.1:${server.port}/herdr-web-ui/demo/app/?pane=${encodeURIComponent(panes.api)}`);
         await page.locator(".conn-live").waitFor();
-        assert.equal(await page.locator(".sidebar-footer .sidebar-footer-pc").count(), 0, "the native app has no redundant Change PC footer row");
-        assert.equal(await page.locator(".sidebar-footer").getByRole("button", { name: "Change PC", exact: true }).count(), 0);
-        // Exercise a workspace with exactly one tab, where upstream used to hide the strip.
+        // A short phone draws no tab row for a workspace's only tab: close the pane's sibling tabs.
         const closed = await page.evaluate(async (id) => {
           const { snapshot } = await (await fetch("/api/session")).json() as { snapshot: { panes: { pane_id: string; tab_id: string; workspace_id: string }[]; tabs: { tab_id: string; workspace_id: string }[] } };
           const own = snapshot.panes.find((pane) => pane.pane_id === id)!;
@@ -87,32 +84,35 @@ try {
           return others.length;
         }, panes.api);
         assert.ok(closed > 0, "the demo pane's workspace had another tab to close");
-        await page.waitForFunction(() => document.querySelectorAll(".tab-strip-item").length === 1);
+        // the title's place among the workspace's tabs goes with the second tab
+        await page.waitForFunction(() => document.querySelector(".context-position") === null);
 
         await pickLens(page, "chat");
         const message = page.getByRole("textbox", { name: "Message", exact: true });
         await message.waitFor();
 
-        // The Duo's compact outer display keeps the same tab navigation as a regular phone.
+        // The iPhone Duo's 466x678-point outer display is compact even before its keyboard opens.
+        // A regular-height phone below still keeps the row in the same one-tab state.
         await page.setViewportSize({ width: 466, height: 678 });
-        await page.locator(".header-tabs .tab-strip").waitFor();
-        assert.equal(await page.locator(".tab-strip-item").count(), 1, "a compact screen keeps its single tab");
+        await page.locator(".tab-strip").waitFor({ state: "detached" });
+        assert.notEqual(await page.locator(".app-header").evaluate((node) => getComputedStyle(node).backdropFilter), "none",
+          "the Duo outer display gives a lone-tab chat its glass header");
         await checkMenus(page, "duo-outer");
-        // A compact phone also offers the pane's actions in More, without taking the tabs away.
+        // with the row out, its New tab entries stay in reach: a phone's title lists the tabs and them
         const sheet = page.locator(".row-sheet, .row-menu");
-        await openMore(page);
+        await page.locator(".app-header .context-tabs").click();
         await sheet.getByText("New tab with agent\u2026", { exact: true }).click();
         await page.locator("#new-session-title").waitFor();
         await page.keyboard.press("Escape");
         await page.locator("#new-session-title").waitFor({ state: "detached" });
-        // The compact More menu's explicit Rename action still opens its dialog.
+        // and the tab is named in a dialog, the row's inline field being gone with it
         await openMore(page);
         await sheet.getByText("Rename tab", { exact: true }).click();
         const tabName = page.getByRole("textbox", { name: "Tab name", exact: true });
         await tabName.fill("Duo tab");
         await tabName.press("Enter");
         await tabName.waitFor({ state: "detached" });
-        // The palette and shortcut use the visible strip's inline editor, without a second dialog.
+        // the palette's Rename tab (and its shortcut) opens the same dialog where the row is left out
         await openMore(page);
         await sheet.getByText("Search panes and actions", { exact: true }).click();
         const search = page.getByRole("searchbox", { name: "Search panes and actions", exact: true });
@@ -141,7 +141,7 @@ try {
         // a landscape phone (wider than the sheet's breakpoint) draws the workspaces as a popover at the
         // header's More, all on screen, and Escape gives the focus back to that button
         await page.setViewportSize({ width: 667, height: 375 });
-        await page.locator(".header-tabs .tab-strip").waitFor();
+        await page.locator(".tab-strip").waitFor({ state: "detached" });
         await openMore(page);
         await sheet.getByText("Move to workspace\u2026", { exact: true }).click();
         const destinations = page.getByRole("menu", { name: "Move Duo tab to" });
@@ -152,7 +152,8 @@ try {
         await destinations.waitFor({ state: "detached" });
         assert.ok(await page.locator(".header-more-button").evaluate((node) => node === document.activeElement), "Escape gives the focus back to the header's More");
 
-        await page.setViewportSize({ width: 390, height: 844 });
+        // a tablet upright (wider than a phone) keeps the lone tab's row, whose menu carries the pane's actions
+        await page.setViewportSize({ width: 700, height: 900 });
         await page.locator(".tab-strip").waitFor();
         await page.locator(".tab-strip-label", { hasText: "Duo tab" }).waitFor();
         assert.equal(await page.locator(".pane-frame.is-single .pane-frame-menu").isVisible(), false,
@@ -165,42 +166,35 @@ try {
         await page.locator(".tab-strip-menu").click();
         await sheet.getByText("Rename tab", { exact: true }).click();
         await tabName.fill("half typed");
-        await page.setViewportSize({ width: 390, height: 650 });
+        await page.setViewportSize({ width: 700, height: 650 });
         await page.waitForFunction(() => window.matchMedia("(max-width: 768px) and (max-height: 700px)").matches);
         await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         assert.equal(await page.locator(".tab-strip-rename").inputValue(), "half typed", "the row's name field keeps what was typed when the row would step out");
         await page.locator(".tab-strip-rename").press("Escape");
-        await page.locator(".header-tabs .tab-strip").waitFor();
-        await page.setViewportSize({ width: 390, height: 844 });
+        await page.locator(".tab-strip").waitFor({ state: "detached" });
+        await page.setViewportSize({ width: 700, height: 900 });
         await page.locator(".tab-strip").waitFor();
+        // an upright phone draws no row for any tab: its title lists them
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.locator(".tab-strip").waitFor({ state: "detached" });
+        await checkMenus(page, "phone");
 
-        // Android shrinks the layout viewport under its keyboard. Keep the tall phone's tab and
-        // pane controls, whether the screen was tall or compact before typing.
+        // the report's own moment: the message box focused and the keyboard up. Android shrinks the
+        // layout viewport with it, under the 700px that drops a lone tab's row (TabStrip's cramped).
         await message.click();
         await page.setViewportSize({ width: 390, height: 470 });
         await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(470));
         await page.waitForFunction(() => document.documentElement.hasAttribute("data-keyboard"));
-        await page.locator(".header-tabs .tab-strip").waitFor();
-        assert.equal(await page.locator(".header-tabs .tab-strip-label", { hasText: "Duo tab" }).count(), 1, "the open tab stays in the header while typing");
-        assert.equal(await message.evaluate((node) => document.activeElement === node), true, "the composer keeps keyboard focus");
-        await page.setViewportSize({ width: 390, height: 844 });
-        await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(844));
-        await page.waitForFunction(() => !document.documentElement.hasAttribute("data-keyboard"));
-        await page.locator(".header-tabs .tab-strip").waitFor();
-
-        // Turning the phone really changes the space available, so the compact layout still works.
-        await message.evaluate((node) => node.blur());
-        await page.setViewportSize({ width: 740, height: 390 });
-        await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(390));
-        await page.locator(".header-tabs .tab-strip").waitFor();
-        assert.equal(await page.locator(".tab-strip-item").count(), 1, "landscape keeps the lone tab too");
-        await checkMenus(page, "chat-landscape");
+        await page.locator(".tab-strip").waitFor({ state: "detached" });
+        assert.notEqual(await page.locator(".app-header").evaluate((node) => getComputedStyle(node).backdropFilter), "none",
+          "the chat of a lone tab with no row puts the glass header over the pane");
+        await checkMenus(page, "chat-keyboard");
 
         // a view-only connection draws its "View only" banner at the pane's top right, below the glass header
         await page.evaluate(() => (window as SocketsWindow).glassSockets.at(-1)!.send(JSON.stringify({ type: "role", mode: "observe" })));
         await page.locator(".terminal-banner-observe").waitFor();
-        await page.locator(".header-tabs .tab-strip").waitFor();
-        await checkMenus(page, "chat-landscape-view-only");
+        await page.locator(".tab-strip").waitFor({ state: "detached" });
+        await checkMenus(page, "chat-keyboard-view-only");
         const header = await page.locator(".app-header").boundingBox();
         if (!header) throw new Error("the glass header has a box");
         const banners = await page.locator(".terminal-banners > :not(.visually-hidden)").evaluateAll((nodes) => nodes.map((node) => {
@@ -211,22 +205,21 @@ try {
         for (const banner of banners) {
           assert.ok(banner.y >= header.y + header.height - 0.5, `the banner "${banner.text}" ${JSON.stringify(banner)} starts below the glass header (bottom ${header.y + header.height})`);
         }
-        // Back at a sheet-width compact screen, moving the lone tab follows its pane to the new workspace.
-        await page.setViewportSize({ width: 390, height: 470 });
-        await page.evaluate(() => (window as Window & { glassViewport?: (value: number) => void }).glassViewport?.(470));
-        await page.locator(".header-tabs .tab-strip").waitFor();
+        // the move from the header's menu: the lone tab joins another workspace, and the view goes with its pane
         const before = new URL(page.url()).searchParams.get("ws");
         await openMore(page);
         await sheet.getByText("Move to workspace\u2026", { exact: true }).click();
         await sheet.getByText("Move Duo tab to", { exact: true }).waitFor();
         await sheet.locator(".row-sheet-item:not(.row-sheet-cancel)").first().click();
         await page.waitForFunction((was) => new URL(location.href).searchParams.get("ws") !== was, before);
-        await page.locator(".tab-strip-label", { hasText: "Duo tab" }).waitFor();
+        await page.locator(".app-header .context-tabs").click();
+        await sheet.getByText("Duo tab", { exact: true }).waitFor();
+        await closeMenu(page);
         assert.deepEqual(errors, []);
       } finally { await context.close(); }
     } finally { await browser.close(); }
   } finally { await server.stop(true); }
-  console.log("PASS phone header: one tab stays visible on compact screens, in landscape and while typing; More actions and view-only banners remain usable");
+  console.log("PASS phone glass header: with no tab row the header's More menu carries the pane's and the tab's actions, and no banner starts under the header");
 } finally {
   rmSync(app, { recursive: true, force: true });
 }
@@ -242,14 +235,25 @@ async function closeMenu(page: Page): Promise<void> {
   await page.locator(".row-sheet, .row-menu").waitFor({ state: "detached" });
 }
 
-/** With no row, the lone pane draws no ellipsis of its own: the header's is the one menu, and it carries the pane's and the tab's actions. */
+/**
+ * With no row, the lone pane draws no ellipsis of its own: the header's is the one menu, and it carries the pane's and the tab's
+ * actions. On a phone the title lists the tabs, and that list, not More, has the ways to a new tab.
+ */
 async function checkMenus(page: Page, label: string): Promise<void> {
   assert.equal(await page.locator(".pane-frame.is-single .pane-frame-menu").count(), 0, `${label}: the lone pane draws no second ellipsis under the header's`);
-  await openMore(page);
+  const listed = await page.locator(".app-header .context-tabs").isVisible();
   const sheet = page.locator(".row-sheet, .row-menu");
-  for (const item of ["Search panes and actions", "Rename pane", "Close pane", "New terminal", "New tab with agent\u2026", "Rename tab", "Move to workspace\u2026", "Close tab"]) {
+  const newTab = ["New terminal", "New tab with agent\u2026"];
+  if (listed) {
+    await page.locator(".app-header .context-tabs").click();
+    for (const item of newTab) assert.equal(await sheet.getByText(item, { exact: true }).count(), 1, `${label}: the title's list offers ${item}`);
+    await closeMenu(page);
+  }
+  await openMore(page);
+  for (const item of ["Search panes and actions", "Rename pane", "Close pane", ...(listed ? [] : newTab), "Rename tab", "Move to workspace\u2026", "Close tab"]) {
     assert.equal(await sheet.getByText(item, { exact: true }).count(), 1, `${label}: the header's menu offers ${item}`);
   }
+  for (const item of listed ? newTab : []) assert.equal(await sheet.getByText(item, { exact: true }).count(), 0, `${label}: More leaves ${item} to the title's list`);
   assert.equal(await sheet.getByText("Split right", { exact: true }).count(), 0,
     `${label}: a canvas showing one pane at a time offers no split, as the row's menu does`);
   if (evidence) {
