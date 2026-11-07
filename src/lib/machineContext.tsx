@@ -64,6 +64,7 @@ export function useMachineApi() {
     closeWorkspace: (workspace: string, closeGroup = false) => api.closeWorkspace(workspace, id, closeGroup),
     createWorktree: (request: CreateWorktreeRequest) => api.createWorktree(request, id),
     listWorktrees: (workspace: string) => api.listWorktrees(workspace, id),
+    readWorktreeInventory: (workspaces: readonly string[]) => api.readWorktreeInventory(workspaces, id),
     openWorktree: (request: OpenWorktreeRequest) => api.openWorktree(request, id),
     listPullRequests: (workspace: string) => api.listPullRequests(workspace, id),
     fetchPullRequestBranch: (workspace: string, branch: string) => api.fetchPullRequestBranch(workspace, branch, id),

@@ -56,8 +56,6 @@ export const WORKSPACE_JA: Record<string, string> = {
   "Directory not found": "ディレクトリが見つかりません",
   "model, effort": "モデル、推論レベル",
   "Empty: the agent's own model.": "空のままならエージェント自身のモデルを使います。",
-  "One model name, without spaces.": "空白を含まないモデル名を一つ指定してください。",
-  "Effort": "推論レベル",
   "Levels depend on the model.": "選べるレベルはモデルによって異なります。",
   "Ultracode": "Ultracode",
   "Claude Code 2.1.284 or later": "Claude Code 2.1.284 以降",

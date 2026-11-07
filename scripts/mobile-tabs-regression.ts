@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Browser, Page } from "playwright-core";
+import type { Browser, Locator, Page } from "playwright-core";
 import { appFaces } from "./app-faces.ts";
 import { herdrRpc, paneSplit, tabCreate, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
@@ -50,6 +50,19 @@ async function activeTabInView(page: Page, label: string): Promise<void> {
       strip: await box(page, ".tab-strip-row"), active: await box(page, ".tab-strip-item.is-active"), add: await box(page, ".tab-strip-add"),
     })}`, { cause });
   });
+}
+
+/**
+ * A sheet closed by its Cancel, and its history entry left: a phone sheet steps back off its entry a
+ * task after it closes (src/lib/sheetHistory.ts), and that traversal aborts a page.goto it overtakes.
+ */
+async function cancelSheet(page: Page, sheet: Locator): Promise<void> {
+  await sheet.getByRole("button", { name: "Cancel", exact: true }).tap();
+  await sheet.waitFor({ state: "detached" });
+  await page.waitForFunction(() => {
+    const state: unknown = window.history.state;
+    return state === null || typeof state !== "object" || !("ovis:sheet" in state);
+  }, null, { timeout: 5_000 });
 }
 
 /** A phone's header and tab strip over a workspace with more tabs than fit the screen. */
@@ -147,8 +160,7 @@ export async function checkMobileTabs(browser: Browser, origin: string): Promise
     assert.equal(tabItems.indexOf("Rename pane"), 2, "a split tab's menu lists its two panes first on a phone");
     assert.ok(tabItems.includes("Rename pane") && tabItems.includes("Close pane"), "the open pane's actions are in the tab's menu on a phone");
     assert.deepEqual(tabItems.slice(-4), ["Move tab right", "New tab with agent…", "Rename tab", "Close tab"], "the first tab offers only its available adjacent move, and the agent's dialog beside the strip's shell +");
-    await tabSheet.getByRole("button", { name: "Cancel", exact: true }).tap();
-    await tabSheet.waitFor({ state: "detached" });
+    await cancelSheet(page, tabSheet);
 
     // The pane a tab and a workspace row were last seen on outlives a reload (a phone drops a page
     // left in the background): both open the split pane last seen, not the one herdr has in front.

@@ -115,8 +115,7 @@ two panes trade places. Drop it on another pane's body to move it beside that pa
 nearest the pointer; the highlighted half shows where it goes. Within its own tab a title only
 arranges the tab: to open it in a half, drop it on the other half while that half shows another tab.
 
-To see more than two panes at once, turn on **Settings > Terminal > Split into rows and columns**.
-Then drop a pane on the edge of another pane in the split to open it beside, above or below that
+To see more than two panes at once, drop a pane on the edge of another pane in the split to open it beside, above or below that
 pane, up to four at once, or on its middle to open it in that pane's place. Drag the line between
 two panes, or focus it and use the arrow keys, to resize them.
 
@@ -149,7 +148,7 @@ bun "$root/scripts/plugin.ts" pair   # plugin install
 bun scripts/plugin.ts pair           # from a checkout
 ```
 
-`pair` prints the code, the address the phone opens when Tailscale serves one, and that address as a QR code. Neither is a herdr action: herdr keeps an action's output in its log, and a pairing code belongs on the screen. While the [Ovis relay](#through-the-ovis-relay) is online, `pair` also prints the relay's pairing link and its QR code; while it's off, it says where to turn it on. The actions start, stop and report on the server:
+`pair` prints the code, the address the phone opens when Tailscale serves one, and that address as a QR code. Neither is a herdr action: herdr keeps an action's output in its log, and a pairing code belongs on the screen. While the [Ovis relay](#through-the-ovis-relay) is online, `pair` also prints the relay's pairing link and its QR code; while it's off, it says where to turn it on. To link the PC through the relay from its terminal, `link` signs it in to your account and approves the device that adds it, and `link --code` shows a code to type and the relay QR code, or the QR code alone when the relay mints no code ([A PC with no screen](relay.md#a-pc-with-no-screen)). A plugin checkout from before `link` needs a plugin reinstall first, since in-app updates do not replace the checkout. The actions start, stop and report on the server:
 
 ```bash
 herdr plugin action invoke devswha.ovis.start    # leaves a running server alone
@@ -342,7 +341,7 @@ across an Ovis restart, which forgets where it saw each `letta` before. Check th
 | --- | --- |
 | **Read the conversation** | Prompts and Markdown answers (links, code blocks, tables). Each turn's commands, edits and progress are folded into one "Worked for …" block. Copy an answer as Markdown or plain text. A Claude Code bash-mode command (`!`) shows as one card: the command, then what it printed, with what it wrote to stderr in red. In a pi, omp, Claude Code or Codex pane, a picture the agent's own tool opened shows inside that tool's row. A picture opens in a full-screen viewer: zoom at the pointer, pan, step through the message's other pictures, **Copy image** and **Download**. Skill names an answer writes (`/name`, or `$name` for Codex) show as chips when the pane's own command list names that skill. Once you have sent four or more messages, a rail of dashes at the left, one per message you sent, jumps between them (not on a phone, or when the chat column leaves less than 32 px of margin at each side). |
 | **Follow the plan** | A supported todo-tool call folds into the turn's work block like any tool: it reads as the done count or the step it took, and opened, as the whole list by phase. |
-| **Drop into the real terminal** | xterm.js 6 on the live pane: full-screen TUIs, raw keys and herdr's scrollback, shared with your own herdr TUI. When a program marks its redraws as synchronized output, as herdr does, xterm.js 6 waits for the whole frame (up to a second) before drawing it, so a fast-redrawing agent does not show half of its new screen over its old one. In a program that reads the mouse, hold Alt to scroll it faster with a trackpad. Drag to select and it is copied on release, unless herdr's `[ui] copy_on_select` is off on the PC serving Ovis: then it is only selected, and stays selected under the pointer until Ctrl+C or Copy copies it. The wheel or the screen's edge scrolls further back while you drag. In an OpenCode pane a drag goes to OpenCode, which selects inside its own panel and copies it itself, as in a native terminal; hold Shift (Option on a Mac) to select and copy in Ovis instead, which is also the way when OpenCode's own copy does not reach this device's clipboard. Ctrl+C copies a selection instead of interrupting. **Quote in message**, shown while text is selected, adds the selection to that pane's chat draft in a code block headed by the pane name, and its line numbers when herdr reports them; nothing is sent. |
+| **Drop into the real terminal** | xterm.js 6 on the live pane: full-screen TUIs, raw keys and herdr's scrollback, shared with your own herdr TUI. When a program marks its redraws as synchronized output, as herdr does, xterm.js 6 waits for the whole frame (up to a second) before drawing it, so a fast-redrawing agent does not show half of its new screen over its old one. In a program that reads the mouse, hold Alt to scroll it faster with a trackpad. Drag to select and it is copied on release, unless herdr's `[ui] copy_on_select` is off on the PC serving Ovis: then it is only selected, and stays selected under the pointer until Ctrl+C or Copy copies it. The wheel or the screen's edge scrolls further back while you drag. In an OpenCode pane a drag goes to OpenCode, which selects inside its own panel and copies it itself, as in a native terminal; hold Shift (Option on a Mac) to select and copy in Ovis instead, which is also the way when OpenCode's own copy does not reach this device's clipboard. In a Codex pane a drag stays Ovis's and stops at the screen's edge, since herdr keeps no history for a program on the alternate screen. **Settings > Terminal > Experimental > Codex panes: let Codex select and scroll** hands it to Codex on this device: Codex selects through its whole history, scrolls it while the drag is held past the top or bottom edge, and copies it on Ctrl+C or Enter. On herdr that copy does not reach this device's clipboard (herdr does not pass it on), and Ovis cannot quote Codex's selection, so a note after the drag says Shift+drag (Option+drag on a Mac) still selects, copies and quotes in Ovis. Ctrl+C copies a selection instead of interrupting. **Quote in message**, shown while text is selected, adds the selection to that pane's chat draft in a code block headed by the pane name, and its line numbers when herdr reports them; nothing is sent. |
 | **Search the conversation** | **Search conversation**, from the pane's menu (right-click on a desktop, the tab's ⋯ on a phone) or the command palette, finds a word in what you wrote and in the agent's answers, earlier pages included; tool output, thinking and progress notes are left out. Matches list newest first as snippets; picking one opens the chat at that message, loading the earlier messages up to it. Nothing in the chat is highlighted, and the phone's screen gains no button. A remote PC offers it once its bridge is updated to one that searches. |
 | **Find in terminal** | **More → Find in terminal** or Mod+Shift+F searches literal text in herdr's history, with a match count, previous/next navigation and visible match highlights. Search jumps and scrolling move the same viewport in every attached client, including the TUI. Older bridges retain search navigation without automatic highlights. |
 | **Jump across PCs** | The command palette (Mod+Shift+K) searches all connected PCs at once by PC, workspace, branch, tab, pane title or agent kind. PC names distinguish results, and Recent remembers each pane's PC. Picking a result opens that PC and pane directly. Disconnected PCs are omitted; app and plugin actions remain on the currently selected PC. It also finds Settings pages and actions by related words (try `theme` or `font`), and browses folders: type a path such as `~/`, or pick **Browse folders**, and the folder you reach opens in Files. |
@@ -352,6 +351,7 @@ across an Ovis restart, which forgets where it saw each `letta` before. Check th
 | **Follow every agent** | Live RUN / INPUT / DONE / READY status for all panes, and alerts when an agent needs input, finishes or its terminal ends. |
 | **Open what agents make** | A file path in an answer opens in a viewer (images, video, audio, PDF, text), or find it with **Browse files**, and download it to your phone. A source file opens whole up to 8 MB and 200,000 lines; past 2,000 lines it scrolls as a window of rows, colored up to 256 KB and 5,000 lines and plain beyond. A link with `:line` or `#L12` opens at that line. |
 | **Edit a text file** | Off by default: turn on **Settings → Chat → File viewer → Edit text files** on this device. A text file under the pane's folder, up to 1 MB, then shows **Edit file** in the viewer: change it in a plain text box and press **Save** twice (the second press confirms). If the file changed on the PC since you opened it, nothing is written: your text stays in the box to copy, and **Reload file** shows the file as it is now. Only a device that drives the PC can edit (not a watching device, a Portal visitor or an open LAN window), and only a UTF-8 file with one kind of line ending that is yours, not read-only and not hard-linked; a file outside the pane's folder, or in `.git`, never opens for editing. The file is replaced in one step with its permissions and line endings kept. Saving works on Linux and macOS PCs; a Windows PC says it can't save yet. A remote PC's file is edited and checked on that PC. |
+| **Keep a file per tab** | Off by default: turn on **Settings → Chat → Reopen files on return** on this device. A file left open when you switch to another tab shows again when you come back to that tab, from the tab strip, the sidebar, a shortcut or Back. Close the file on its tab and it stays closed. |
 | **See what changed** | **Browse files → Changes** lists what changed in the git repository the pane sits in: the **Working tree**, what is **Staged**, or two **Commits** you name, as a folder tree with git's status letter and the added and removed lines. A row opens its diff, **Unified** or **Split** (the switch in the diff's header; a phone shows one column), with **Copy path**, **Copy patch** and **Open file**. The files a turn's edit tools changed, listed in its work block, open the same diff. It only reads; a remote PC's repository is read on that PC. |
 | **Manage sessions** | Start an agent in a folder you type or pick with **Browse**. In New workspace, Browse filters the currently loaded folders as you type (case-insensitive); opening a folder updates Directory, so **Start** uses that path even without **Use this folder** (which closes Browse), and a folder under home stays written as `~/…`. **New folder** (the folder-plus button in Browse's bar) makes a folder inside the one shown and opens it. It does not search subfolders or folders beyond the displayed 500. Add a tab to a workspace (as herdr's prefix+c), switch tabs from the strip over the pane, rename workspaces from their ⋯/right-click menu and panes from their own menu, reorder workspaces (drag a row, or on a phone long-press it and drag; Alt+Up/Down moves a focused row one step), and jump anywhere from the command palette. For Claude Code, New workspace and New tab have an **Ultracode** switch under Model and Effort, which asks Claude Code to start the session with Ultracode on at the chosen effort level. It needs Claude Code 2.1.284 or later, a model with xhigh and dynamic workflows on; otherwise Claude Code ignores it without a word (see [Starting an agent with a first message](agent-commands.md#starting-an-agent-with-a-first-message)). |
 | **Speak instead of typing** | A mic beside Attach in the composer and beside Send in the terminal input line. Tap to start and again to finish, or hold it while you talk (not on a touch screen without an API key); the words land at the caret and are never sent by themselves. See [Voice input](#voice-input). |
@@ -451,7 +451,7 @@ Turn it on in **Settings → Voice input**, then tap the mic beside Attach (chat
 
 ## On your phone
 
-A phone reaches the app on this PC in one of two ways. The **Ovis relay** needs nothing set up on the phone or your network: turn it on and scan a QR code. **Tailscale** keeps everything inside your own network, with an HTTPS address for this PC. Either way the app installs on the phone's home screen and gets push alerts.
+A phone reaches the app on this PC in one of two ways. The **Ovis relay** needs nothing set up on the phone or your network: turn it on and scan a QR code. **Tailscale** keeps everything inside your own network, with an HTTPS address for this PC. Either way the app installs on the phone's home screen and gets push alerts. With the relay on, the iPhone and Android apps also connect straight to this PC on the same Wi-Fi or over Tailscale, and use the relay only when neither answers ([Which way the app connects](#which-way-the-app-connects)).
 
 On an iPhone or iPad the app needs iOS 16 or later (Safari 16 or later on a Mac), and push alerts need iOS 16.4 or later.
 
@@ -461,7 +461,7 @@ The Ovis relay lets your phone reach this PC from anywhere, with no Tailscale, n
 
 Step by step:
 
-1. On the PC, open **Settings → Phone & devices**, choose **Connect** next to **Connect a phone**, and turn on the switch on the **Ovis relay** card. Once it says **Online**, a QR code shows below. It works for ten minutes, and **New code** makes another.
+1. On the PC, open **Settings → Devices and PCs**, choose **Connect** next to **Connect a device**, and turn on the **Ovis relay** switch. Once it is online, a QR code shows with a code to type beside it. Both work for ten minutes, and **Refresh** makes new ones. Signed in to your Ovis account, the dialog asks the new device to sign in instead, and you approve it once on a device already in the account; **Connect with a code (no sign-in)** still shows the QR code. The relay's switch and **Reset relay identity** are also under **More settings** on that page.
 2. Scan the QR code with the phone's camera. Ovis opens in the phone's browser at `app.ovis.sh` and asks whether to pair with this PC: tap **Pair**.
 3. Install it: in Safari, choose **Share → Add to Home Screen**; in Chrome, choose **Install app** or **Add to Home screen** from its menu. Then open the **⋯** menu at the top right and tap **Alerts** to get alerts on this phone. iPhone needs iOS 16.4+ and the home-screen app.
 
@@ -469,7 +469,7 @@ If the relay cannot start before its link exists, the switch stays off and shows
 **The relay did not start: …** with the reason. Fix the cause, then press **Try again**.
 A link that already exists stays on while retrying a connection error.
 
-The phone pairs once. It makes a key of its own for this PC, which never leaves the phone, and proves itself with it on every connection, so there's no token or password to type. The PC lists the phone under **Phone & devices**, marked **via relay**, and **Revoke** there removes it and closes its connections at once. Opened again later, the app connects by itself. Each PC is an app of its own: pair another PC from its own QR code, and `app.ovis.sh` lists every PC the phone is paired with.
+The phone pairs once. It makes a key of its own for this PC, which never leaves the phone, and proves itself with it on every connection, so there's no token or password to type. The PC lists the phone under **Devices and PCs → My devices**, marked **via relay**, and **Revoke** there removes it and closes its connections at once. Opened again later, the app connects by itself. Each PC is an app of its own: pair another PC from its own QR code, and `app.ovis.sh` lists every PC the phone is paired with.
 
 **On an iPhone or iPad, add it to the Home Screen to stay paired.** In a Safari tab, the phone's key for a PC can be cleared after a week without a visit, and the phone then has to pair again. The home-screen app keeps it, and the app reminds you of this in Safari.
 
@@ -482,7 +482,7 @@ The phone pairs once. It makes a key of its own for this PC, which never leaves 
 Good to know:
 
 - Relay controls require drive access and a direct connection to this PC. A visitor signed in
-  through Portal can read the state in Connect a phone, with an explanation, but gets no relay
+  through Portal can read the state in Connect a device, with an explanation, but gets no relay
   switch, no QR code and no identity reset. Relay changes answer `403 read_only` for the default watch visitor;
   even a saved drive invitation gets `403 owner_only`, because the watch guard runs first
   ([`server/dispatch.ts:223-243`](../server/dispatch.ts#L223-L243)).
@@ -495,6 +495,20 @@ Good to know:
 - Turning the relay off closes every connection through it, and the PC then makes no connection to the relay at all.
 - **Reset relay identity**, below the switch, gives this PC a new identity on the relay and removes every phone paired through it; each then needs a new QR code. Use it when a QR code or pairing link may have been seen by someone else.
 - On a PC with no browser of its own, `pair` in a terminal also prints the relay's QR code while the relay is online ([In a terminal](#in-a-terminal)).
+
+#### Which way the app connects
+
+While the relay is on, this PC also takes connections straight from the iPhone and Android apps: on its home network addresses and, when Tailscale runs on it, on its Tailscale address. Each time the app opens the PC, it has three ways in:
+
+- **Same Wi-Fi**: the PC's home network address.
+- **Tailscale**: the PC's Tailscale address, when the phone has Tailscale on.
+- **The relay**, which always works.
+
+It does not wait for one to fail before trying the next: it tries both direct ways at once, opens the relay too when neither is up within 300 ms, and keeps whichever connects first (a firewall that blocks the PC's direct port leaves it on the relay). So a phone at home connects straight, and a phone away from home is not held up by an address that leads nowhere. While the relay carries it, the app checks the direct addresses again now and then (after it connects, at most every five minutes, when the phone is back online and when the app comes back to the front) and moves back to one once nothing is under way. The PC tells the app these addresses inside the encrypted connection, so they follow the PC to another network. A browser, including the home-screen app from `app.ovis.sh`, always uses the relay.
+
+Nothing new is trusted. Only a device already paired through the relay can sign in on those addresses, with the same key and the same end-to-end encryption, and nothing pairs there. **Settings → Devices and PCs → My devices** shows **Same Wi-Fi direct connection on** (and says when it is on Tailscale too), with one switch that turns both off. On an iPhone the app asks for Local Network access once; declining it keeps the app on the relay. On Windows the PC shows Windows' firewall prompt the first time; declining it leaves the relay as the only way in. [Direct on the same network](relay.md#direct-on-the-same-network) has the details.
+
+**How each device is connected.** **Settings → Devices and PCs → My devices** says how a device paired through the relay reaches this PC right now while it is connected: **Same Wi-Fi, direct**, **Tailscale, direct**, **Seoul relay** or **Through the relay**, with its round trip in milliseconds once one was measured. A device that is not connected shows when it was last seen (with a short reason once it has been gone a while). **Check now** measures them all again. On the phone, **Your PCs** shows the same line for each saved PC (the way it answers on and how fast, or why it is offline), with **Check now** above the list, and the header of the app always says how this device reaches Ovis.
 
 #### Running your own relay
 
@@ -517,11 +531,17 @@ To stop trusting `app.ovis.sh` too, host the app yourself. `bun run build:shell`
 
 Signing in links your devices once instead of pairing each phone with each PC. It's optional: a QR code and a pairing code work as before, with or without an account.
 
-1. At `app.ovis.sh`, choose **Continue with GitHub** or **Continue with Apple**. **Your PCs** lists the PCs of your account and the ones this phone is already paired with.
+1. Sign in with **Continue with GitHub** or **Continue with Google** where the app offers it: in the desktop app, or on a PC's own page (**Settings → Devices and PCs → Account**). The public `app.ovis.sh` shows no sign-in at the moment; a phone pairs there with a QR code, and a hosted app built with `OVIS_ACCOUNT_SERVICE_URL` offers it. **Your PCs** lists the PCs of your account and the ones this phone is already paired with.
 2. A phone already paired by QR code needs nothing more: the next time it opens each PC, it moves that pairing into the account by itself. Until then the PC's row says **Ready · not in the account yet**, since removing the phone through the account would not reach it.
 3. A PC marked **Needs approval** has not let this device in yet. Tap it: this device and the PC show the same six digits, as with a link without a code. The first device of an account is approved on the PC itself. After that, any device already in the account can approve: it asks whether to add the new device and shows three numbers, and you pick the one the new device shows. One approval adds the device to every PC of the account: the approving device signs a record that adds it to each PC, and a PC that was off picks that record up when it comes back.
 
-Who gets into a PC is still decided by that PC alone, in **Settings → Phone & devices**, where **Revoke** always works. The account service at `account.ovis.sh` lists your PCs and carries signed messages between your devices; it can't read your sessions or add a device by itself ([how it works](account.md)). [The privacy policy](https://ovis.sh/privacy/) says what it stores.
+**Signing in a PC.** The desktop app signs in through your browser. A PC's own page (a browser at the PC's address) and a PC with no screen (`link`, see [A PC with no screen](relay.md#a-pc-with-no-screen)) show one code instead, with a QR code that fills it in: open `account.ovis.sh/link` on any device, check the code, choose **Continue with GitHub** or **Continue with Google**, sign in and confirm. The page says which PC asked, its system and roughly where from ("Asked by Desk (Linux), near Seoul, South Korea"): continue only if you started it on your own PC just now. Signing in only lists the PC in your account: on a device already in the account, tap the PC's card, type the six digits the PC shows, and approve on the PC (`link` asks y/N in its terminal).
+
+**Approving a device.** The approval card on your other devices says what is asking: the system it runs and roughly where its request came from (country and city, as Cloudflare saw it, never the address), or **Location unknown**. Approve only if you started it yourself just now; if you didn't, deny it.
+
+**Ways to sign in.** **Settings → Devices and PCs → Account** lists your account's sign-in methods. In the desktop app, **Add Google** (or **Add GitHub**) adds one on purpose, and **Remove** takes one away, except the one this device signed in with. An account is never joined to another because their email addresses match.
+
+Who gets into a PC is still decided by that PC alone, in **Settings → Devices and PCs**, where **Revoke** always works. The account service at `account.ovis.sh` lists your PCs and carries signed messages between your devices; it can't read your sessions or add a device by itself ([how it works](account.md)). It keeps no email, name or username. [The privacy policy](https://ovis.sh/privacy/) says what it stores and for how long.
 
 ### Through Tailscale
 
@@ -616,6 +636,8 @@ The running server sends the alerts. Keep it running, and keep `OVIS_STATE_DIR` 
 A workspace row's **⋯** menu offers **New worktree** and **Open worktree…**, as herdr's own worktree keys do: the first checks a branch out as a git worktree under herdr's worktree folder and opens it as a workspace next to the repository's, the second lists the repository's other checkouts and opens one. New worktree opens with a branch (`worktree/brave-valley-07f8` style) and a name already filled in, as herdr's own form does; type over either. **Agent** picks what starts in the new checkout, as New workspace does: the agent you last started, or Shell for none. In the By workspace view a worktree workspace sits under its repository's row. Its menu ends in **Delete worktree checkout…**, which deletes the folder and closes the workspace but keeps the branch; a checkout with unsaved changes is refused first, in git's words, with **Delete anyway** as the second step. Closing the repository's workspace closes its open worktree workspaces with it and leaves their checkouts on disk.
 
 Open Settings → Remote PCs and choose **Add PC** (the command palette has it too), then enter an SSH alias or `user@host` for a Linux or macOS computer. The setup dialog walks you through the host fingerprint, the password or key passphrase, and an explicit install approval. The PC's workspaces then join the sidebar, and chat, files, terminal input and alerts all follow the PC you pick.
+
+A PC that runs Ovis itself needs no SSH: add it through the relay from **Settings → Devices and PCs → Connect a device**, by typing the code that PC shows ([Through the relay](remote-pcs.md#through-the-relay)). When both PCs are on your own Tailscale login, **PCs on your Tailscale** in the same dialog lists the ones whose Ovis already lets this PC in, and **Add PC** adds one in one tap: this PC asks that PC for its code over Tailscale and checks that the relay found the same PC. Such a PC is then reached on its own network or its Tailscale address when this PC can get there, and through the relay otherwise.
 
 - **SSH runs on the server**, as the web server's account, with its OpenSSH configuration and agent. The browser never opens SSH itself.
 - **The remote side gets a private runtime bundle** and a loopback-only bridge, reached through an SSH forward.
@@ -898,6 +920,21 @@ session, `default` otherwise); nothing connects to it.
 On Windows Ovis serves herdr-core only when `OVIS_RUNTIME=herdr-core` is set, as the desktop app
 sets it: the automatic choice stays on herdr there, and Settings offers no switch.
 
+**Moving everything to herdr-core.** On a Linux or macOS PC where Ovis serves herdr's TUI through
+its own launcher and no Herdr app is installed, **Settings → About → Terminals** offers **Move
+everything to herdr-core**. It shows its plan first, then moves the whole session together:
+every workspace, tab, split and pane name is rebuilt on herdr-core, agents reopen on their own
+conversation (or start new in the same folder when it cannot be told), and shells start again in
+the same folder (your home folder when that folder is gone). Ovis ends an idle Claude Code itself; other agents wait for you to end them, so
+nothing typed in their input line is sent. Nothing moves while an agent works or a shell runs a
+command: the move waits for them and goes by itself once they are done. Scrollback and programs
+running in a shell do not move. If a step fails before the switch, Ovis ends what it built on
+herdr-core, restarts in herdr the agents it ended, and lists any it could not; herdr itself is
+never closed. On such a PC without herdr-core, the row
+reads **Install herdr-core and move everything**: it installs herdr-core 0.1.17 into
+`~/.local/bin` (checked against a pinned checksum, no sudo, herdr untouched), then shows the same
+plan. [Moving herdr's session to herdr-core](runtime-move.md) has the details.
+
 On a Linux or macOS PC with herdr-core and no herdr, the one-line installer
 (`curl -fsSL https://ovis.sh/install.sh | sh`) sets this up by itself: no herdr and no plugin, Ovis
 in `~/.local/share/ovis/app`, `OVIS_RUNTIME=herdr-core` in `~/.config/ovis/env`, and a user service
@@ -930,10 +967,13 @@ macOS). See [INSTALL.md](../INSTALL.md#2-choose-the-install-method).
   before anything is typed: in Windows PowerShell one whose whitespace all follows an odd number of
   `"` (`"fix the bug"`, `x="a b"`); in PowerShell 7 an empty one, one holding a `"`, or one holding
   whitespace and ending in a backslash; in cmd one holding a `"` or a `%`. In PowerShell one
-  holding `&`, `|`, `<`, `>`, `^` or `%` is refused too: an agent PowerShell starts through a
+  holding `%` or `^` is refused too, and one holding `&`, `|`, `<` or `>` unless it also holds a
+  space and no `!`, and no argument of the line holds a `"`: an agent PowerShell starts through a
   `.cmd` file alone (an npm install also has a `.ps1`, which PowerShell prefers) has its arguments
   read by cmd as well, where an `&` outside cmd's quotes would end the agent's line and run the
-  rest, and which file the agent's name finds is not known before. Where the execution policy blocks scripts (`Restricted`, the Windows
+  rest. PowerShell quotes an argument only for its whitespace, a `"` in any argument moves cmd's
+  quotes, cmd expands `%NAME%` (and `!NAME!` with delayed expansion) inside quotes too, a shim's
+  `call` doubles a `^`, and which file the agent's name finds is not known before. Where the execution policy blocks scripts (`Restricted`, the Windows
   default), PowerShell refuses that `.ps1` and does not fall back to the `.cmd`: the start fails,
   and the pane says why. cmd looks in the pane's folder before the `PATH`, as it does for what you
   type. Command Code is not offered on Windows, where its command `cmd` is cmd.exe, and a Windows
@@ -1138,6 +1178,21 @@ List and tab controls also have focus-local keys; those do not become global ter
 On a focused tab, Alt+Shift+Left/Right reorders it and Shift+F10 opens its menu. For the pane menu
 on desktop, tab to the pane header's **⋯** (it appears on keyboard focus) and press Enter.
 Shift+F10 inside the terminal stays with the terminal program.
+
+**Settings → Shortcuts → Use herdr's prefix keys** (off by default) brings herdr's own prefix
+keys to the app. It reads `[keys]` in herdr's `config.toml` on the PC serving the page (read only,
+herdr's defaults when there is none): herdr's prefix (`ctrl+b` unless the config sets another; any
+of them when `prefix` or `extra_prefixes` lists several), then a key herdr binds runs the same
+action here. These actions are taken: `new_tab` (a terminal
+tab, at once), `split_vertical` / `split_horizontal`, `zoom`, `previous_tab` / `next_tab`,
+`switch_tab` (`1..9`), `rename_tab`, `previous_workspace` / `next_workspace`, `new_workspace`,
+`toggle_sidebar`, `settings`, and `help` / `goto` / `workspace_picker` (the command palette).
+Bindings resolve as herdr resolves them: one key or a list per action, and a key the config gives any
+other action or custom command is no longer the default's. The Settings row lists what it read. Every
+other action, a direct (non-prefix) binding and `[[keys.command]]` stay herdr's. The header says when the prefix waits for its key; Escape, a click
+or leaving the window cancels it, and a key with no action behind it (the prefix again too) goes to
+the pane as typed, so the prefix pressed twice sends it. Text fields, dialogs, menus, IME
+composition and the app's own shortcuts keep their keys.
 
 On a phone, use the header, the tab's ⋯ and the More menu for app actions. The command palette
 and its plugin actions are not available in the phone touch UI. Use a wider screen or an external

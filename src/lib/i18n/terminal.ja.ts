@@ -61,7 +61,6 @@ export const TERMINAL_JA: Record<string, string> = {
   "Input held:": "保持した入力:",
   "Send held input": "保持した入力を送信",
   "Discard held input": "保持した入力を破棄",
-  "View only": "表示のみ",
   "Terminal text size {px} px": "ターミナルの文字サイズ {px} px",
   "{command} ran": "{command} 実行済み",
   "Back to Chat": "チャットに戻る",
@@ -84,8 +83,6 @@ export const TERMINAL_JA: Record<string, string> = {
   "Not sent. Reconnect and try again.": "送信できませんでした。再接続してもう一度お試しください。",
   "The chat can't be shown. The terminal still works.": "チャットを表示できません。ターミナルは引き続き使えます。",
   "New tab with agent…": "エージェントで新しいタブ…",
-  "New terminal": "新しいターミナル",
-  "New terminal failed: {reason}": "新しいターミナルを開けませんでした: {reason}",
   "Tab {n}": "タブ {n}",
   "Close tab": "タブを閉じる",
   "Tab name": "タブ名",
@@ -123,4 +120,6 @@ export const TERMINAL_JA: Record<string, string> = {
   "Fewer keys": "キーを減らす",
   "{key}, locked": "{key}、ロック中",
   "Recover unsent text": "未送信のテキストを復元",
+  "Codex selected this: Shift+drag copies or quotes it here": "Codex が選択しました。ここでコピーや引用をするには Shift+ドラッグ",
+  "Codex selected this: Option+drag copies or quotes it here": "Codex が選択しました。ここでコピーや引用をするには Option+ドラッグ",
 };
