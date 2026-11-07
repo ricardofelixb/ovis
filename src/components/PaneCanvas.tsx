@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type DragEvent, type MouseEvent, type MutableRefObject, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type DragEvent, type MouseEvent, type MutableRefObject, type PointerEvent, type ReactNode } from "react";
 import { ArchiveRestore, Bot, Columns2, Ellipsis, Eraser, Folder, FolderInput, LockOpen, Maximize2, Minimize2, MoveHorizontal, Pencil, Plus, Rows2, ArrowLeftRight, Terminal, TextSearch, TextWrap, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { HerdrPane, HerdrTab, PaneLayoutSnapshot, SessionSnapshot } from "../../shared/protocol.ts";
@@ -13,7 +13,7 @@ import { PaneCachedContext, PanePresentedContext, PaneShownContext, PaneSubmitCo
 import { cachedPaneCells, visitPaneTab } from "../lib/paneTabCache.ts";
 import { routeMissing } from "../lib/api.ts";
 import { layoutCells, zoomMode } from "../lib/layoutMap.ts";
-import { compactPaneMenu, layoutTopology, paneContextPress, paneFieldTarget, SOLO_PANE_QUERY, soloPane, splitPath, splitRatioAt } from "../lib/paneCanvas.ts";
+import { layoutTopology, paneContextPress, paneFieldTarget, SOLO_PANE_QUERY, soloPane, splitPath, splitRatioAt, tabRowHidden } from "../lib/paneCanvas.ts";
 import { useCramped } from "../lib/useCramped.ts";
 import { rosterPanes } from "../lib/dagPane.ts";
 import { useT } from "../lib/i18n.ts";
@@ -23,6 +23,7 @@ import { userErrorMessage, type UserError } from "../lib/userError.ts";
 import { useFocusTrap } from "../lib/useFocusTrap.ts";
 import { usePhoneSheetBack } from "../lib/sheetHistory.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
+import type { RenameRequest } from "../lib/useRenameRequest.ts";
 import { paneLifetimes } from "../lib/paneLifetime.ts";
 import { usePaneLocked } from "../lib/paneLocks.ts";
 import { sidebarPinKey } from "../lib/sidebarPins.ts";
@@ -43,7 +44,7 @@ interface Props {
   renderPane: (pane: HerdrPane | null, active: boolean, split: boolean) => ReactNode;
   /** filled with this canvas's pane actions on each render: a phone's tab menu offers them for the open pane (TabStrip) */
   actionsRef?: MutableRefObject<((target: HerdrPane) => RowMenuItem[]) | null>;
-  /** where the split view can be drawn: a pane's title dragged onto a side of the pane area opens it there (lib/split.ts) */
+  /** where the split view can be drawn: a pane opened in a half of it, from its menu or by dragging its title (lib/split.ts) */
   onOpenInHalf?: (paneId: string, side: SplitSide) => void;
   /** the PC's panes are mirrored (no terminal attach there): their grid can be wider than this screen */
   mirrored?: boolean;
@@ -56,6 +57,10 @@ interface Props {
   onNewTerminal?: () => Promise<void>;
   /** the row's Move to workspace…: a one-pane tab into a new tab of another workspace on this PC; rejects with herdr's refusal */
   onMoveToWorkspace?: (tabId: string, workspaceId: string) => Promise<void>;
+  /** the Rename tab shortcut or palette action for the open pane: where the row is left out, its dialog stands in for the row's field (TabStrip clears it) */
+  renameRequest?: RenameRequest | null;
+  /** a phone's header title lists the tabs (App): no row is drawn, and its sheet holds New terminal and New tab with agent… */
+  tabsInHeader?: boolean;
   /** a watching device sends no settings: it sees a locked pane's Unlock and cannot use it, as in the Agents list */
   watching?: boolean;
 }
@@ -80,7 +85,7 @@ interface Drag {
 }
 
 /** The active tab, drawn from herdr's rectangles. No browser-owned layout or PTY state. */
-export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged, renderPane, actionsRef, onOpenInHalf, mirrored = false, onRecoverUnsent, onSearchConversation, onNewTab, onNewTerminal, onMoveToWorkspace, watching = false }: Props) {
+export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged, renderPane, actionsRef, onOpenInHalf, mirrored = false, onRecoverUnsent, onSearchConversation, onNewTab, onNewTerminal, onMoveToWorkspace, renameRequest = null, tabsInHeader = false, watching = false }: Props) {
   const t = useT();
   const { settings, update: updateSettings } = useSettings();
   const narrowScreen = useMediaQuery(MIRROR_WRAP_QUERY);
@@ -132,9 +137,9 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
     ?? snapshot?.panes.find((item) => item.tab_id === previousTab)
     ?? null;
   const layout = snapshot?.layouts.find((item) => item.tab_id === presented?.tab_id) ?? null;
-  // A compact one-tab workspace puts its pane actions in More rather than another header row.
+  // the open tab has no row (a phone's header lists the tabs, or a lone tab on a cramped screen): its lone pane draws no ellipsis
   const loneRowHidden = presented !== null
-    && compactPaneMenu(cramped, snapshot?.tabs.filter((tab) => tab.workspace_id === presented.workspace_id).length ?? 0);
+    && tabRowHidden(cramped, snapshot?.tabs.filter((tab) => tab.workspace_id === presented.workspace_id).length ?? 0, tabsInHeader);
   const topology = layout ? layoutTopology(layout) : "";
   const latest = useRef({ topology, tabId: presented?.tab_id, paneId: selectedPaneId, selection: 0 });
   latest.current = { topology, tabId: presented?.tab_id, paneId: selectedPaneId,
@@ -162,6 +167,12 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
   }, []);
   useEffect(() => { cancelDrag(); }, [topology]);
   useEffect(() => { setMenu(null); setRenaming(null); setRenamingTab(null); setMovingTab(null); setClosingTab(null); setClosing(null); setError(null); }, [presented?.tab_id]);
+  // one press each: the request depends on itself alone, as the row's does (TabStrip)
+  useLayoutEffect(() => {
+    if (renameRequest === null || !loneRowHidden || !appLayout.rename || !presented) return;
+    const tab = snapshot?.tabs.find((entry) => entry.tab_id === presented.tab_id);
+    if (tab) setRenamingTab(tab);
+  }, [renameRequest]);
   useEffect(() => { if (menu && !snapshot?.panes.some((item) => item.pane_id === menu.paneId)) setMenu(null); }, [snapshot, menu]);
 
   const run = (operation: () => Promise<unknown>): void => {
@@ -219,11 +230,13 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
     ...(!appLayout.arrange ? [] : [{ id: "zoom", label: t(layout && zoomMode(layout, target.pane_id) === "off" ? "Unzoom pane" : "Zoom pane"), icon: Maximize2,
       run: () => zoom(target) }]),
   ];
-  // A compact phone folds the pane header into More (App). Keep its pane and tab actions there
-  // as well as in the tab menu, so the pane's context menu has the same actions.
+  // A tab with no row (a phone's header lists the tabs, a lone tab on a cramped phone: TabStrip), so
+  // the pane's menu carries what the row's menu would: the tab's other panes, shown one at a time
+  // there, and the way to a new tab unless the header's tab sheet has it. There the pane draws no
+  // ellipsis of its own: the header's More menu offers this menu (App)
   const rowItems = (target: HerdrPane): { panes: RowMenuItem[]; tab: RowMenuItem[] } | null => {
     const tabs = snapshot?.tabs.filter((tab) => tab.workspace_id === target.workspace_id).length ?? 0;
-    if (!compactPaneMenu(cramped, tabs)) return null;
+    if (!tabRowHidden(cramped, tabs, tabsInHeader)) return null;
     const tab = snapshot?.tabs.find((entry) => entry.tab_id === target.tab_id);
     const own = rosterPanes(snapshot?.panes.filter((item) => item.tab_id === target.tab_id) ?? [], selectedPaneId);
     return {
@@ -233,7 +246,7 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
         current: item.pane_id === selectedPaneId, run: () => onSelect(item.pane_id),
       })),
       tab: [
-        ...(onNewTerminal ? [{ id: "new-terminal", label: t("New terminal"), icon: Plus, run: () => {
+        ...(onNewTerminal && !tabsInHeader ? [{ id: "new-terminal", label: t("New terminal"), icon: Plus, run: () => {
           const tabId = latest.current.tabId;
           setError(null);
           void onNewTerminal().catch((reason: unknown) => {
@@ -249,7 +262,7 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
             const anchor = document.querySelector<HTMLElement>(".header-more-button") ?? canvas.current;
             if (anchor) setMovingTab({ tab, anchor });
           } }] : []),
-        ...(onNewTab ? [{ id: "new-agent-tab", label: t("New tab with agent…"), icon: Bot, run: onNewTab }] : []),
+        ...(onNewTab && !tabsInHeader ? [{ id: "new-agent-tab", label: t("New tab with agent…"), icon: Bot, run: onNewTab }] : []),
         // the row's inline name field is gone with it: the tab is named in a dialog, as a pane is
         ...(!appLayout.rename || !tab ? [] : [{ id: "rename-tab", label: t("Rename tab"), icon: Pencil, run: () => setRenamingTab(tab) }]),
         // the tab's last pane closes it too, but a split tab has no other way to close as one (the row's confirmation: it is the workspace's last tab)
@@ -423,7 +436,7 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
             paneInput(event.currentTarget.parentElement)?.focus({ preventScroll: true });
           }}
           onDragStart={(event: DragEvent<HTMLDivElement>) => {
-            // dropped on the pane area, the title opens its pane in a column there (App's drop)
+            // dropped on a half of the pane area, the title opens its pane there (App's drop)
             event.dataTransfer.effectAllowed = "move";
             event.dataTransfer.setData(PANE_DRAG_TYPE, paneDragData({ machineId, paneId: item.pane_id }));
           }}>

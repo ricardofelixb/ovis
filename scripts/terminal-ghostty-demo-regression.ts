@@ -16,6 +16,7 @@ import { buildDemoApp } from "./demo-build.ts";
 import { chromePath } from "./chrome-path.ts";
 import { readableColor } from "../src/lib/terminalFold.ts";
 import { openSettingsPage } from "./settings-page.ts";
+import { pickLens } from "./view-toggle.ts";
 
 interface Frame { type: string; pane_id?: string; data?: string; text?: string; features?: string[] }
 interface GhosttyFixture { inputs: Frame[]; print(data: string): void }
@@ -328,7 +329,7 @@ try {
           await columnsKept(`a ${width}px window after a fit against the old screen`);
         }
         for (const view of ["Chat", "Terminal", "Chat", "Terminal"]) {
-          await page.getByRole("radio", { name: view, exact: true }).or(page.getByRole("button", { name: view, exact: true })).first().click();
+          await pickLens(page, view === "Chat" ? "chat" : "terminal");
           if (view === "Terminal") {
             await page.locator(".pane-frame.is-current .pane-terminal[data-renderer='ghostty']").waitFor();
             await columnsKept("back from Chat");
