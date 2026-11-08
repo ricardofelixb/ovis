@@ -409,7 +409,7 @@ describe("a device's Omarchy theme", () => {
     const streams: { events: MachineEvent[]; reader: ReadableStreamDefaultReader<Uint8Array>; abort: AbortController }[] = [];
     const open = async (device: string) => {
       const abort = new AbortController();
-      const response = await handleMachineRequest(from(device, "events", { signal: abort.signal }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, themes);
+      const response = await handleMachineRequest(from(device, "events", { signal: abort.signal }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, false, themes);
       const stream = { events: [] as MachineEvent[], reader: response.body!.getReader(), abort };
       streams.push(stream);
       return stream;
@@ -424,14 +424,14 @@ describe("a device's Omarchy theme", () => {
       expect(await next(laptop)).toEqual({ type: "omarchy-theme", theme: null });
       expect(await next(phone)).toEqual({ type: "omarchy-theme", theme: null });
 
-      const sent = await handleMachineRequest(from("100.96.150.40", "omarchy-theme?name=catppuccin-latte", { method: "PUT", body: colorsToml }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, themes);
+      const sent = await handleMachineRequest(from("100.96.150.40", "omarchy-theme?name=catppuccin-latte", { method: "PUT", body: colorsToml }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, false, themes);
       expect(sent.status).toBe(200);
       const told = await next(laptop);
       expect(told).toMatchObject({ type: "omarchy-theme", theme: { name: "catppuccin-latte", mode: "light", colors: { accent: "#a1b2c3" } } });
       // nothing more on the phone's stream: its next read waits
       expect(await Promise.race([phone.reader.read().then(() => "told"), Bun.sleep(50).then(() => "quiet")])).toBe("quiet");
 
-      const refused = await handleMachineRequest(from("100.96.150.40", "omarchy-theme", { method: "PUT", body: 'mode = "dark"\n' }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, themes);
+      const refused = await handleMachineRequest(from("100.96.150.40", "omarchy-theme", { method: "PUT", body: 'mode = "dark"\n' }), manager, undefined, undefined, false, undefined, undefined, undefined, undefined, false, themes);
       expect(refused.status).toBe(400);
       expect(new OmarchyThemeStore(stateDir).get("100.96.150.40")).toEqual((told as Extract<MachineEvent, { type: "omarchy-theme" }>).theme);
       expect(new OmarchyThemeStore(stateDir).get("100.101.250.35")).toBeNull();

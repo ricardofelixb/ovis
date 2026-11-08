@@ -101,6 +101,7 @@ const BASE: Record<string, string> = {
   "Input line": "입력창",
   // ---- settings ----
   "Settings": "설정",
+  "PCs": "PC",
   "Agent default": "에이전트 기본값",
   "Devices and PCs": "기기와 PC",
   "Access token": "접속 토큰",

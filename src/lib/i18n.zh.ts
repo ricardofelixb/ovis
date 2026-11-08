@@ -105,6 +105,7 @@ const BASE: Record<string, string> = {
   "Input line": "输入框",
   // ---- settings ----
   "Settings": "设置",
+  "PCs": "PC",
   "Agent default": "代理默认",
   "Devices and PCs": "设备和电脑",
   "Access token": "访问 Token",

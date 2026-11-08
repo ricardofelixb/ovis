@@ -103,6 +103,7 @@ const BASE: Record<string, string> = {
   "Input line": "入力欄",
   // ---- settings ----
   "Settings": "設定",
+  "PCs": "PC",
   "Agent default": "エージェントの既定",
   "Devices and PCs": "デバイスと PC",
   "Access token": "アクセストークン",
