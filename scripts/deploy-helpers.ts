@@ -1,6 +1,6 @@
 /**
  * Fork only. What scripts/deploy-vps.ts needs of Ricardo's own Ovis: the steps that bring its
- * checkout to origin/main, and its plugin's settings file (`env` in its config dir).
+ * checkout to origin/main, and its settings file (`~/.config/ovis/env`).
  */
 
 /**
@@ -23,7 +23,7 @@ export function pullMainSteps(repo: string): string[] {
 
 /**
  * `text`, a file of `KEY=value` lines, with `name` set to `value`: each line that sets it changed in
- * place (the plugin reads the last one), or one added after the others. Comments and the other
+ * place (the last one wins), or one added after the others. Comments and the other
  * lines stay as they are.
  */
 export function withSetting(text: string, name: string, value: string): string {
@@ -32,4 +32,11 @@ export function withSetting(text: string, name: string, value: string): string {
   const sets = (candidate: string) => candidate.trim().split("=")[0]!.trim() === name;
   if (lines.some(sets)) return lines.map((candidate) => (sets(candidate) ? line : candidate)).join("\n");
   return `${text}${text === "" || text.endsWith("\n") ? "" : "\n"}${line}\n`;
+}
+
+/** The value `text`, a file of `KEY=value` lines, gives `name` (the last line that sets it, unquoted), or null. */
+export function settingOf(text: string, name: string): string | null {
+  const lines = text.split("\n").filter((line) => line.trim().split("=")[0]!.trim() === name);
+  const value = lines.at(-1)?.slice(lines.at(-1)!.indexOf("=") + 1).trim().replace(/^(["'])(.*)\1$/, "$2");
+  return value ? value : null;
 }
