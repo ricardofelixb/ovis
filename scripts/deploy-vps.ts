@@ -1,8 +1,8 @@
 /**
  * Puts Ricardo's own Ovis on the latest main: the server on the VPS that
  * https://vps.tailb4e5ae.ts.net:8443 fronts (this fork only, see AGENTS.md "This fork"). There Ovis
- * is the herdr plugin `devswha.ovis`, linked from the checkout and started by herdr under the
- * systemd user unit `herdr.service`.
+ * runs on herdr-core from this checkout, started by `scripts/plugin.ts start` under the systemd user
+ * unit `ovis.service` (INSTALL.md describes the unit and its `~/.config/ovis/env`; no herdr is needed).
  *
  * On any other machine it runs itself on the VPS over SSH (a login shell, which has mise's
  * shims): it pulls origin/main there, fast-forward only, and runs this script with the same
@@ -14,14 +14,14 @@
  * fast-forward it (scripts/deploy-helpers.ts, onMainSteps). Once on main it:
  *
  * 1. builds the client (`bun run build`);
- * 2. restarts the running `bun server/managed.ts` of this checkout with the environment it ran with,
- *    since a build under a running server only gets it the "Restart it there" banner;
+ * 2. restarts `ovis.service` (`systemctl --user restart`), since a build under a running server only
+ *    gets it the "Restart it there" banner;
  * 3. waits until the server runs HEAD, then checks from omarchy that the tailnet address serves the
  *    new bundle;
  * 4. restarts the Ovis app on the Xiaomi over adb, since the Android app ignores a reload.
  *
- * It also sets OVIS_AUTO_UPDATE=1 for the server it starts and in the plugin's `env` file, which a later
- * start (herdr's, after a reboot) reads: from then on the VPS's updater installs by itself every newer plain
+ * It also sets OVIS_AUTO_UPDATE=1 in `~/.config/ovis/env`, which every start of the unit reads (this
+ * one, and the one at login after a reboot): from then on the VPS's updater installs by itself every newer plain
  * `vX.Y.Z` tag its origin gets, such as the fork's calendar tags (`v2026.1101.1`, pushed by the
  * orchestrator's weekly job), and this script is only for putting a change there before it is tagged.
  *
@@ -30,7 +30,7 @@
  * OVIS_DEPLOY_ADB_SERIAL, OVIS_DEPLOY_SSH (where to run it from another machine). Every OVIS_DEPLOY_*
  * set here goes along to the run on the VPS, except OVIS_DEPLOY_SSH.
  */
-import { existsSync, readFileSync, readlinkSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { onMainSteps, pullMainSteps, withSetting } from "./deploy-helpers.ts";
@@ -43,14 +43,17 @@ const androidApp = "sh.ovis.app";
 const vpsHostname = "vps";
 const vpsSsh = process.env.OVIS_DEPLOY_SSH ?? `ricardo@${vpsHostname}`;
 const vpsRepo = "/home/ricardo/Projects/forks/ovis";
+const service = "ovis.service";
+/** the HERDR_PLUGIN_CONFIG_DIR the unit hands scripts/plugin.ts (install.sh core_dirs), whose `env` a start reads */
+const settingsFile = join(homedir(), ".config", "ovis", "env");
 
 function fail(message: string): never {
   console.error(`deploy-vps: ${message}`);
   process.exit(1);
 }
 
-function run(cmd: string[], options: { env?: Record<string, string>; quiet?: boolean } = {}): { ok: boolean; code: number; out: string } {
-  const result = Bun.spawnSync(cmd, { cwd: repo, env: options.env ?? process.env, stdout: options.quiet === false ? "inherit" : "pipe", stderr: options.quiet === false ? "inherit" : "pipe" });
+function run(cmd: string[], options: { quiet?: boolean } = {}): { ok: boolean; code: number; out: string } {
+  const result = Bun.spawnSync(cmd, { cwd: repo, stdout: options.quiet === false ? "inherit" : "pipe", stderr: options.quiet === false ? "inherit" : "pipe" });
   return { ok: result.exitCode === 0, code: result.exitCode ?? 1, out: `${result.stdout?.toString() ?? ""}${result.stderr?.toString() ?? ""}`.trim() };
 }
 
@@ -61,31 +64,6 @@ async function waitFor(what: string, ms: number, done: () => boolean | Promise<b
     await Bun.sleep(250);
   }
   fail(`timed out after ${ms / 1000}s waiting for ${what}`);
-}
-
-const alive = (pid: number) => existsSync(`/proc/${pid}`);
-
-/** The running `bun server/managed.ts` started in this checkout, if any. */
-function managedServer(): number | null {
-  for (const entry of readdirSync("/proc")) {
-    const pid = Number(entry);
-    if (!Number.isInteger(pid)) continue;
-    try {
-      const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
-      if (!args.some((arg) => arg.endsWith("server/managed.ts"))) continue;
-      if (readlinkSync(`/proc/${pid}/cwd`) === repo) return pid;
-    } catch { /* gone, or not ours to read */ }
-  }
-  return null;
-}
-
-function environOf(pid: number): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const pair of readFileSync(`/proc/${pid}/environ`, "utf8").split("\0")) {
-    const at = pair.indexOf("=");
-    if (at > 0) env[pair.slice(0, at)] = pair.slice(at + 1);
-  }
-  return env;
 }
 
 const bundleOf = (html: string) => html.match(/assets\/index-[^"]+\.js/)?.[0] ?? null;
@@ -113,25 +91,14 @@ if (!process.argv.includes("--no-build")) {
   if (!run(["bun", "run", "build"], { quiet: false }).ok) fail("the build failed");
 }
 
-const old = managedServer();
-if (old === null) fail(`no \`bun server/managed.ts\` runs in ${repo}; start it once by hand, then rerun`);
-const env = environOf(old);
-env.OVIS_AUTO_UPDATE = "1";
-if (env.HERDR_PLUGIN_CONFIG_DIR) {
-  const settings = join(env.HERDR_PLUGIN_CONFIG_DIR, "env");
-  const before = existsSync(settings) ? readFileSync(settings, "utf8") : "";
-  const after = withSetting(before, "OVIS_AUTO_UPDATE", "1");
-  if (after !== before) { writeFileSync(settings, after, { mode: 0o600 }); console.log(`deploy-vps: set OVIS_AUTO_UPDATE=1 in ${settings}`); }
-} else console.warn("deploy-vps: warning: the server has no HERDR_PLUGIN_CONFIG_DIR, so a later start (a reboot) will not install releases by itself");
-const port = env.PORT ?? "7317";
-let log = "/dev/null";
-try { log = readlinkSync(`/proc/${old}/fd/1`); } catch { /* keep /dev/null */ }
-if (!log.startsWith("/") || log.startsWith("/dev/pts")) log = "/dev/null";
+if (!run(["systemctl", "--user", "cat", service]).ok) fail(`no ${service} user service here: install it first (INSTALL.md, the herdr-core setup, with this checkout as the app)`);
+const before = existsSync(settingsFile) ? readFileSync(settingsFile, "utf8") : "";
+const after = withSetting(before, "OVIS_AUTO_UPDATE", "1");
+if (after !== before) { writeFileSync(settingsFile, after, { mode: 0o600 }); console.log(`deploy-vps: set OVIS_AUTO_UPDATE=1 in ${settingsFile}`); }
+const port = process.env.PORT ?? "7317";
 
-console.log(`deploy-vps: restarting the server (pid ${old}, port ${port})`);
-process.kill(old, "SIGTERM");
-await waitFor("the old server to stop", 20_000, () => !alive(old));
-run(["sh", "-c", "setsid nohup bun server/managed.ts >>\"$1\" 2>&1 </dev/null &", "sh", log], { env });
+console.log(`deploy-vps: restarting ${service} (port ${port})`);
+if (!run(["systemctl", "--user", "restart", service], { quiet: false }).ok) fail(`could not restart ${service}`);
 
 const local = `http://127.0.0.1:${port}/`;
 await waitFor(`the server to run ${head.slice(0, 8)}`, 90_000, async () => {

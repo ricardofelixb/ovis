@@ -148,18 +148,24 @@ to change. Also read [server/AGENTS.md](server/AGENTS.md) and [src/AGENTS.md](sr
   `tailscale serve` fronts from 127.0.0.1:7317), run `bun scripts/deploy-vps.ts`. It builds, restarts
   the server, checks the new bundle from omarchy and restarts the Xiaomi app. Say it's deployed only
   once it exits 0; when it stops at the Xiaomi, ask Ricardo to swipe Ovis away and reopen it.
-- There Ovis is the herdr plugin `devswha.ovis`, linked from the checkout
-  `/home/ricardo/Projects/forks/ovis` and started by herdr under the systemd user unit `herdr.service`
-  (never restart that unit to deploy: herdr owns every pane). Its plugin settings are in
-  `/home/ricardo/.config/herdr/plugins/config/devswha.ovis`, its state in `~/.config/ovis`.
+- There Ovis runs on herdr-core (hc), with no herdr: the checkout `/home/ricardo/Projects/forks/ovis`
+  started by `bun scripts/plugin.ts start` from the systemd user unit `ovis.service`, the layout INSTALL.md
+  describes for a PC with hc and no herdr, pointed at the checkout instead of `~/.local/share/ovis/app`.
+  The unit hands plugin.ts `HERDR_PLUGIN_CONFIG_DIR=~/.config/ovis` and `HERDR_PLUGIN_STATE_DIR=~/.local/state/ovis`;
+  its settings are `~/.config/ovis/env` (`OVIS_RUNTIME=herdr-core`, `OVIS_HC_BIN`, `OVIS_AUTO_UPDATE`,
+  the app name, telemetry and screen bridge), next to the state. The herdr plugin `devswha.ovis` is
+  disabled there (`herdr plugin disable devswha.ovis`) and its settings in
+  `~/.config/herdr/plugins/config/devswha.ovis` are kept, so `herdr.service` (still up for the agents-app
+  and exac panes that live in herdr, not hc) starts no second Ovis. Never end `herdr.service` while
+  those panes run; the deploy script no longer drives the plugin setup.
 - It works from any machine: elsewhere it runs itself on the VPS over SSH (`OVIS_DEPLOY_SSH`, default
   `ricardo@vps`), after `git pull --ff-only origin main` there, so it deploys origin/main, not your
   checkout. Push or merge first; it warns when HEAD is not on origin/main. It stops, changing nothing,
   while the VPS checkout is on another branch (a PR under test there, as `feat/screen-window-title`
   was), whether run from elsewhere or on the VPS itself, where it does not pull: switch it back to main
   there first.
-- `deploy-vps` also sets `OVIS_AUTO_UPDATE=1` for the server it restarts and in the plugin's `env` file
-  (`$HERDR_PLUGIN_CONFIG_DIR/env`, read on every later start). From then on the VPS's updater installs by
+- `deploy-vps` restarts with `systemctl --user restart ovis.service` and sets `OVIS_AUTO_UPDATE=1` in
+  `~/.config/ovis/env` (read on every start of the unit, a reboot's too). From then on the VPS's updater installs by
   itself each newer plain `vX.Y.Z` tag of its origin, such as the fork's calendar tags
   (`v2026.1101.1`, pushed by the orchestrator's weekly job; upstream's are `v0.x.y`). The Xiaomi app is
   not restarted by that: swipe Ovis away and reopen it. The phone's adb serial is its tailnet address,

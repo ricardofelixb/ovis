@@ -1,6 +1,6 @@
 /**
  * Fork only. What scripts/deploy-vps.ts needs of Ricardo's own Ovis: the steps that bring its
- * checkout to origin/main, and its plugin's settings file (`env` in its config dir).
+ * checkout to origin/main, and its settings file (`~/.config/ovis/env`).
  */
 
 /**
@@ -23,7 +23,7 @@ export function pullMainSteps(repo: string): string[] {
 
 /**
  * `text`, a file of `KEY=value` lines, with `name` set to `value`: each line that sets it changed in
- * place (the plugin reads the last one), or one added after the others. Comments and the other
+ * place (the last one wins), or one added after the others. Comments and the other
  * lines stay as they are.
  */
 export function withSetting(text: string, name: string, value: string): string {
