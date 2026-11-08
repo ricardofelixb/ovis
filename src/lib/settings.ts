@@ -93,7 +93,7 @@ export interface Settings {
   density: Density;
   /** How much a workspace row says: its name, or its pane's title over its place. */
   sidebarRows: SidebarRows;
-  /** the Filter field above the sidebar's lists (components/MachineSidebar.tsx); off, the command palette's
+  /** the Filter field above the sidebar's lists (components/MachineSidebar.tsx), off until chosen; off, the command palette's
    *  Filter workspaces and agents still opens it for the time it holds words or the focus */
   sidebarFilter: boolean;
   /** the composer's context ring on each agent row of the sidebar (components/Sidebar.tsx ContextBadge); off until chosen */
@@ -460,7 +460,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "dark",
   density: "comfortable",
   sidebarRows: "one",
-  sidebarFilter: true,
+  sidebarFilter: false,
   sidebarContext: false,
   foldHelpers: false,
   sidebarAgentTree: false,
@@ -823,8 +823,10 @@ function readMirrorWrap(): boolean | null {
   }
 }
 
-/** Settings → Appearance → Sidebar filter, kept in a key of its own for the same reason: shown until chosen off. */
-export const SIDEBAR_FILTER_STORAGE_KEY = "ovis:sidebar-filter";
+/** Settings → Appearance → Sidebar filter, kept in a key of its own for the same reason: out until chosen on. A new key:
+ *  the earlier `ovis:sidebar-filter` held the old default (on) on every device that saved any setting, which no
+ *  choice can be told from, so it is not read. */
+export const SIDEBAR_FILTER_STORAGE_KEY = "ovis:sidebar-filter-shown";
 
 function readSidebarFilter(): boolean {
   try {
