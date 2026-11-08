@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { onMainSteps, pullMainSteps, withSetting } from "./deploy-helpers.ts";
+import { onMainSteps, pullMainSteps, settingOf, withSetting } from "./deploy-helpers.ts";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -115,5 +115,13 @@ describe("a plugin settings file with one setting set", () => {
 
   it("does not take another setting that starts with the same letters for it", () => {
     expect(withSetting("OVIS_AUTO_UPDATE_X=0\n", "OVIS_AUTO_UPDATE", "1")).toBe("OVIS_AUTO_UPDATE_X=0\nOVIS_AUTO_UPDATE=1\n");
+  });
+});
+
+describe("settingOf", () => {
+  it("gives the last value a line sets, unquoted, and null when none does", () => {
+    expect(settingOf("PORT=1\n# PORT=2\n PORT = \"7400\"\n", "PORT")).toBe("7400");
+    expect(settingOf("PORT_X=1\n", "PORT")).toBeNull();
+    expect(settingOf("PORT=\n", "PORT")).toBeNull();
   });
 });

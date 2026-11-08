@@ -33,7 +33,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
-import { onMainSteps, pullMainSteps, withSetting } from "./deploy-helpers.ts";
+import { onMainSteps, pullMainSteps, settingOf, withSetting } from "./deploy-helpers.ts";
 
 const repo = join(import.meta.dir, "..");
 const publicUrl = process.env.OVIS_DEPLOY_URL ?? "https://vps.tailb4e5ae.ts.net:8443/";
@@ -95,7 +95,8 @@ if (!run(["systemctl", "--user", "cat", service]).ok) fail(`no ${service} user s
 const before = existsSync(settingsFile) ? readFileSync(settingsFile, "utf8") : "";
 const after = withSetting(before, "OVIS_AUTO_UPDATE", "1");
 if (after !== before) { writeFileSync(settingsFile, after, { mode: 0o600 }); console.log(`deploy-vps: set OVIS_AUTO_UPDATE=1 in ${settingsFile}`); }
-const port = process.env.PORT ?? "7317";
+// the port the unit starts the server on is the settings file's, not this shell's
+const port = settingOf(after, "PORT") ?? "7317";
 
 console.log(`deploy-vps: restarting ${service} (port ${port})`);
 if (!run(["systemctl", "--user", "restart", service], { quiet: false }).ok) fail(`could not restart ${service}`);

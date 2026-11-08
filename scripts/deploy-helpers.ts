@@ -33,3 +33,10 @@ export function withSetting(text: string, name: string, value: string): string {
   if (lines.some(sets)) return lines.map((candidate) => (sets(candidate) ? line : candidate)).join("\n");
   return `${text}${text === "" || text.endsWith("\n") ? "" : "\n"}${line}\n`;
 }
+
+/** The value `text`, a file of `KEY=value` lines, gives `name` (the last line that sets it, unquoted), or null. */
+export function settingOf(text: string, name: string): string | null {
+  const lines = text.split("\n").filter((line) => line.trim().split("=")[0]!.trim() === name);
+  const value = lines.at(-1)?.slice(lines.at(-1)!.indexOf("=") + 1).trim().replace(/^(["'])(.*)\1$/, "$2");
+  return value ? value : null;
+}
