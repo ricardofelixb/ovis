@@ -153,11 +153,11 @@ to change. Also read [server/AGENTS.md](server/AGENTS.md) and [src/AGENTS.md](sr
   describes for a PC with hc and no herdr, pointed at the checkout instead of `~/.local/share/ovis/app`.
   The unit hands plugin.ts `HERDR_PLUGIN_CONFIG_DIR=~/.config/ovis` and `HERDR_PLUGIN_STATE_DIR=~/.local/state/ovis`;
   its settings are `~/.config/ovis/env` (`OVIS_RUNTIME=herdr-core`, `OVIS_HC_BIN`, `OVIS_AUTO_UPDATE`,
-  the app name, telemetry and screen bridge), next to the state. The herdr plugin `devswha.ovis` is
-  disabled there (`herdr plugin disable devswha.ovis`) and its settings in
-  `~/.config/herdr/plugins/config/devswha.ovis` are kept, so `herdr.service` (still up for the agents-app
-  and exac panes that live in herdr, not hc) starts no second Ovis. Never end `herdr.service` while
-  those panes run; the deploy script no longer drives the plugin setup.
+  the app name, telemetry and screen bridge), next to the state. herdr is stopped there:
+  `herdr.service` is disabled (its unit link was removed; the file stays in the orchestrator repo's
+  `vps/systemd`), the herdr plugin `devswha.ovis` is disabled, and its settings in
+  `~/.config/herdr/plugins/config/devswha.ovis` are kept. The terminals Ovis shows there are hc's.
+  The deploy script no longer drives the plugin setup.
 - It works from any machine: elsewhere it runs itself on the VPS over SSH (`OVIS_DEPLOY_SSH`, default
   `ricardo@vps`), after `git pull --ff-only origin main` there, so it deploys origin/main, not your
   checkout. Push or merge first; it warns when HEAD is not on origin/main. It stops, changing nothing,
