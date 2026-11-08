@@ -1,4 +1,5 @@
 import type { TailnetPcsOptions } from "./tailnet-pcs.ts";
+import type { SshCandidatesOptions } from "./ssh-candidates.ts";
 import "./adopt-legacy-env.ts";
 import type { RelaySocket } from "../shared/relay-channel.ts";
 import { createCore, type SocketData } from "./core/index.ts";
@@ -19,6 +20,7 @@ import { DeviceStore, mergeAccountTombstones } from "./devices.ts";
 import { OmarchyThemeStore } from "./omarchy-themes.ts";
 import { PreferenceStore } from "./preferences.ts";
 import { FriendStore } from "./friends.ts";
+import { readOmpHeldFilesSetting } from "./omp.ts";
 import { SeenStore } from "./seen.ts";
 import type { SeenFinish } from "../shared/seen.ts";
 import { TailnetIdentitySource } from "./tailscale.ts";
@@ -33,6 +35,7 @@ import { herdrSocketPath, ping } from "./herdr/client.ts";
 import { coreConnection, coreSeenMarker, hcBin, hcMachine, NoHerdrCoreError, runtime, servingCore, setRuntime, startRuntime } from "./herdr-core/runtime.ts";
 import { chooseRuntime, runtimeService, type RuntimeChoice, type RuntimeService } from "./herdr-core/runtime-choice.ts";
 import { moveService, type HcInstaller } from "./runtime-move-service.ts";
+import { moveLockPath } from "./runtime-move-lock.ts";
 import { bridgePins } from "./herdr-core/pin-label.ts";
 import { herdrCoreFacts, rediscoverHc } from "./herdr-core/discovery.ts";
 import { HC_RELEASE, hcInstallTarget, installHc } from "./herdr-core/install.ts";
@@ -47,7 +50,7 @@ import { connectUpdater, type UpdateService } from "./update-api.ts";
 import { HerdrUpdater } from "./herdr-update.ts";
 import { PortalService } from "./portal.ts";
 import { RelayService } from "./relay/service.ts";
-import { AccountMailbox, accountServiceUrl } from "./account/mailbox.ts";
+import { AccountMailbox, accountServiceUrl, passAccountService } from "./account/mailbox.ts";
 import { AccountHolds } from "./account/holds.ts";
 import { AccountIntroductions } from "./account/introductions.ts";
 import { Telemetry } from "./telemetry.ts";
@@ -214,8 +217,12 @@ export function createServer(
     relayPcSocket?: (url: string) => RelaySocket;
     /** how they dial those PCs' direct carriers; tests point it at a local listener */
     relayPcDirectSocket?: (url: string) => RelaySocket;
+    /** how often another PC's own update is looked at while it runs; tests shorten it */
+    pcUpdateTimings?: { pollMs?: number; startMs?: number; checkMs?: number; offerMs?: number };
     /** how other PCs on this PC's Tailscale are found (server/tailnet-pcs.ts); tests give their own */
     tailnetPcs?: TailnetPcsOptions;
+    /** where Add a connection → SSH reads its list from; tests point it at a fixture */
+    sshCandidates?: SshCandidatesOptions;
     /** a bridge this app starts on a PC (server/remote-entry.ts): its token is the credential its connection server holds, and no browser reaches it, so its snapshots go whole (#2160) */
     bridgeOnly?: boolean;
     /** false: the panes' files are on another machine (server/herdr-core/machine-entry.ts), so no route reads or makes files on this disk for them */
@@ -286,7 +293,7 @@ export function createServer(
   /** paired devices (server/devices.ts) and the PC's Tailscale login: the two ways in besides the token and this PC itself */
   // resolved once: a merge can give the old dir files of its own, after which resolving again could name the other dir
   const stateDir = options.stateDir ?? defaultStateDir();
-  const ovisRelay = options.relay ?? new RelayService({ stateDir });
+  const ovisRelay = options.relay ?? new RelayService({ stateDir, accountService: passAccountService(options.accountService?.url), ...(options.accountService?.fetch ? { accountFetch: options.accountService.fetch } : {}) });
   const merge = options.siblingStateDir ? mergeSiblingState(stateDir, options.siblingStateDir) : null;
   let accountBlocked: string | null = null;
   if (options.siblingStateDir) {
@@ -298,6 +305,8 @@ export function createServer(
   const preferences = new PreferenceStore(stateDir);
   const omarchyThemes = new OmarchyThemeStore(stateDir);
   const friends = new FriendStore(stateDir);
+  // Settings -> Experimental -> OMP on macOS herdr-core: chat from the session it holds open
+  readOmpHeldFilesSetting(() => preferences.get().settings.ompHeldFiles === true);
   // on herdr-core an agent pinned here is pinned in the Herdr app and its other clients too
   const stopPinBridge = servingCore() ? bridgePins(coreConnection(), preferences, LOCAL_MACHINE, stateDir) : null;
   // Chat's own rewind (#1500, never released) kept its rewinds here; nothing reads them since #1577
@@ -312,13 +321,33 @@ export function createServer(
   const usageLogin = options.usageLogin ?? new UsageLoginService();
   // a sign-in runs in a herdr tab, which outlives this server: the next one must know its home is taken (#2313)
   usageLogin.persistTo(stateDir);
-  const usage = options.usage ?? new UsageService(undefined, undefined, (refresh) => cliProxy.report(refresh));
+  const usage = options.usage ?? new UsageService(undefined, undefined, (refresh, skipped) => cliProxy.report(refresh, skipped));
   const usageAccounts = new UsageAccountList(stateDir, usage);
+  const hiddenAccounts = (hidden: unknown): Set<string> => new Set(Array.isArray(hidden) ? hidden.filter((key): key is string => typeof key === "string") : []);
+  // an account hidden in Settings (the shared usageHidden) or removed from Ovis has its sign-in looked up no more (#3333)
+  const skippedAccounts = () => {
+    let removed: string[] = [];
+    // an unreadable list skips nothing; the report says why
+    try { removed = usageAccounts.removed(); } catch { /* UsageAccountList.report warns */ }
+    return new Set([...hiddenAccounts(preferences.get().settings.usageHidden), ...removed]);
+  };
+  usage.skipAccounts(skippedAccounts);
+  // a Hub sign-in keeps the rows of the accounts hidden now, not only of those the last report skipped
+  cliProxy.skipAccounts(skippedAccounts);
+  // an account shown again is looked up now, not at the browser's next poll; hiding one needs no read,
+  // and with Plan limits off nothing is read at all (gh auth token included)
+  let usageHidden = hiddenAccounts(preferences.get().settings.usageHidden);
+  preferences.subscribe((next) => {
+    const before = usageHidden;
+    usageHidden = hiddenAccounts(next.settings.usageHidden);
+    if (!next.settings.showUsage || ![...before].some((key) => !usageHidden.has(key))) return;
+    usage.report().catch((error: unknown) => console.warn("usage: could not be read after the hidden accounts changed", error instanceof Error ? error.message : String(error)));
+  });
   // a herdr-core machine's server runs on this PC, so it has no load of that machine to tell (system-stats.ts)
   const systemSampler = options.system === undefined ? (hcMachine() === null ? createSystemSampler() : null) : options.system;
   // a sign-in the browser followed ends in the server's own PTY, not a herdr pane: it says so itself
-  usageLogin.onLoginEnded((account) => {
-    usage.invalidate();
+  usageLogin.onLoginEnded((account, provider) => {
+    usage.invalidate(provider);
     if (account !== null) {
       try { usageAccounts.restore(account); }
       catch (error) { console.warn("Could not restore the signed-in account to Ovis", error instanceof Error ? error.message : String(error)); }
@@ -457,6 +486,7 @@ export function createServer(
   const services: RequestServices = {
     runtimeMove: options.runtimeService ? moveService({
       stateDir, port: server.port ?? DEFAULT_PORT, serving: runtime, facts: () => options.runtimeService?.facts(),
+      lock: { path: moveLockPath(herdrSocketPath()), bootId },
       stores: { codexHome: options.codexHome, opencodeDb: options.opencodeDb, hermesHome: options.hermesHome, piReader },
       holdsPending: core.holdsPending,
       inputEmpty: core.inputEmpty,
@@ -623,7 +653,7 @@ if (import.meta.main) {
   const portal = new PortalService({ stateDir });
   // the direct carrier on this PC's private and Tailscale addresses, which the phone apps' OvisDirect plugin opens (docs/relay.md)
   const tailnet = new TailnetIdentitySource();
-  const relay = new RelayService({ stateDir, direct: { tailnetIp: () => tailnet.identity().tailnetIp } });
+  const relay = new RelayService({ stateDir, direct: { tailnetIp: () => tailnet.identity().tailnetIp }, accountService: passAccountService() });
   const lanConfig = lanHttpsConfig(process.env);
   if (lanConfig !== null && "error" in lanConfig) console.error(`LAN HTTPS is off: ${lanConfig.error}.`);
   let instance: ReturnType<typeof createServer>;

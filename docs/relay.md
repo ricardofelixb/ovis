@@ -199,7 +199,8 @@ device pairs with the six-digit code in it as a scanned QR code does: nothing el
 
 1. Its first three characters are a public **nameplate**: the PC holds a rendezvous for it on
    `relay.ovis.sh` (`/v1/pair`, [relay/README.md](../relay/README.md#what-it-answers)), and the
-   device joins it. The other seven (35 bits) are the **password**, which never leaves either end.
+   device joins it. The PC proves its relay key for that nameplate before the relay lets it hold
+   one, and sends its [relay pass](#relay-pass) there as on its other sockets. The other seven (35 bits) are the **password**, which never leaves either end.
 2. The two run CPace ([draft-irtf-cfrg-cpace-21](https://datatracker.ietf.org/doc/draft-irtf-cfrg-cpace/),
    `CPACE-RISTR255-SHA512`, the PC as initiator) with the password, `CI = lv_cat("ovis-pair-code/1",
    nameplate)`, a fresh 16-byte `sid` per try and role labels as associated data. The device answers
@@ -685,6 +686,63 @@ can be apart.
   by hand.
 - **Newer PC.** A PC newer than the app means the app's cached copy is out of date: the app checks
   for a newer version of itself and reloads, once.
+
+## Relay pass
+
+Ovis's own relays (`relay.ovis.sh` and the regional ones) may let in only PCs whose owner has an
+Ovis account. They check a **relay pass**, a short-lived token the account service signs for the PC
+([relay/README.md](../relay/README.md#relay-pass) has the format and the relay's side). Only the PC
+needs one: phones and browsers never sign in for the relay, pairing works as before, and the frames
+stay end-to-end encrypted. Direct connections on the same network or Tailscale, SSH, and a relay you
+run yourself need no account and no pass.
+
+- **Getting one** (`server/relay/pass.ts`). While its relay is one of Ovis's, the PC proves its relay
+  key to the account service (the `account` server proof, as for its mailbox) and asks
+  `POST /v1/pc/relay-pass` for a pass under an account: the account of its members
+  ([Linking devices with an account](account.md)), else the one its signed-in owner named with
+  `POST /api/account/relay-account` after adding the PC to that account. A pass the relay refuses
+  (`4402`, or `invalid`/`expired` in `sync`) is dropped and a new one asked for at once, at most once
+  a minute. The service gives one only
+  when that account lists the PC, so another account listing it neither charges nor blocks it.
+- **Keeping it.** The pass lasts 48 hours. The PC keeps it in `relay/pass.json` (readable by your user
+  only), so a restart or an account service outage costs nothing while it holds, and asks for the
+  next one after 12 hours, backing off (and honoring `Retry-After`) when the service does not answer.
+  A new pass goes to the relay on the open control socket; nothing reconnects. The file names the
+  account service the pass came from, and a pass from another one (a staging one) is never sent.
+  While `OVIS_ACCOUNT_SERVICE_URL` cannot be used, the saved pass still holds until it runs out.
+- **Sending it.** In the `x-ovis-relay-pass` header of every socket the PC opens to Ovis's relays,
+  never in the address, and never to any other relay (`OVIS_RELAY_URL` naming your own). A pass only
+  goes to the relays of the service that signed it. For testing only, `OVIS_RELAY_STAGING=1` with
+  `OVIS_ACCOUNT_SERVICE_URL` naming Ovis's staging account service makes the relay `OVIS_RELAY_URL`
+  names the only one the PC uses and sends the staging service's pass to
+  ([relay/README.md](../relay/README.md#staging)); with any other service it does nothing.
+- **When it is refused.** A relay that asks for a pass closes a PC socket without one `4402`. The PC
+  then stops reconnecting until it gets a pass, and reconnects as soon as it does. `GET /api/relay`
+  says where it stands in `pass`: `state` (`ok`, `no_account`, `not_listed`, `limit` or
+  `unavailable`), what the relay last said of it (`relay`), and from when the relay will need it
+  (`enforce_at`). `pass` is absent on a relay that is not Ovis's, and with
+  `OVIS_ACCOUNT_SERVICE_URL=off`. `error_code` says which of the reasons below it is.
+
+## Why it is not online
+
+Whenever `GET /api/relay` has an `error`, it also has an `error_code`, one of a fixed set, so an app
+can put the reason in its own words (`error` stays English for logs) and know whether to wait or
+ask the user to act (`RelayErrorCode` in [`shared/protocol.ts`](../shared/protocol.ts)):
+
+| `error_code` | What happened | Tries again by itself |
+|---|---|---|
+| `start_failed` | the relay did not start | no: start it again |
+| `identity_unreadable` | this PC's relay identity cannot be read (`blocked` says so too) | no |
+| `relay_unreachable` | the relay did not answer, or the connection dropped | yes |
+| `server_key_refused` | the relay refused this PC's key for good | no |
+| `pass_required` | an Ovis relay needs a [relay pass](#relay-pass) and no account names this PC: sign in on it and add it | when a pass comes |
+| `pass_not_listed` | the account this PC names does not list it: add it there | when a pass comes |
+| `pass_limit` | that account has as many PCs on the Ovis relay as it may: remove one | when a pass comes |
+| `pass_unavailable` | the account service has not given a pass yet | yes |
+| `pass_refused` | the relay refused the pass this PC holds (a key it does not trust, a PC it revoked) | asks for another now and then |
+| `pass_unsupported` | the relay needs a pass and this PC asks no account service for one (`OVIS_ACCOUNT_SERVICE_URL=off` or unusable, or a relay that is not Ovis's) | no: connect over the same Wi-Fi, Tailscale or another relay |
+
+It is null while nothing is wrong, and absent from a server older than this field.
 
 ## Operations
 
