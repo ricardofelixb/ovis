@@ -10,6 +10,8 @@ import { createServer } from "../server/index.ts";
 import { herdrRpc, sessionSnapshot, workspaceCreate, workspaceClose } from "../server/herdr/client.ts";
 import type { SessionSnapshot, WorkspaceCreated, WorktreeOpened } from "../shared/protocol.ts";
 import type { Machine } from "../shared/machines.ts";
+import type { PluginActionsResponse } from "../shared/plugins.ts";
+import { offeredPluginActions } from "../src/lib/paletteSearch.ts";
 import { MAX_ATTACHMENT_BYTES } from "../shared/attachments.ts";
 import { alertsOffMarked, alertsState, runMoreItem } from "./header-more.ts";
 import { routeDrained } from "./drained-route.ts";
@@ -37,7 +39,7 @@ import type { BrowserEvidenceSession } from "./browser-evidence.ts";
 import { chromePath } from "./chrome-path.ts";
 import { pickLens, VIEW_BUTTON } from "./view-toggle.ts";
 
-const root = realpathSync(mkdtempSync(join(tmpdir(), "ovis-browser-")));
+const root = realpathSync(mkdtempSync(join(tmpdir(), "ovis-ui-")));
 const workspaces: string[] = [];
 const worktreeWorkspaces: string[] = [];
 // the repository the worktree step makes, for the cleanup to find what the step made
@@ -129,7 +131,8 @@ try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await context.addInitScript((ids) => {
     // only the first load: a reload must keep what Settings stored, such as the language
-    if (!localStorage.getItem("ovis:settings")) localStorage.setItem("ovis:settings", JSON.stringify({ language: "en" }));
+    // The pending-input cases exercise automatic queue delivery, which is opt-in.
+    if (!localStorage.getItem("ovis:settings")) localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", autoSendQueued: true }));
     for (const id of ids) localStorage.setItem(`ovis:view:${id}`, "chat");
   }, panes);
   await context.addInitScript(rewriteMachinesFrames);
@@ -321,7 +324,13 @@ try {
   // browser's hover update after the scroll must not take the keyboard selection, and a real
   // pointer move still does.
   await page.setViewportSize({ width: 1280, height: 400 });
+  // each opening reads the PC's plugin actions: their rows land in one render after the answer, so the list is
+  // counted once they are in (a herdr session with plugins otherwise grows it under the arrow)
+  const pluginsAnswer = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/plugins/actions"));
   await openPalette();
+  const pluginsOffered = offeredPluginActions(((await (await pluginsAnswer).json()) as PluginActionsResponse).plugins, true, "").length;
+  if (pluginsOffered > 0) await palette.locator(".palette-plugin-action").first().waitFor();
+  const restingOptionCount = await palette.getByRole("option").count();
   const firstOption = (await palette.locator("#palette-item-0").boundingBox())!;
   await page.mouse.move(firstOption.x + firstOption.width / 2, firstOption.y + firstOption.height / 2);
   await until(async () => await paletteSearch.getAttribute("aria-activedescendant") === "palette-item-0", "the resting pointer is over the first option");
@@ -418,12 +427,15 @@ try {
   console.log("PASS delayed machines poll preserves newer status; unavailable chat keeps DONE until terminal content is presented");
 
   // Agents is global to the sidebar: explicit pane selection from that list keeps its machine and pane target.
-  // The test session's only PC is the Host, drawn without its header: no caret folds it, and its + is the New
-  // workspace row under the workspaces. A PC's fold over Agents, with two PCs, is in sidebar-spacing-demo-regression.ts.
+  // The test session's only PC is the Host, drawn without its header: no caret folds it, and New workspace
+  // stays available in the compact header. A PC's fold over Agents, with two PCs, is in sidebar-spacing-demo-regression.ts.
   await herdrRpc("pane.report_agent", { pane_id: paneB, source: "manual", agent: "codex", state: "idle" });
+  const resting = page.locator(".agents-sidebar .agent-resting-label .agent-background-toggle");
+  if (await resting.getAttribute("aria-expanded") === "false") await resting.click();
+  await page.locator('.agents-sidebar .agent-resting-label .agent-background-toggle[aria-expanded="true"]').waitFor();
   await agentRow(paneB).waitFor();
   assert.equal(await page.locator(".machine-group .machine-header").count(), 0, "the lone Host is drawn without its header");
-  assert.equal(await page.locator(".machine-group .machine-new-row").count(), 1, "its + is the New workspace row");
+  assert.equal(await page.getByRole("button", { name: "New workspace", exact: true }).count(), 1, "its + offers New workspace");
   await agentRow(paneB).locator(".agent-select").click();
   await agentRow(paneB).locator('.agent-select[aria-current="true"]').waitFor();
   assert.deepEqual(await page.evaluate(() => JSON.parse(sessionStorage.getItem("ovis:selection") ?? "null")),
@@ -455,6 +467,9 @@ try {
     const offlinePage = await offlineContext.newPage();
     offlineEvidence = evidenceDirectory ? await watchBrowserEvidence(offlineContext, offlinePage, "offline-cached-roster") : undefined;
     await offlinePage.goto(`${origin}/?pane=${encodeURIComponent(paneA)}`);
+    const offlineResting = offlinePage.locator(".agents-sidebar .agent-resting-label .agent-background-toggle");
+    if (await offlineResting.getAttribute("aria-expanded") === "false") await offlineResting.click();
+    await offlinePage.locator('.agents-sidebar .agent-resting-label .agent-background-toggle[aria-expanded="true"]').waitFor();
     const offlineAgent = offlinePage.locator(`.agents-sidebar .agent-item[data-machine="local"][data-pane="${paneB}"] .agent-select`);
     await offlineAgent.waitFor();
     assert.equal(await offlineAgent.isDisabled(), true, "a cached offline agent cannot select its pane");
@@ -1507,7 +1522,7 @@ try {
     await createGate;
     await route.continue();
   });
-  await page.locator(".machine-new-row").click();
+  await page.getByRole("button", { name: "New workspace", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: /^New workspace/ });
   // opening Browse on home leaves Directory as typed, `~`, not the absolute path it lists
   await dialog.getByLabel(/^Directory/).fill("~");
@@ -1525,7 +1540,7 @@ try {
   await until(async () => (await dialog.getByLabel(/^Directory/).inputValue()).endsWith("/a"), "Directory follows Browse into a");
   // New folder inside a: the workspace starts in the folder it made
   await checkNewFolder(page, dialog, () => createRequests, "made-here");
-  await dialog.getByLabel(/^Name/).fill("ovis-test-browser-created");
+  await dialog.getByLabel("Optional workspace label", { exact: true }).fill("ovis-test-browser-created");
   await dialog.getByRole("button", { name: "Start", exact: true }).click();
   await until(() => createRequests === 1, "creation started");
   assert.equal(createCwd, join(root, "a", "made-here"), "Start uses the folder Browse is showing");
@@ -1569,7 +1584,7 @@ try {
   worktreeWorkspaces.push(initialWorktree.workspace_id);
   const initialRow = page.locator(`.worktree-children .workspace-group[data-workspace="${initialWorktree.workspace_id}"]`);
   await until(async () => await initialRow.locator(".workspace-name").textContent() === "Existing checkout", "a named worktree's row is titled by its workspace name");
-  assert.equal(await initialRow.locator(".worktree-workspace-label").textContent(), "browser/initial", "the list API discovers an existing worktree's exact branch, said after the name");
+  assert.equal(await initialRow.locator(".workspace-branch-tail").textContent(), "browser/initial", "the list API discovers an existing worktree's branch, said dim at the row's end (a prefix that is no kind of change stays)");
   assert.equal(await repoRow.locator(".workspace-name").textContent(), "ovis-test-repo", "the parent keeps its workspace name");
   // An inventory read from before creation must not erase the branch supplied by the create response (#2661: one read per PC).
   let releaseWorktreeList!: () => void;
@@ -1637,7 +1652,7 @@ try {
   assert.equal(await repoRow.locator(".workspace-select").getAttribute("draggable"), "true", "the parent workspace row supports dragging");
   assert.equal(await childHeader.locator(".workspace-select").getAttribute("draggable"), "true", "the branch workspace row supports dragging");
   await until(async () => await childHeader.locator(".workspace-name").textContent() === "Sidebar redesign", "a newly created child is titled by the name it was given");
-  assert.equal(await childHeader.locator(".worktree-workspace-label").textContent(), "browser/sidebar", "its exact branch, slash included, follows the name");
+  assert.equal(await childHeader.locator(".workspace-branch-tail").textContent(), "browser/sidebar", "its branch follows the name at the row's end");
   assert.equal(await repoRow.locator(".workspace-toggle").getAttribute("aria-expanded"), "true", "creation expands a previously folded parent");
   assert.equal(await page.locator(`.workspace-group[data-workspace="${repoWorkspace.workspace.workspace_id}"] + .worktree-children > .workspace-list > .workspace-group`).count(), 2,
     "existing and newly created branches share their repository workspace");
@@ -1645,7 +1660,7 @@ try {
   assert.equal(staleWorktreeListFinished, false, "the create response displays the branch before the pending list finishes");
   releaseWorktreeList();
   await until(() => staleWorktreeListFinished && freshWorktreeListFinished, "the stale inventory is followed by a fresh one");
-  assert.equal(await childHeader.locator(".worktree-workspace-label").textContent(), "browser/sidebar", "a pre-create inventory cannot erase the new branch");
+  assert.equal(await childHeader.locator(".workspace-branch-tail").textContent(), "browser/sidebar", "a pre-create inventory cannot erase the new branch");
   assert.equal(await childHeader.locator(".workspace-name").textContent(), "Sidebar redesign", "nor the name it was given");
   await page.unroute("**/api/worktree/inventory?*");
   await childHeader.locator(".workspace-select").click({ button: "right" });
@@ -1656,7 +1671,7 @@ try {
   await worktreeRename.press("Enter");
   await until(async () => await childHeader.locator(".workspace-name").textContent() === "Sidebar renamed", "the child workspace is renamed in its row title");
   assert.equal(await childHeader.locator(".workspace-select").getAttribute("draggable"), "true", "row dragging returns after editing finishes");
-  assert.equal(await childHeader.locator(".worktree-workspace-label").textContent(), "browser/sidebar", "renaming a workspace preserves its actual git branch");
+  assert.equal(await childHeader.locator(".workspace-branch-tail").textContent(), "browser/sidebar", "renaming a workspace preserves its actual git branch");
   if (process.env.UI_EVIDENCE_DIR) await page.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, "worktree-branches-sidebar.png") });
   // a workspace row's menu also opens from a right-click on the row
   await repoRow.locator(".workspace-select").click({ button: "right" });
@@ -1779,7 +1794,7 @@ try {
   await tabDialog.waitFor();
   assert.equal(await tabDialog.locator(".new-session-folder").textContent(), join(root, "a", "made-here"), "the folder is the workspace's, shown");
   assert.equal(await tabDialog.getByRole("button", { name: "Browse", exact: true }).count(), 0, "the folder is not asked for");
-  const tabNameField = tabDialog.getByLabel(/^Name/);
+  const tabNameField = tabDialog.getByLabel("Tab name (optional)", { exact: true });
   await tabNameField.fill("second");
   // The command palette takes the keyboard above a dialog. Escape closes only the palette,
   // preserving the dialog's draft so the same creation can continue.
@@ -1885,8 +1900,8 @@ try {
   await page.unroute("**/api/agents");
   await page.evaluate(() => localStorage.removeItem("ovis:new-session-agent"));
   console.log("PASS reopening after a failed agent start owns focus before paint, enables its fields and closes with Escape");
-  // the lone Host's New workspace row is New workspace again, not a tab in the workspace the last dialog was for
-  await page.locator(".machine-new-row").click();
+  // the lone Host's New workspace action is New workspace again, not a tab in the workspace the last dialog was for
+  await page.getByRole("button", { name: "New workspace", exact: true }).click();
   await page.getByRole("dialog", { name: /^New workspace/ }).waitFor();
   await page.keyboard.press("Escape");
   await page.getByRole("dialog", { name: /^New workspace/ }).waitFor({ state: "hidden" });
@@ -2431,7 +2446,12 @@ try {
   // closed from the row's menu, which a desktop opens with the context-menu key or a right-click
   // (it draws no row ⋯); the workspace's pane goes with it, so a confirm asks first
   const selectedRow = page.locator(".pane-item.is-selected .pane-select");
-  assert.equal(await page.locator(".pane-item.is-selected .row-menu-toggle").isVisible(), false, "a desktop draws no row ⋯");
+  // a desktop draws the row's ⋯ under the pointer and the keyboard alone: away from both, the row is its selector
+  await page.mouse.move(640, 400);
+  assert.equal(await page.locator(".pane-item.is-selected .row-menu-toggle").isVisible(), false, "a desktop draws no row ⋯ at rest");
+  await selectedRow.hover();
+  assert.equal(await page.locator(".pane-item.is-selected .row-menu-toggle").isVisible(), true, "the row's ⋯ shows under the pointer");
+  await page.mouse.move(640, 400);
   await selectedRow.focus();
   await contextMenuKey(page);
   const rowMenu = page.getByRole("menu");
@@ -2505,13 +2525,16 @@ try {
   csp.push(await watchCsp(securedPage));
   await securedContext.request.post(`${securedOrigin}/api/auth`, { data: { token: "browser-test-token" } });
   await securedPage.goto(`${securedOrigin}/?pane=${encodeURIComponent(securedWorkspace.root_pane.pane_id)}`);
-  await securedPage.getByRole("button", { name: "Command palette", exact: true }).waitFor();
+  // with the sidebar out, the logo row's + for a new workspace stands where the palette's glass was (the shortcut opens it)
+  const securedHeaderButton = securedPage.locator(".header-side").getByRole("button", { name: "New workspace", exact: true });
+  await securedHeaderButton.waitFor();
+  assert.equal(await securedPage.getByRole("button", { name: "Command palette", exact: true }).isVisible(), false, "the + takes the glass's place in the logo row");
   assert.equal(await securedPage.getByRole("button", { name: "Sign out", exact: true }).count(), 0, "sign out is not in the header");
   await securedPage.keyboard.press("ControlOrMeta+Shift+K");
   await securedPage.getByRole("dialog", { name: "Command palette", exact: true }).waitFor();
   assert.equal(await securedPage.getByRole("option", { name: "Sign out", exact: true }).count(), 0, "the palette cannot bypass confirmation");
   // Simulate a late terminal focus change: Escape must still dismiss the modal.
-  await securedPage.getByRole("button", { name: "Command palette", exact: true }).focus();
+  await securedHeaderButton.focus();
   await securedPage.keyboard.press("Escape");
   await securedPage.getByRole("dialog", { name: "Command palette", exact: true }).waitFor({ state: "hidden" });
   await securedPage.keyboard.press("ControlOrMeta+Shift+Comma");

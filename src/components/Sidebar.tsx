@@ -1,6 +1,5 @@
 import { Fragment, useCallback, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type AnimationEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { ChevronDown, ChevronRight, Ellipsis, Folder, FolderOpen, GitBranch, GitPullRequest, History, Layers, ListChecks, Pencil, Pin, PinOff, Plus, Trash2, TriangleAlert, X } from "lucide-react";
-import { Terminal } from "lucide-react";
+import { ChevronDown, ChevronRight, Ellipsis, Folder, FolderOpen, GitBranch, GitPullRequest, History, Layers, ListChecks, Pencil, Pin, PinOff, Plus, Terminal, Trash2, TriangleAlert, X } from "lucide-react";
 
 import "./Sidebar.css";
 
@@ -20,8 +19,7 @@ import { RowMenu, type RowMenuItem } from "./RowMenu.tsx";
 import { PullRequestsDialog } from "./PullRequestsDialog.tsx";
 import { WorktreeDialog, type WorktreeDialogMode } from "./WorktreeDialog.tsx";
 import { focusWorkspaceListToggle } from "../lib/focus.ts";
-import { shortPathTitle, stripPaneChrome, tabTitle } from "../lib/paneName.ts";
-import { ApiError } from "../lib/api.ts";
+import { folderName, shortPathTitle, stripPaneChrome, tabTitle, taskRowLines } from "../lib/paneName.ts";
 import { useT } from "../lib/i18n.ts";
 import { contextLeftPercent, formatTokens } from "../lib/compose.ts";
 import { userErrorMessage } from "../lib/userError.ts";
@@ -31,9 +29,11 @@ import { filterWorkspaceGroups, machineFilter } from "../lib/sidebarFilter.ts";
 import { useSidebarFilter } from "../lib/sidebarFilterContext.ts";
 import { useSettings } from "../lib/settings.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
+import { SHEET_QUERY } from "../lib/sheets.ts";
 import { useAnnouncedText } from "../lib/useAnnouncedText.ts";
 import { useWorktreeBranches } from "../lib/useWorktreeBranches.ts";
 import { useSessionHistoryOffered } from "../lib/useSessionHistoryOffered.ts";
+import { useRepositoryWorkspaces } from "../lib/repositoryWorkspaces.ts";
 import { watchTouchReorder } from "../lib/touchReorder.ts";
 import { isBackgroundWorkspace, placeBlock, splitBackgroundGroups, workspaceMoves, worktreeGroups as groupWorktrees } from "../lib/workspaceOrder.ts";
 import { worktreeLabel } from "../lib/worktreeName.ts";
@@ -114,7 +114,9 @@ export function StatusBadge({ status, compact = false, detail = null }: { status
   const { settings } = useSettings();
   const value = knownStatus(status);
   const label = t(STATUS_WORD[value]);
-  const stateWords = value === "waiting" ? t("Agent waiting on background work") : t("Agent {status}", { status: label });
+  // the description names the state in words a reader knows (G-020): "waiting" is said whole, and a state nobody
+  // reported (an agent that said nothing yet, a PC that is away) is said to be unknown, not read as a dash
+  const stateWords = value === "waiting" ? t("Agent waiting on background work") : value === "unknown" ? t("Agent state unknown") : t("Agent {status}", { status: label });
   const description = detail ? `${stateWords} — ${detail}` : stateWords;
   // classic (the default): a compact cell draws only the states that ask for a look: a red question
   // mark while the agent waits for an answer, a green dot once it has finished and was not looked
@@ -189,6 +191,38 @@ export function ContextBadge({ context }: { context?: PaneContext | undefined })
   );
 }
 
+/**
+ * A worktree workspace's name without what herdr adds to it: the `worktree-` prefix and the four-digit hash after
+ * it, only when both are there (`worktree-brave-valley-7fc6`); any other name is kept whole.
+ */
+export function compactWorktreeName(label: string): string {
+  const generated = /^worktree-(.+)-[0-9a-f]{4}$/.exec(label);
+  return generated ? generated[1]! : label;
+}
+
+/**
+ * Whether a branch only repeats a workspace's name: the same text, or for a worktree herdr named
+ * (`worktree-brave-valley-7fc6`) its branch `worktree/brave-valley-7fc6` or `brave-valley`, herdr's prefix and hash aside.
+ */
+export function sameName(branch: string, name: string): boolean {
+  if (branch === name) return true;
+  const short = compactWorktreeName(name);
+  return short !== name && branch.replace(/^worktree[-/]/, "").replace(/-[0-9a-f]{4}$/, "") === short;
+}
+
+/** the kind-of-change prefixes a branch drops on a compact row; any other prefix (`team-a/`) says something and stays */
+const BRANCH_KIND = /^(?:feat|feature|fix|bugfix|hotfix|chore|docs|refactor|perf|test|tests|ci|build|style|release)\//;
+
+/** The branch a compact row says at its end: none for the default branch, and without a `feat/`-style prefix. */
+export function compactBranch(branch: string | null): string | null {
+  if (branch === null || branch === "main" || branch === "master") return null;
+  return branch.replace(BRANCH_KIND, "") || branch;
+}
+
+function cwdBasename(cwd: string | null | undefined): string {
+  return cwd ? folderName(cwd) : "unknown directory";
+}
+
 interface InlineError {
   workspaceId?: string;
   message: string;
@@ -252,6 +286,7 @@ export interface SidebarProps {
 export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = false }: SidebarProps) {
   const t = useT();
   const { settings } = useSettings();
+  const twoLine = settings.sidebarRows === "two";
   // Settings > Appearance > Agents under workspaces: each workspace's agents hang under its row (#773)
   const agentTree = settings.sidebarAgentTree;
   const machineId = useMachineId();
@@ -266,38 +301,9 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   // the roster's wait is a live region in the list from its first render, clipped while empty (never
   // display: none); its words land a frame after it (lib/useAnnouncedText.ts)
   const loadingWords = useAnnouncedText(snapshot ? null : t("Loading workspaces…"));
-  // herdr marks only a workspace it opened as a worktree. One made on a repository's folder has no
-  // `worktree`, and it is where the first worktree starts: each is asked once whether git answers
-  // for it. A refusal (4xx) is an answer and is kept; a failure to ask is not, so that workspace
-  // keeps what was known of it and is asked again when the set changes or the PC comes back.
-  const unmarked = (snapshot?.workspaces ?? []).filter((workspace) => !workspace.worktree).map((workspace) => workspace.workspace_id).join("\n");
-  const [repositoryWorkspaces, setRepositoryWorkspaces] = useState<ReadonlySet<string>>(() => new Set());
-  const repositoryAnswers = useRef(new Map<string, boolean>());
-  useEffect(() => {
-    const known = repositoryAnswers.current;
-    // a watching device is refused the listing (#2250), and a PC the Herdr app lays out offers no worktree: nothing to ask
-    if (!online || unmarked === "" || watching || !worktreesOffered) { known.clear(); setRepositoryWorkspaces(new Set()); return; }
-    const ids = unmarked.split("\n");
-    for (const id of [...known.keys()]) if (!ids.includes(id)) known.delete(id);
-    let live = true;
-    const publish = () => { if (live) setRepositoryWorkspaces(new Set(ids.filter((id) => known.get(id) === true))); };
-    publish();
-    void Promise.all(ids.filter((id) => !known.has(id)).map((id) => listWorktrees(id).then(
-      () => { if (live) known.set(id, true); },
-      (error: unknown) => { if (live && error instanceof ApiError && error.status < 500) known.set(id, false); },
-    ))).then(publish);
-    return () => { live = false; };
-  }, [listWorktrees, unmarked, online, watching, worktreesOffered]);
-  // a repository's folder that stops being a checkout is refused on a later poll: that refusal is an answer too (#2726)
-  const notCheckout = useCallback((id: string) => {
-    repositoryAnswers.current.set(id, false);
-    setRepositoryWorkspaces((current) => {
-      if (!current.has(id)) return current;
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
-  }, []);
+  // the unmarked workspaces git answers for: a repository's folder, where the first worktree starts
+  // (lib/repositoryWorkspaces.ts, shared with the palette)
+  const { repositoryWorkspaces, notCheckout } = useRepositoryWorkspaces({ machineId, snapshot, online, watching, offered: worktreesOffered, listWorktrees });
   const { branches, rememberOpened } = useWorktreeBranches(snapshot, online, true, repositoryWorkspaces, watching, notCheckout);
   // the sidebar's filter (lib/sidebarFilter.ts): which rows stay, which are context; it learns the branch
   // each row says from here, since the inventory is this roster's. What it last said outlives a fold of the
@@ -357,6 +363,8 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   const [touchDrag, setTouchDrag] = useState<{ source: string; over: string | null } | null>(null);
   // the browser's drag and drop is a mouse's: on a touch screen a long press lifts the row instead
   const coarsePointer = useMediaQuery("(pointer: coarse)");
+  // a row's ⋯ opens a sheet at a phone's width and a popover above it (RowMenu): the button says which (G-037)
+  const sheet = useMediaQuery(SHEET_QUERY);
   const [inlineError, setInlineError] = useState<InlineError | null>(null);
   const rosterId = useId();
   const workspaceRoot = useRef<HTMLDivElement>(null);
@@ -496,6 +504,18 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
       ?? panes[0]!;
   };
 
+  /**
+   * What leads a row: the coding agent in the pane the row opens, so the mark never promises an
+   * agent a click would not reach. A shell is a terminal, a linked worktree without an agent its branch.
+   */
+  const rowMark = (pane: PaneInfo, linked: boolean) => {
+    const mark = paneMark(agentByPane.get(pane.pane_id));
+    return (
+      <span className="sidebar-mark" aria-hidden="true">
+        {mark !== null ? <AgentMark agent={mark} size={18} /> : linked ? <GitBranch /> : <Terminal />}
+      </span>
+    );
+  };
   /** the mark in words, for a reader who cannot see it */
   const markName = (pane: PaneInfo): string => {
     const entry = agentByPane.get(pane.pane_id);
@@ -835,10 +855,14 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     // the row says the workspace's name, the one its owner gave it or herdr made from the branch; the
     // branch itself is the tooltip's and the menu's, where the name does not already say it
     const rowTitle = workspace.label;
-    // the branch follows the name on the same line, for a worktree and a top-level checkout alike, where
-    // the name does not already say it; a pinned top-level row stays compact, its branch in the tooltip and menu
-    const secondaryBranch = branchTitle && (linked || (!nested && !pinnedIds.includes(workspace.workspace_id)))
-      && workspace.label !== branchTitle && workspace.label !== worktreeLabel(branchTitle) ? branchTitle : null;
+    const secondaryBranch = linked && branchTitle && workspace.label !== branchTitle && workspace.label !== worktreeLabel(branchTitle) ? branchTitle : null;
+    // the compact rows (the default), as herdr-app's Spaces list: one line, the name without herdr's worktree prefix and
+    // hash, and a branch other than the default one dim at its end, unless it only repeats the name
+    const compact = !twoLine;
+    // only a worktree herdr opened has a name it made: a name the user chose is drawn whole
+    const shownTitle = compact && linked ? compactWorktreeName(rowTitle) : rowTitle;
+    const tailBranch = compact ? compactBranch(branchTitle) : null;
+    const branchTail = tailBranch !== null && branchTitle !== null && !sameName(branchTitle, rowTitle) && tailBranch !== worktreeLabel(shownTitle) ? tailBranch : null;
     // the tooltip and the menu keep the exact branch (its slashes) even where the row does not repeat it
     const branchNote = branchTitle && branchTitle !== workspace.label ? branchTitle : null;
     const paths = [...new Set([workspace.worktree?.checkout_path, pane.cwd].filter((path): path is string => Boolean(path)))];
@@ -849,6 +873,8 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
     // a folded group's parent stands for its worktrees too, as herdr's collapsed parent does:
     // a checkout that waits or has finished must not hide behind the fold
     const statusPanes = collapsed ? [...panes, ...children.flatMap((child) => roster.filter((candidate) => candidate.workspace_id === child.workspace_id))] : panes;
+    // on two lines the row says what its pane is doing, and the workspace it has named until now sits under that
+    const lines = twoLine ? taskRowLines({ paneTitle: displayPaneTitle(pane), labelled: Boolean(pane.label?.trim()), folder: cwdBasename(pane.cwd), workspace: rowTitle, alias: secondaryBranch }) : null;
     // a folded group still shows the checkout that is open; the count is of the ones put away
     const foldedCount = collapsed ? children.filter((child) => !roster.some((candidate) => candidate.workspace_id === child.workspace_id && candidate.pane_id === selectedPaneId)).length : 0;
     const editingWorkspace = editingWorkspaceId === workspace.workspace_id;
@@ -907,6 +933,8 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
             actions.selectPane(pane.pane_id);
           }}
         >
+          {/* a compact top-level row keeps its face alone; a worktree, which has none, keeps its mark */}
+          {(!compact || nested) && rowMark(pane, workspace.worktree?.is_linked_worktree === true)}
           {editingWorkspace ? <input
             className="input workspace-rename-input"
             aria-label={t("Workspace name")}
@@ -922,9 +950,17 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
               if (event.key === "Enter") saveWorkspaceRename(workspace.workspace_id);
               if (event.key === "Escape") setEditingWorkspaceId(null);
             }}
-          /> : <span className="workspace-copy">
-            <span className="workspace-name">{rowTitle}</span>
-            {secondaryBranch && <span className="worktree-workspace-label">{secondaryBranch}</span>}
+          /> : lines ? <span className="workspace-copy is-two-line">
+            <span className="workspace-line">
+              <span className="workspace-name">{lines.title}</span>
+              {foldedCount > 0 && <span className="workspace-fold-count" aria-hidden="true">+{foldedCount}</span>}
+              {filterNote}
+            </span>
+            {lines.place && <span className="workspace-place">{lines.place}</span>}
+          </span> : <span className="workspace-copy">
+            <span className="workspace-name">{shownTitle}</span>
+            {!compact && secondaryBranch && <span className="worktree-workspace-label">{secondaryBranch}</span>}
+            {branchTail && <span className="workspace-branch-tail">{branchTail}</span>}
             {foldedCount > 0 && <span className="workspace-fold-count" aria-hidden="true">+{foldedCount}</span>}
             {filterNote}
           </span>}
@@ -934,7 +970,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
           </span>
         </div>
         <div className="workspace-actions">
-          <button type="button" className="sidebar-row-action row-menu-toggle" aria-label={t("More for {title}", { title: rowTitle })} aria-haspopup="menu" aria-expanded={menuOpen} onClick={(event) => toggleMenu(event.currentTarget)}>
+          <button type="button" className="sidebar-row-action row-menu-toggle" aria-label={t("More for {title}", { title: rowTitle })} aria-haspopup={sheet ? "dialog" : "menu"} aria-expanded={menuOpen} onClick={(event) => toggleMenu(event.currentTarget)}>
             <Ellipsis aria-hidden="true" />
           </button>
         </div>
@@ -967,7 +1003,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   };
 
   return (
-    <div className="machine-workspaces" ref={workspaceRoot}>
+    <div className={`machine-workspaces${twoLine ? " is-two-line" : ""}`} ref={workspaceRoot}>
       <nav className="sidebar-list" aria-label={t("Herdr workspaces")}>
         <>
           <p className={loadingWords === null ? "visually-hidden" : "tree-state"} role="status">{loadingWords}</p>
@@ -994,7 +1030,9 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
           )}
         </>
       </nav>
-      {menu && <RowMenu anchor={menu.anchor} point={menu.point} restoreFocusTo={menu.previousFocus} title={menu.title} subtitle={menu.place} items={menuItems(menu)} onClose={closeMenu} />}
+      {/* the menu names the workspace it is for above its items (G-022): the popover covers the row */}
+      {menu && <RowMenu anchor={menu.anchor} point={menu.point} restoreFocusTo={menu.previousFocus} title={menu.title} subtitle={menu.place} items={menuItems(menu)} onClose={closeMenu}
+        header={<span className="row-menu-target"><span className="row-menu-target-name" title={menu.title}>{menu.title}</span>{menu.place && <span className={`row-menu-target-place${menu.place === menu.workspace.label ? "" : " is-literal"}`} title={menu.place}>{menu.place}</span>}</span>} />}
       {confirm && <ConfirmDialog title={confirm.title} body={confirm.body} confirmLabel={confirm.action ?? t("Close")} onConfirm={confirm.run} escalation={confirm.escalation} onClose={() => setConfirm(null)} />}
       {worktreeDialog && <WorktreeDialog mode={worktreeDialog.mode} workspace={worktreeDialog.workspace} onClose={() => setWorktreeDialog(null)} onOpenPane={(paneId) => { setWorktreeDialog(null); actions.selectPane(paneId); }} onOpened={(opened) => showOpenedWorktree(opened, worktreeDialog.workspace)} />}
       {pullRequestsFor && <PullRequestsDialog workspace={pullRequestsFor} onClose={() => setPullRequestsFor(null)} onOpened={(opened) => showOpenedWorktree(opened, pullRequestsFor)} />}
