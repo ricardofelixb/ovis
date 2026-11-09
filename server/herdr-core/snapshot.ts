@@ -247,7 +247,11 @@ function besides(root: LayoutNode | null, count: number, address: string): Layou
  * its first terminal's folder, or its number. A space or tab id seen before, or empty, is skipped; one
  * with no live terminal stays a place for a labeled terminal and shows only once it holds one.
  */
-function groups(terminals: readonly HcTerminal[], layout: unknown): Group[] {
+function groups(terminals: readonly HcTerminal[], layout: unknown, host: CoreHost = coreHost(false)): Group[] {
+  // Generated names are not user-assigned tab labels: the Agents list must let pi's
+  // resolved session title win. Explicit Ovis tab labels still name the row.
+  const unplacedTabLabel = (terminal: HcTerminal): string => terminal.labels?.[TAB_NAME_LABEL]
+    || (agentOf(terminal, host) === "pi" ? "" : terminal.name || terminal.address);
   // no Herdr app arranges this core: the tabs labels make are Ovis's to lay out
   const own = layout === null || layout === undefined;
   const live = new Map(terminals.filter((terminal) => terminal.state === "live" && !onOtherMachine(terminal.address)).map((terminal) => [terminal.address, terminal]));
@@ -343,7 +347,7 @@ function groups(terminals: readonly HcTerminal[], layout: unknown): Group[] {
       let tabId = `${home.group.id}:${terminal.address}`;
       for (let n = 2; ids.has(tabId); n++) tabId = `${home.group.id}:${terminal.address}:${n}`;
       ids.add(tabId);
-      const tab: ShownTab = { id: tabId, label: terminal.labels?.[TAB_NAME_LABEL] || terminal.name || terminal.address, terminals: [terminal], root: null, kept: false };
+      const tab: ShownTab = { id: tabId, label: unplacedTabLabel(terminal), terminals: [terminal], root: null, kept: false };
       let at = home.group.tabs.indexOf(home.tab) + 1;
       while (at < home.group.tabs.length && below(home.group.tabs[at]!, home.tab)) at++;
       home.group.tabs.splice(at, 0, tab);
@@ -376,7 +380,7 @@ function groups(terminals: readonly HcTerminal[], layout: unknown): Group[] {
     shown.push({
       id: OTHER_WORKSPACE_ID,
       label: "Other terminals",
-      tabs: rest.map((terminal) => ({ id: `${OTHER_WORKSPACE_ID}:${terminal.address}`, label: terminal.labels?.[TAB_NAME_LABEL] || terminal.name || terminal.address, terminals: [terminal], root: null, kept: false })),
+      tabs: rest.map((terminal) => ({ id: `${OTHER_WORKSPACE_ID}:${terminal.address}`, label: unplacedTabLabel(terminal), terminals: [terminal], root: null, kept: false })),
     });
   }
   return shown;
@@ -511,7 +515,7 @@ export function buildSnapshot(terminals: readonly HcTerminal[], layout: unknown,
   const panes: PaneInfo[] = [];
   const layouts: PaneLayoutSnapshot[] = [];
   const own = layout === null || layout === undefined;
-  const grouped = groups(terminals, layout);
+  const grouped = groups(terminals, layout, host);
   const { groups: placed, zoomed } = own ? arranged(grouped, ovisDoc) : { groups: grouped, zoomed: new Map<string, string>() };
   const shown = new Set(placed.flatMap((group) => group.tabs.flatMap((tab) => tab.terminals.map((terminal) => terminal.address))));
   for (const [index, group] of placed.entries()) {
