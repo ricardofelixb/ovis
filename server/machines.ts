@@ -38,6 +38,7 @@ import { readMoveOffer } from "./remote-move.ts";
 import type { RelaySocket } from "../shared/relay-channel.ts";
 import { newRouteProbes, openRelayPcTunnel, RelayPcKey, RelayPcRefused, relayPcLabel, removeRelayPcKey, type RelayPcTunnel, type RouteProbes } from "./relay-pc.ts";
 import type { HcMachine, MachineBridge } from "./herdr-core/machine-bridge.ts";
+import { hcTwin } from "./hc-machine-twin.ts";
 
 /** a PC keeps the six-digit code in its offer for 10 minutes at most (server/devices.ts) */
 const RELAY_FOUND_MS = 10 * 60_000;
@@ -381,6 +382,10 @@ export class MachineManager {
   private discoveryStarted = false;
   private hcTimer?: ReturnType<typeof setTimeout>;
   private hcStart?: (machine: Pick<HcMachine, "id" | "name">) => Promise<MachineBridge>;
+  /** the core's machines as last read, and which of them are left out as an SSH or relay PC's twin (hc-machine-twin.ts) */
+  private hcSeen: readonly HcMachine[] = [];
+  private hcTwins = "";
+  private hcSyncing = false;
   private settingsPath: string;
   private tailnet?: TailnetPresence;
   private preferences: MachineSettings = { ...DEFAULT_SETTINGS };
@@ -593,7 +598,8 @@ export class MachineManager {
   /**
    * On herdr-core, the core's other machines (`hc machine add`) as PCs, read every few seconds: each one's
    * server starts as it connects (`start`, herdr-core/machine-bridge.ts) and reaches its terminals through
-   * this PC's core. A broken read keeps the PCs as they were.
+   * this PC's core. A broken read keeps the PCs as they were. A machine that is the same computer as an SSH or
+   * relay PC here is not shown, nor its server started: that PC has the files and chat (hc-machine-twin.ts).
    */
   watchHcMachines(read: () => Promise<HcMachine[]>, start: (machine: Pick<HcMachine, "id" | "name">) => Promise<MachineBridge>, intervalMs = 5000): void {
     if (this.hcStart || this.stopped) return;
@@ -612,11 +618,24 @@ export class MachineManager {
     };
     void poll();
   }
+  private twinsOf(list: readonly HcMachine[]): string {
+    const pcs = [...this.machines.values()].map((runtime) => runtime.machine);
+    return list.filter((hc) => hcTwin(hc, pcs) !== null).map((hc) => hc.id).sort().join();
+  }
   syncHcMachines(list: readonly HcMachine[]): void {
     if (this.stopped) return;
+    this.hcSyncing = true;
+    try { this.syncHc(list); } finally { this.hcSyncing = false; }
+  }
+  private syncHc(list: readonly HcMachine[]): void {
+    this.hcSeen = list;
+    this.hcTwins = this.twinsOf(list);
+    const twins = new Set(this.hcTwins.split(",").filter(Boolean));
     const wanted = new Set<string>();
     let changed = false;
     for (const hc of list) {
+      // the same computer as an SSH or relay PC: that one is shown; this one comes back if it is removed
+      if (twins.has(hc.id)) continue;
       const id = `hc-${hc.id}`;
       wanted.add(id);
       let runtime = this.machines.get(id);
@@ -770,6 +789,8 @@ export class MachineManager {
   }
   private emit(event?: MachineEvent): void {
     if (this.stopped) return;
+    // a PC added, renamed or removed can make a core machine its twin, or end that: shown again at once, not at the next read
+    if (!event && !this.hcSyncing && this.hcStart && this.twinsOf(this.hcSeen) !== this.hcTwins) { this.syncHcMachines(this.hcSeen); return; }
     for (const listener of this.listeners) listener(event ?? { type: "machines", machines: this.list() });
   }
   localMessage(message: ServerMessage): void {

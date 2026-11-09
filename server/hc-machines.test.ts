@@ -31,7 +31,7 @@ async function fixture() {
   return { manager, events, dir };
 }
 
-const lab: HcMachine = { id: "a32c7763ba582b75", name: "lab", connected: true, why: null };
+const lab: HcMachine = { id: "a32c7763ba582b75", name: "lab", target: "ricardo@lab.tail1e211e.ts.net", host: "lab", connected: true, why: null };
 
 describe("herdr-core's machines as PCs (#2497)", () => {
   it("shows each machine of the core as a PC of its own, which starts its server and is never saved here", async () => {
@@ -61,6 +61,39 @@ describe("herdr-core's machines as PCs (#2497)", () => {
     manager.syncHcMachines([]);
     expect(manager.list()).toHaveLength(1);
     expect(events).toEqual(["start lab", "stop lab", "start lab", "stop lab", "start lab2", "stop lab2"]);
+  });
+});
+
+describe("a core machine that is also an SSH or relay PC is shown once", () => {
+  /** an SSH PC as the roster holds it, without the connection a real add makes */
+  function addSsh(manager: MachineManager, id: string, name: string, destination: string) {
+    const internal = manager as unknown as { machines: Map<string, unknown>; runtime(machine: unknown): unknown };
+    internal.machines.set(id, internal.runtime({ id, name, kind: "ssh", target: { destination }, enabled: false, state: "disconnected", error: null, snapshot: null }));
+  }
+  const shown = (manager: MachineManager) => manager.list().slice(1).map((machine) => machine.id);
+
+  it("keeps the SSH PC, starts no server for its twin, and shows the twin again once the SSH PC is gone", async () => {
+    const { manager, events } = await fixture();
+    addSsh(manager, "ssh-1", "Lab Omarchy", "ricardo@lab");
+    manager.syncHcMachines([lab, { ...lab, id: "other", name: "other", target: "ricardo@elsewhere", host: "elsewhere" }]);
+    await settled();
+    expect(shown(manager)).toEqual(["ssh-1", "hc-other"]);
+    expect(events).toEqual(["start other"]);
+    manager.remove("ssh-1");
+    await settled();
+    expect(shown(manager).sort()).toEqual(["hc-a32c7763ba582b75", "hc-other"]);
+    expect(events).toContain("start lab");
+  });
+
+  it("drops a twin already shown when the SSH PC is added afterwards, at once", async () => {
+    const { manager, events } = await fixture();
+    manager.syncHcMachines([lab]);
+    await settled();
+    expect(shown(manager)).toEqual(["hc-a32c7763ba582b75"]);
+    addSsh(manager, "ssh-1", "omarchy", "ricardo@lab.tail1e211e.ts.net");
+    (manager as unknown as { emit(): void }).emit();
+    expect(shown(manager)).toEqual(["ssh-1"]);
+    expect(events).toEqual(["start lab", "stop lab"]);
   });
 });
 
