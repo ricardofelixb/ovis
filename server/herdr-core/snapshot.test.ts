@@ -12,6 +12,17 @@ function block(address: string) {
 }
 
 describe("buildSnapshot", () => {
+  it("marks only terminals labeled ovis.view=work as work", () => {
+    const snapshot = buildSnapshot([
+      terminal("work", { labels: { "ovis.view": "work" } }),
+      terminal("coding"),
+      terminal("unknown", { labels: { "ovis.view": "Work" } }),
+      terminal("empty", { labels: { "ovis.view": "" } }),
+    ], null, "0.1.17");
+    expect(snapshot.panes.map((pane) => [pane.pane_id, (pane as HerdrPane).view])).toEqual([
+      ["work", "work"], ["coding", undefined], ["unknown", undefined], ["empty", undefined],
+    ]);
+  });
   it("reads the app's spaces as workspaces, its tabs as tabs and each terminal block as a pane, in the app's order", () => {
     const layout = {
       spaces: [

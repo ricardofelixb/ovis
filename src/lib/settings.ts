@@ -22,6 +22,8 @@ import { themeFor } from "./themeFor.ts";
 import { DEFAULT_KEY_BAR_ITEMS, migrateKeyBarItems, sanitizeKeyBarItems, type KeyBarItem } from "./keyBar.ts";
 import { applyThemeEntry, DARK_QUERY, readStoredAppearance, resolveTheme, sanitizeAppearance, SETTINGS_STORAGE_KEY, THEMES_STORAGE_KEY, type ResolvedTheme, type ThemeSetting } from "./themeBoot.ts";
 
+import type { SidebarView } from "./sidebarView.ts";
+
 export { resolveTheme };
 export type { ResolvedTheme, ThemeSetting };
 export type Density = "compact" | "comfortable";
@@ -96,6 +98,8 @@ export interface Settings {
   /** the Filter field above the sidebar's lists (components/MachineSidebar.tsx), off until chosen; off, the command palette's
    *  Filter workspaces and agents still opens it for the time it holds words or the focus */
   sidebarFilter: boolean;
+  /** The sidebar's Coding | Work choice, kept on this device, never shared with the server. */
+  sidebarView: SidebarView;
   /** the composer's context ring on each agent row of the sidebar (components/Sidebar.tsx ContextBadge); off until chosen */
   sidebarContext: boolean;
   /** an agent's helpers folded under its row in the Agents list (components/AgentSidebar.tsx); off until chosen */
@@ -315,7 +319,7 @@ type TelemetrySourceSettings = Omit<Settings,
   "keyBarExtras" | "keyBarItems" | "keyBarExpanded" | "shortcutOverrides" | "herdrPrefixKeys" | "terminalFontFamily" | "chatFontFamily" | "uiFontFamily"
   | "quickReplies" | "agentLocks" | "lockedAgents" | "opencodeParentEnds" | "ompHeldFiles" | "restoreReplacedServer" | "agentNamedGroups" | "agentGroupNames" | "agentGroupOf" | "usageOrder" | "usageHidden" | "fileOpen" | "filesPanel" | "webLinks" | "reuseExternalLinkTab" | "claudeLaunchMode" | "codexLaunchMode"
   | "claudeLaunchModel" | "claudeLaunchEffort" | "codexLaunchModel" | "codexLaunchEffort"
-  | "followHerdrFocus" | "sidebarPeek" | "sidebarBackgroundWorkspaces" | "codexDrag" | "composerArtifacts" | "composerPasteSend" | "composerBtw" | "terminalMirrorWrap" | "sidebarFilter" | "sidebarContext" | "sidebarAgentTree" | "foldHelpers" | "pcLoad"
+  | "followHerdrFocus" | "sidebarPeek" | "sidebarBackgroundWorkspaces" | "codexDrag" | "composerArtifacts" | "composerPasteSend" | "composerBtw" | "terminalMirrorWrap" | "sidebarFilter" | "sidebarView" | "sidebarContext" | "sidebarAgentTree" | "foldHelpers" | "pcLoad"
   | "expandThinking" | "foldWork" | "autoTabNames" | "voiceEngine" | "agentGroups" | "agentGroupSort" | "terminalImages" | "terminalAttachButton"
   | "followOmarchy" | "contextCircle" | "speechVoice" | "liveVoice" | "openLiveWork"
   | "terminalKeyboardOnRequest" | "terminalFoldKeyBar" | "fileFontSize" | "fileFontBase" | "editTextFiles" | "reopenFileOnReturn">;
@@ -428,6 +432,7 @@ export const SETTING_SCOPE = {
   composerBtw: "device",
   // a desk with a keyboard may do without the field a phone keeps, as with the PCs it shows (lib/hiddenMachines.ts)
   sidebarFilter: "device",
+  sidebarView: "device",
   contextCircle: "shared",
   // a phone's narrow rows may do without the ring a desk shows, as with the filter
   sidebarContext: "device",
@@ -465,6 +470,7 @@ export const DEFAULT_SETTINGS: Settings = {
   density: "comfortable",
   sidebarRows: "one",
   sidebarFilter: false,
+  sidebarView: "coding",
   sidebarContext: false,
   foldHelpers: false,
   sidebarAgentTree: false,
@@ -695,6 +701,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     density: density === "compact" || density === "comfortable" ? density : DEFAULT_SETTINGS.density,
     sidebarRows: record["sidebarRows"] === "one" || record["sidebarRows"] === "two" ? record["sidebarRows"] : DEFAULT_SETTINGS.sidebarRows,
     sidebarFilter: typeof record["sidebarFilter"] === "boolean" ? record["sidebarFilter"] : DEFAULT_SETTINGS.sidebarFilter,
+    sidebarView: record["sidebarView"] === "work" ? "work" : "coding",
     sidebarContext: typeof record["sidebarContext"] === "boolean" ? record["sidebarContext"] : DEFAULT_SETTINGS.sidebarContext,
     foldHelpers: typeof record["foldHelpers"] === "boolean" ? record["foldHelpers"] : DEFAULT_SETTINGS.foldHelpers,
     sidebarAgentTree: typeof record["sidebarAgentTree"] === "boolean" ? record["sidebarAgentTree"] : DEFAULT_SETTINGS.sidebarAgentTree,
@@ -835,6 +842,17 @@ function readMirrorWrap(): boolean | null {
  *  the earlier `ovis:sidebar-filter` held the old default (on) on every device that saved any setting, which no
  *  choice can be told from, so it is not read. */
 export const SIDEBAR_FILTER_STORAGE_KEY = "ovis:sidebar-filter-shown";
+
+/** A key of its own keeps an older tab's whole-record save from erasing the view. */
+export const SIDEBAR_VIEW_STORAGE_KEY = "ovis:sidebar-view";
+
+function readSidebarView(): SidebarView {
+  try {
+    return JSON.parse(window.localStorage.getItem(SIDEBAR_VIEW_STORAGE_KEY) ?? "null") === "work" ? "work" : "coding";
+  } catch {
+    return "coding";
+  }
+}
 
 function readSidebarFilter(): boolean {
   try {
@@ -1052,6 +1070,7 @@ export function loadSettings(): Settings {
     uiFontFamily: device(UI_FONT_STORAGE_KEY, merged.uiFontFamily, readUiFontFamily),
     terminalMirrorWrap: device(MIRROR_WRAP_STORAGE_KEY, merged.terminalMirrorWrap, readMirrorWrap),
     sidebarFilter: device(SIDEBAR_FILTER_STORAGE_KEY, merged.sidebarFilter, readSidebarFilter),
+    sidebarView: readSidebarView(),
     pcLoad: readPcLoad(),
     voiceEngine: device(VOICE_ENGINE_STORAGE_KEY, merged.voiceEngine, readVoiceEngine),
     agentGroups: device(AGENT_GROUPS_STORAGE_KEY, merged.agentGroups, () => readAgentGroups().agentGroups),
@@ -1081,11 +1100,12 @@ export function saveSettings(settings: Settings): boolean {
       darkTheme: mirrored.darkTheme, lightTheme: mirrored.lightTheme,
       mirror: { palette: mirrored.palette, paletteDark: mirrored.paletteDark, paletteLight: mirrored.paletteLight },
     }));
-    const { uiFontFamily, terminalMirrorWrap, sidebarFilter, sidebarContext, sidebarAgentTree, foldHelpers, pcLoad, voiceEngine, agentGroups, agentGroupSort, fileFontSize, fileFontBase, composerArtifacts, composerPasteSend, composerBtw, expandThinking, foldWork, reuseExternalLinkTab, filesPanel, terminalImages, terminalAttachButton, terminalKeyboardOnRequest, terminalFoldKeyBar, ...main } = mirrored;
+    const { uiFontFamily, terminalMirrorWrap, sidebarFilter, sidebarView, sidebarContext, sidebarAgentTree, foldHelpers, pcLoad, voiceEngine, agentGroups, agentGroupSort, fileFontSize, fileFontBase, composerArtifacts, composerPasteSend, composerBtw, expandThinking, foldWork, reuseExternalLinkTab, filesPanel, terminalImages, terminalAttachButton, terminalKeyboardOnRequest, terminalFoldKeyBar, ...main } = mirrored;
     window.localStorage.setItem(VOICE_ENGINE_STORAGE_KEY, JSON.stringify(voiceEngine));
     window.localStorage.setItem(UI_FONT_STORAGE_KEY, JSON.stringify(uiFontFamily));
     window.localStorage.setItem(MIRROR_WRAP_STORAGE_KEY, JSON.stringify(terminalMirrorWrap));
     window.localStorage.setItem(SIDEBAR_FILTER_STORAGE_KEY, JSON.stringify(sidebarFilter));
+    window.localStorage.setItem(SIDEBAR_VIEW_STORAGE_KEY, JSON.stringify(sidebarView));
     window.localStorage.setItem(PC_LOAD_STORAGE_KEY, JSON.stringify(pcLoad));
     window.localStorage.setItem(AGENT_GROUPS_STORAGE_KEY, JSON.stringify(agentGroups));
     window.localStorage.setItem(AGENT_GROUP_SORT_STORAGE_KEY, JSON.stringify(agentGroupSort));
@@ -1196,11 +1216,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onStorage = (event: StorageEvent): void => {
-      if (event.storageArea !== window.localStorage || (event.key !== SETTINGS_STORAGE_KEY && event.key !== ENTER_SENDS_STORAGE_KEY && event.key !== VOICE_ENGINE_STORAGE_KEY && event.key !== null)) return;
+      if (event.storageArea !== window.localStorage || (event.key !== SETTINGS_STORAGE_KEY && event.key !== ENTER_SENDS_STORAGE_KEY && event.key !== VOICE_ENGINE_STORAGE_KEY && event.key !== SIDEBAR_VIEW_STORAGE_KEY && event.key !== null)) return;
       // the recognition another tab chose: audio must not keep going where this tab last sent it
-      const { shortcutOverrides, enterSends, voiceEngine } = loadSettings();
-      stored.current = { ...stored.current, shortcutOverrides, enterSends, voiceEngine };
-      setSettings((current) => ({ ...current, shortcutOverrides, enterSends, voiceEngine }));
+      const { shortcutOverrides, enterSends, voiceEngine, sidebarView } = loadSettings();
+      stored.current = { ...stored.current, shortcutOverrides, enterSends, voiceEngine, sidebarView };
+      setSettings((current) => ({ ...current, shortcutOverrides, enterSends, voiceEngine, sidebarView }));
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);

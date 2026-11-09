@@ -431,6 +431,7 @@ function paneOf(terminal: HcTerminal, workspaceId: string, tabId: string, shown:
     title,
     terminal_title: terminal.title ?? null,
     label: terminal.labels?.[PANE_NAME_LABEL] || (agent === "pi" ? null : terminal.name) || null,
+    ...(terminal.labels?.["ovis.view"] === "work" ? { view: "work" as const } : {}),
     focused: false,
     revision: terminal.turn ?? 0,
   };

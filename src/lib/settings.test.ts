@@ -183,6 +183,19 @@ describe("saved theme migration", () => {
     expect(loadSettings().sidebarFilter).toBe(false);
   });
 
+  it("defaults to Coding and keeps Work on this device despite an old tab's save", () => {
+    expect(loadSettings().sidebarView).toBe("coding");
+    saveSettings(sanitizeSettings({ sidebarView: "work" }));
+    expect(JSON.parse(records.get(main) ?? "{}")).not.toHaveProperty("sidebarView");
+    oldSaveSettings({ ...readOld(), terminalFontSize: 18 });
+    expect(loadSettings().sidebarView).toBe("work");
+    expect(sanitizeSettings({ sidebarView: "other" }).sidebarView).toBe("coding");
+    records.set("ovis:sidebar-view", "not json");
+    expect(loadSettings().sidebarView).toBe("coding");
+    saveSettings({ ...loadSettings(), sidebarView: "coding" });
+    expect(loadSettings().sidebarView).toBe("coding");
+  });
+
   it("keeps the PC load choice in its own key, out of an old tab's whole-record save, and unchosen until chosen", () => {
     expect(loadSettings().pcLoad).toBeNull();
     saveSettings(sanitizeSettings({ pcLoad: false }));

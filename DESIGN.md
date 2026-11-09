@@ -888,6 +888,13 @@ Alert rows of the table above from the `--droplet-*` roles in `src/styles.css`.
   chip while the bridge is not live (herdr version in its tooltip), the offline pill, sign out and
   the More menu (`⋯`). Theme lives in Settings and the palette; the herdr version is also read
   in Settings.
+- Coding | Work replaces the sidebar wordmark from `769px`; below that it sits at the top of
+  the PC list. It uses the existing `.segmented` track, two native buttons with `aria-pressed`,
+  and the normal keyboard focus ring. Like Warp's saved terminal contexts it separates kinds of
+  sessions, but uses a two-way filter rather than launching a new layout: terminals stay attached
+  and alerts keep arriving across views. Coding is the default, Work is opt-in via the hc label
+  `ovis.view=work`, and the choice stays on this device. Work leaves out PCs without work
+  terminals, as hidden PCs leave no empty header; the full roster still owns pins and attention.
 - From `769px` the header is two zones. Over the sidebar, `.header-side` is the sidebar's own top
   row (toggle at its start, palette at its end) on `--bg-panel`, as wide as `--sidebar-w`, and the
   sidebar's seam runs to the top of the window. Over the pane, the header takes the pane's

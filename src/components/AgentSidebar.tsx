@@ -15,6 +15,7 @@ import { currentPaneMutes, paneMuteKey, prunePaneMutes, setPaneMutes, subscribeP
 import { lockedPinKeys, locksAfterPinToggle, toggleAgentLock } from "../lib/paneLocks.ts";
 import { agentContext, agentTabName, paneMark, givenTabName } from "../lib/sidebarAgents.ts";
 import { useSettings } from "../lib/settings.ts";
+import { inSidebarView } from "../lib/sidebarView.ts";
 import { useSidebarActivity } from "../lib/sidebarActivity.tsx";
 import { machineFilter } from "../lib/sidebarFilter.ts";
 import { useSidebarFilter } from "../lib/sidebarFilterContext.ts";
@@ -248,10 +249,10 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
   // order and cards; the pins and their pruning go on reading every row
   const { filter } = useSidebarFilter();
   const split = useMemo(() => {
-    if (!filter.active) return roster;
-    const kept = ({ machine, entry }: AgentRow): boolean => machineFilter(filter, machine.id)?.panes.has(entry.pane.pane_id) === true;
+    const kept = ({ machine, entry }: AgentRow): boolean => inSidebarView(entry.pane, settings.sidebarView)
+      && (!filter.active || machineFilter(filter, machine.id)?.panes.has(entry.pane.pane_id) === true);
     return { pinned: roster.pinned.filter(kept), rest: roster.rest.filter(kept) };
-  }, [roster, filter]);
+  }, [roster, filter, settings.sidebarView]);
   const rows = useMemo(() => [...split.pinned, ...split.rest], [split]);
   // background agents (a pane tagged role=background, and its helpers) stand apart, after the rest (lib/agentRoster.ts)
   const parts = useMemo(() => splitBackgroundRows(split.rest, ({ machine, entry }) => machine.state === "connected" ? activity.status(machine.id, entry.pane) : undefined, allRows), [split, activity, allRows]);

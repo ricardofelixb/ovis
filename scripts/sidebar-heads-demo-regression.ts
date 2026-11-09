@@ -85,8 +85,8 @@ const heads = (page: Page) => page.evaluate(() => {
   const number = (count: Element | null) => shown(count) ? (count!.querySelector('[aria-hidden="true"]') ?? count)!.textContent!.trim() : null;
   const pcs = document.querySelector(".pcs-sidebar")!, agents = document.querySelector(".agents-sidebar")!;
   return {
-    // the PCs list has no head: nothing above its PCs, so it starts right under the logo
-    pcsHead: pcs.querySelectorAll(":scope > :not(.machine-list)").length,
+    // no PCs heading or count; a phone's view switch is a control, not another section head
+    pcsHead: pcs.querySelectorAll(":scope > :not(.machine-list, .sidebar-view-mobile)").length,
     agentsFolded: agents.classList.contains("is-collapsed"),
     agentsCaret: shown(agents.querySelector(".agent-section-toggle .agent-section-caret")),
     agentsCount: number(agents.querySelector(".agent-section-toggle .agent-section-count")),
