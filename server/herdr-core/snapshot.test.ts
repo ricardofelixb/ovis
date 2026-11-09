@@ -12,6 +12,27 @@ function block(address: string) {
 }
 
 describe("buildSnapshot", () => {
+  it("leaves out a terminal labeled ovis.view=work, placed by the app or not, with its agent and counts", () => {
+    const layout = { spaces: [{ id: "s1", name: "api", tabs: [{ id: "s1t1", name: "", root: { type: "row", id: "r", children: [block("coding"), block("assistant")] } }] }] };
+    const terminals = [
+      terminal("coding", { status: { app: "claude-code", state: "blocked" } }),
+      terminal("assistant", { status: { app: "claude-code", state: "blocked" }, labels: { "ovis.view": "work" } }),
+      terminal("loose", { labels: { "ovis.view": "work" } }),
+      // only the exact value hides one
+      terminal("capital", { labels: { "ovis.view": "Work" } }),
+      terminal("empty", { labels: { "ovis.view": "" } }),
+    ];
+    for (const snapshot of [buildSnapshot(terminals, layout, "0.1.17"), buildSnapshot(terminals, null, "0.1.17")]) {
+      const shown = snapshot.panes.map((pane) => pane.pane_id);
+      expect(shown).not.toContain("assistant");
+      expect(shown).not.toContain("loose");
+      expect(shown).toContain("coding");
+      expect(shown).toContain("capital");
+      expect(shown).toContain("empty");
+      expect(snapshot.agents.map((agent) => agent.pane_id)).not.toContain("assistant");
+      expect(snapshot.workspaces.reduce((sum, workspace) => sum + workspace.pane_count, 0)).toBe(snapshot.panes.length);
+    }
+  });
   it("reads the app's spaces as workspaces, its tabs as tabs and each terminal block as a pane, in the app's order", () => {
     const layout = {
       spaces: [

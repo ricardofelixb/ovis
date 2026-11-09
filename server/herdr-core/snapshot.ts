@@ -36,6 +36,15 @@ export const TAB_NAME_LABEL = "ovis.tab";
 /** The name a person gave a pane, on a core whose layout Ovis keeps: the terminal's own name otherwise. */
 export const PANE_NAME_LABEL = "ovis.pane";
 /**
+ * `ovis.view=work` marks a terminal that runs in hc for something other than coding (a phone assistant
+ * the gateway keeps). Ovis shows it nowhere: not in the snapshot, nor in the events and alerts built on
+ * it. It keeps running, and `hc attach` still reaches it. Only the exact value hides one.
+ */
+export const VIEW_LABEL = "ovis.view";
+export function hiddenTerminal(labels: Readonly<Record<string, string>> | undefined): boolean {
+  return labels?.[VIEW_LABEL] === "work";
+}
+/**
  * The last turn a person looked at, shared by every Herdr client (herdr-app docs/labels.md): an
  * agent at rest whose turn is past it is done, one at or below it idle. Missing, the program's own
  * word stands, as it did before.
@@ -254,7 +263,8 @@ function groups(terminals: readonly HcTerminal[], layout: unknown, host: CoreHos
     || (agentOf(terminal, host) === "pi" ? "" : terminal.name || terminal.address);
   // no Herdr app arranges this core: the tabs labels make are Ovis's to lay out
   const own = layout === null || layout === undefined;
-  const live = new Map(terminals.filter((terminal) => terminal.state === "live" && !onOtherMachine(terminal.address)).map((terminal) => [terminal.address, terminal]));
+  // the one place a hidden terminal (hiddenTerminal) leaves: every list, count and alert reads this projection
+  const live = new Map(terminals.filter((terminal) => terminal.state === "live" && !onOtherMachine(terminal.address) && !hiddenTerminal(terminal.labels)).map((terminal) => [terminal.address, terminal]));
   const placed = new Set<string>();
   const take = (address: string): HcTerminal | null => {
     const terminal = live.get(address);
