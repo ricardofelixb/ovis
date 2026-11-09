@@ -169,7 +169,7 @@ describe("herdr-core adapter", () => {
     const { socket } = await setup(records, {}, undefined, undefined, { piName });
     expect((await sessionSnapshot(socket)).agents[0]?.title).toBe(name);
     expect((await paneGet("t1", socket)).title).toBe(name);
-    expect((await herdrRpc<{ agent: { title: string } }>("agent.get", { pane_id: "t1" }, socket)).agent.title).toBe(name);
+    expect((await herdrRpc<{ agent: { title: string } }>("agent.get", { target: "t1" }, socket)).agent.title).toBe(name);
     name = "Renamed session";
     expect((await sessionSnapshot(socket)).panes[0]?.title).toBe(name);
     name = null;

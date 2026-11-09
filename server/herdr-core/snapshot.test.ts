@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { HerdrPane } from "../../shared/protocol.ts";
 import type { ProgramPlatform } from "../agent-identity.ts";
-import { agentOf, buildSnapshot, type HcTerminal, keyBytes, opencodeRecords, OTHER_WORKSPACE_ID, terminalPlatform } from "./snapshot.ts";
+import { agentOf, buildSnapshot, coreHost, type HcTerminal, keyBytes, opencodeRecords, OTHER_WORKSPACE_ID, terminalPlatform } from "./snapshot.ts";
 
 function terminal(address: string, extra: Partial<HcTerminal> = {}): HcTerminal {
   return { address, cols: 120, rows: 40, cwd: "/home/u", state: "live", ...extra };
@@ -473,7 +473,7 @@ describe("pi names", () => {
       terminal("t3", pi),
       terminal("t4", { ...pi, labels: { "ovis.pane": "My label" } }),
       terminal("t5", { title: "π - not-pi" }),
-    ], null, "0.1.19", undefined, undefined, undefined, "linux",
+    ], null, "0.1.19", undefined, undefined, undefined, coreHost(false, "linux"),
     (entry) => ["t1", "t4"].includes(entry.address) ? "VPS off herdr" : null);
     expect(snapshot.panes.map((pane) => [pane.label, pane.title, pane.terminal_title])).toEqual([
       [null, "VPS off herdr", "π - agents-app"],
