@@ -161,6 +161,25 @@ describe("Settings > Appearance > Agents under workspaces (#773)", () => {
     expect(context("web:pi")).toContain("is-filter-context");
   });
 
+  it("filters mixed workspaces and their agent trees, even when the hidden agent is selected or matches search", async () => {
+    stored.set("ovis:sidebar-agent-tree", "true");
+    const mixed: SessionSnapshot = {
+      ...snapshot,
+      panes: snapshot.panes.map((pane) => pane.pane_id === "api:codex" || pane.pane_id === "web:pi" ? { ...pane, view: "work" as const } : pane),
+    };
+    await draw({ shown: mixed });
+    expect(tree()).toEqual([["api", "api:claude"]]);
+    await act(async () => renderer!.unmount());
+    stored.set("ovis:sidebar-view", JSON.stringify("work"));
+    await draw({ shown: mixed, selectedPaneId: "api:claude" });
+    expect(tree()).toEqual([["api", "api:codex"], ["web", "web:pi"]]);
+    await act(async () => renderer!.unmount());
+    stored.set("ovis:sidebar-view", JSON.stringify("coding"));
+    await draw({ shown: mixed, selectedPaneId: "api:codex", filter: sidebarFilter("review", [{ id: "local", name: "Host", snapshot: mixed }], { machineId: "local", paneId: "api:codex" }, (words) => words) });
+    expect(tree().flat()).not.toContain("api:codex");
+    expect(tree().flat()).not.toContain("web:pi");
+  });
+
   it("draws an offline PC's agents without a state and does not open them", async () => {
     stored.set("ovis:sidebar-agent-tree", "true");
     await draw({ online: false });
