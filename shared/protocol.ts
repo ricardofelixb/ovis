@@ -67,6 +67,8 @@ export type HerdrPane = PaneInfo & {
   background_tasks?: number; background_wait?: true; plan?: PlanSummary; context?: PaneContext;
   parent_pane_id?: string;
   own_tab?: true;
+  /** herdr-core's exact ovis.view=work label; absent means Coding, including on herdr. */
+  view?: "work";
   agent_kind?: string;
   agent_message?: string;
   agent_progress?: number;
