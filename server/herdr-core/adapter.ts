@@ -9,6 +9,8 @@ import { descendantProcesses, type ProcessRow, windowsProcessTable } from "../wi
 import { type HcConnection, HcError } from "./connection.ts";
 import { foreignLayout, leaves, neighbour, OVIS_LAYOUT_DOC, type OvisLayout, type PaneDirection, resizeLeaf, setRatio, splitLeaf, swapLeaves, type TabLayout } from "./layout-doc.ts";
 import { paneSession, titleStatus } from "../agent-identity.ts";
+import { piSessionName } from "../pi.ts";
+import { PiSessionReader } from "../pi-session-metadata.ts";
 import { agentInfoOf, agentOf, agentOfStatus, type CoreHost, coreHost, agentStatusOf, foregroundOf, type HcForeground, buildSnapshot, type FirstTurn, keptLayout, opencodeRecords, type SessionOf, reportedFacts, type HcStatus, type HcTerminal, hcKeyName, HERDR_PROTOCOL, isRecord, keyBytes, LAYOUT_DOC, onOtherMachine, OTHER_WORKSPACE_ID, PANE_NAME_LABEL, processInfoOf, SEEN_LABEL, shownStatusOf, SPACE_LABEL, TAB_LABEL, TAB_NAME_LABEL, WORKSPACE_NAME_LABEL } from "./snapshot.ts";
 import { checkoutHolding, defaultCheckoutPath, factsOf, git, gitDirIdentity, labeledWorktree, realPath, type Checkout, type Repository, repositoryOf, WORKTREE_LABEL, WorktreeError, worktreeFolder, worktreeLabel } from "./worktrees.ts";
 import type { AgentStatus, SessionSnapshot } from "../../shared/herdr-api.generated.ts";
@@ -112,6 +114,8 @@ export interface AdapterOptions {
   platform?: NodeJS.Platform;
   /** this PC's process table, read afresh within `timeoutMs` each time; a test stands in for it */
   processTable?: (timeoutMs: number) => Promise<ProcessRow[]>;
+  /** The active pi session's name; a test stands in for the local extension and session store. */
+  piName?: (terminal: HcTerminal) => Promise<string | null>;
 }
 
 /** The sessions a terminal named that it keeps as candidates, the newest last. */
@@ -157,7 +161,8 @@ export async function startHerdrCoreAdapter(hc: HcConnection, socketPath: string
     for (const address of firstTurns.keys()) if (!live.has(address)) firstTurns.delete(address);
     for (const address of sessions.keys()) if (!live.has(address)) sessions.delete(address);
   };
-  const answers = createAnswers(hc, firstTurn, forgetTurns, options, sessionOf);
+  const piReader = new PiSessionReader();
+  const answers = createAnswers(hc, firstTurn, forgetTurns, options, piReader, sessionOf);
   const listener = Bun.listen<ConnectionState>({
     unix: socketPath,
     socket: {
@@ -198,6 +203,7 @@ export async function startHerdrCoreAdapter(hc: HcConnection, socketPath: string
   return {
     socketPath,
     stop: () => {
+      piReader.close();
       listener.stop(true);
       rmSync(socketPath, { force: true });
     },
@@ -399,7 +405,7 @@ function herdrCode(error: HcError, missing: string): string {
   }
 }
 
-function createAnswers(hc: HcConnection, firstTurn: FirstTurn, forgetTurns: (live: ReadonlySet<string>) => void, options: AdapterOptions, sessionOf?: SessionOf): (request: Request) => Promise<Reply> {
+function createAnswers(hc: HcConnection, firstTurn: FirstTurn, forgetTurns: (live: ReadonlySet<string>) => void, options: AdapterOptions, piReader: PiSessionReader, sessionOf?: SessionOf): (request: Request) => Promise<Reply> {
   const platform = options.platform ?? process.platform;
   const processTable = options.processTable ?? windowsProcessTable;
   /** A Windows pane's programs are read off this PC's process table, which says nothing of another machine's. */
@@ -422,7 +428,22 @@ function createAnswers(hc: HcConnection, firstTurn: FirstTurn, forgetTurns: (liv
       hc.hello(),
     ]);
     forgetTurns(new Set(list.terminals.map((terminal) => terminal.address)));
-    return { shown: buildSnapshot(list.terminals, doc.value, hello.version, firstTurn, ovis.value, sessionOf, coreHost(options.otherMachine, platform)), own: ownsLayout(doc.value) };
+    const host = coreHost(options.otherMachine, platform);
+    const piNames = new Map<string, string | null>();
+    // Never ask this PC's extension or filesystem for another machine's sessions. Supply
+    // process facts directly: calling agent.get through our own adapter here would recurse.
+    if (!options.otherMachine) await Promise.all(list.terminals.filter((entry) => agentOf(entry, host) === "pi").map(async (entry) => {
+      const name = options.piName ? await options.piName(entry) : await piSessionName(entry.address, piReader, {
+        agent: { agent: "pi" },
+        processes: processInfoOf(entry).foreground_processes ?? [],
+        processesAfter: async () => {
+          const fresh = await terminal(entry.address).catch(() => null);
+          return fresh ? processInfoOf(fresh).foreground_processes ?? [] : null;
+        },
+      });
+      piNames.set(entry.address, name);
+    }));
+    return { shown: buildSnapshot(list.terminals, doc.value, hello.version, firstTurn, ovis.value, sessionOf, host, (entry) => piNames.get(entry.address) ?? null), own: ownsLayout(doc.value) };
   };
   const snapshot = async (): Promise<SessionSnapshot> => (await read()).shown;
   /** The snapshot, for a call that changes the layout Ovis keeps in labels: refused where the Herdr app arranges this core. */
