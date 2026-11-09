@@ -11,7 +11,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { flushSync } from "react-dom";
+import { flushSync, createPortal } from "react-dom";
 import { ArrowUp, ClipboardPaste, FileText, FolderGit2, LoaderCircle, Package, Plus, Puzzle, Square, TriangleAlert, UserRound, X, type LucideIcon, AudioLines, ChevronDown, Cpu } from "lucide-react";
 
 import "./Composer.css";
@@ -179,25 +179,55 @@ function readSlashUsage(): Record<string, number> {
 
 /**
  * What is left of the context, as a ring filled by what is used (as Codex's app shows it):
- * red when little is left. It only shows: the number is in its tooltip and read to a screen
- * reader, and a press does nothing. A window the transcript does not name draws no ring.
+ * red when little is left. The number is on hover, and on a tap on the ring (a touch screen has no
+ * hover): a bubble over it, drawn through a portal so the card's clipping cannot cut it, which a
+ * press anywhere else closes. A window the transcript does not name draws no ring.
  */
 function ContextRing({ context }: { context: NonNullable<ConversationMetadata["context"]> }) {
   const t = useT();
+  const button = useRef<HTMLButtonElement>(null);
+  const bubble = useRef<HTMLDivElement>(null);
+  const [tip, setTip] = useState<{ left: number; bottom: number } | null>(null);
+  useEffect(() => {
+    if (tip === null) return;
+    const inside = (target: EventTarget | null) => target instanceof Node && (button.current?.contains(target) || bubble.current?.contains(target));
+    const press = (event: PointerEvent) => { if (!inside(event.target)) setTip(null); };
+    const close = () => setTip(null);
+    window.addEventListener("pointerdown", press, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("pointerdown", press, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [tip]);
   const left = contextLeftPercent(context);
   if (left === null || context.window === null) return null;
-  const label = t("Context {percent}% left", { percent: left });
-  const detail = t("{used} of {window} tokens", { used: formatTokens(context.used), window: formatTokens(context.window) });
+  const detail = `${t("Context {percent}% left", { percent: left })} · ${t("{used} of {window} tokens", { used: formatTokens(context.used), window: formatTokens(context.window) })}`;
   const radius = 6;
   const circumference = 2 * Math.PI * radius;
-  return <span className={`composer-context${left <= 20 ? " is-low" : ""}`} title={`${label} · ${detail}`}>
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <circle className="composer-context-track" cx="8" cy="8" r={radius} />
-      <circle className="composer-context-used" cx="8" cy="8" r={radius}
-        strokeDasharray={`${circumference * (100 - left) / 100} ${circumference}`} transform="rotate(-90 8 8)" />
-    </svg>
-    <span className="visually-hidden">{label} · {detail}</span>
-  </span>;
+  const toggle = (): void => {
+    const rect = button.current?.getBoundingClientRect();
+    setTip(tip !== null || !rect ? null : { left: rect.left + rect.width / 2, bottom: window.innerHeight - rect.top + 6 });
+  };
+  return (
+    <>
+    <button ref={button} type="button" className={`composer-context${left <= 20 ? " is-low" : ""}`} aria-label={detail} title={detail} aria-expanded={tip !== null} onClick={toggle}>
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <circle className="composer-context-track" cx="8" cy="8" r={radius} />
+        <circle className="composer-context-used" cx="8" cy="8" r={radius}
+          strokeDasharray={`${circumference * (100 - left) / 100} ${circumference}`} transform="rotate(-90 8 8)" />
+      </svg>
+    </button>
+    {tip && createPortal(
+      <div ref={bubble} className="composer-context-tip" role="status" style={{ left: tip.left, bottom: tip.bottom }}>
+        <span>{detail}</span>
+      </div>,
+      document.body,
+    )}
+    </>
+  );
 }
 
 /** a model's maker's mark for the model menu; the menu's chip icon stands for a maker without one */
