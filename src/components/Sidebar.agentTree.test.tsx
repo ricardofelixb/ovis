@@ -9,6 +9,7 @@ import { inactiveSidebarFilter, sidebarFilter } from "../lib/sidebarFilter.ts";
 import { SidebarFilterProvider } from "../lib/sidebarFilterContext.ts";
 import { currentSidebarPins, setSidebarPins } from "../lib/sidebarPins.ts";
 import { Sidebar } from "./Sidebar.tsx";
+import { SidebarViewSwitch } from "./SidebarViewSwitch.tsx";
 
 const workspace = (id: string, tabs: number): WorkspaceInfo =>
   ({ workspace_id: id, label: id, active_tab_id: `${id}:t1`, number: 1, tab_count: tabs, pane_count: 1, focused: false, agent_status: "idle", worktree: null });
@@ -75,7 +76,7 @@ describe("Settings > Appearance > Agents under workspaces (#773)", () => {
   async function draw({ online = true, selectedPaneId = "web:pi", filter = inactiveSidebarFilter(), shown = snapshot } = {}): Promise<void> {
     await act(async () => {
       renderer = create(createElement(SettingsProvider, null, createElement(SidebarFilterProvider, { value: { filter, reportBranches: () => {} } },
-        createElement(Sidebar, { snapshot: shown, online, selectedPaneId, actions }))));
+        createElement(SidebarViewSwitch), createElement(Sidebar, { snapshot: shown, online, selectedPaneId, actions }))));
     });
   }
   /** each workspace drawn and the agents listed under it, as [workspace, ...agent panes] */
@@ -159,6 +160,24 @@ describe("Settings > Appearance > Agents under workspaces (#773)", () => {
     const context = (paneId: string) => renderer!.root.find((node) => node.type === "li" && node.props["data-agent-pane"] === paneId).props.className as string;
     expect(context("api:codex")).not.toContain("is-filter-context");
     expect(context("web:pi")).toContain("is-filter-context");
+  });
+
+  it("switches views with pressed buttons, persists on remount and does not select or send anything", async () => {
+    stored.set("ovis:sidebar-agent-tree", "true");
+    const mixed = { ...snapshot, panes: snapshot.panes.map((entry) => entry.pane_id === "web:pi" ? { ...entry, view: "work" as const } : entry) };
+    await draw({ shown: mixed });
+    const control = () => renderer!.root.findByProps({ role: "group", "aria-label": "Terminal view" });
+    const buttons = () => control().findAllByType("button");
+    expect(buttons().map((button) => [button.children.join(""), button.props.type, button.props["aria-pressed"]])).toEqual([["Coding", "button", true], ["Work", "button", false]]);
+    await act(async () => buttons()[1]!.props.onClick());
+    expect(tree()).toEqual([["web", "web:pi"]]);
+    expect(buttons().map((button) => button.props["aria-pressed"])).toEqual([false, true]);
+    expect(selected).toEqual([]);
+    await act(async () => renderer!.unmount());
+    await draw({ shown: mixed });
+    expect(tree()).toEqual([["web", "web:pi"]]);
+    await act(async () => buttons()[0]!.props.onClick());
+    expect(tree()).toEqual([["api", "api:claude", "api:codex"]]);
   });
 
   it("filters mixed workspaces and their agent trees, even when the hidden agent is selected or matches search", async () => {
