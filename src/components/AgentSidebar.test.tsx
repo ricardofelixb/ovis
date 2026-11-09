@@ -11,7 +11,7 @@ import { SettingsProvider } from "../lib/settings.ts";
 import { SidebarActivityProvider } from "../lib/sidebarActivity.tsx";
 import type { SidebarFilter } from "../lib/sidebarFilter.ts";
 import { SidebarFilterProvider } from "../lib/sidebarFilterContext.ts";
-import { currentSidebarPins, setSidebarPins } from "../lib/sidebarPins.ts";
+import { setSidebarPins } from "../lib/sidebarPins.ts";
 import { AgentSidebar } from "./AgentSidebar.tsx";
 import { RowMenu, type RowMenuItem } from "./RowMenu.tsx";
 
@@ -40,7 +40,7 @@ describe("AgentSidebar phone sheet live row", () => {
   beforeEach(() => {
     originalTokens = currentAgentRowTokens();
     setAgentRowTokens(null);
-    for (const key of ["window", "document", "navigator", "getComputedStyle", "CSS", "IS_REACT_ACT_ENVIRONMENT"]) {
+    for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) {
       descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     }
     historyState = null;
@@ -48,7 +48,6 @@ describe("AgentSidebar phone sheet live row", () => {
     steppedBack = new Promise<void>((resolve) => { onBack = resolve; });
     const events = new EventTarget();
     const media = { matches: true, addEventListener() {}, removeEventListener() {} };
-    Object.defineProperty(globalThis, "CSS", { configurable: true, value: { escape: (value: string) => value } });
     Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
     Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["en-US"] } });
     Object.defineProperty(globalThis, "window", { configurable: true, value: {
@@ -139,43 +138,6 @@ describe("AgentSidebar phone sheet live row", () => {
     expect(["t17", "t18", "t19", "t20", "t21", "t22"].map(displayedTitle)).toEqual([
       "VPS off herdr", "VPS off herdr", "My Ovis tab", "VPS off herdr", "My helper tab", "My pane",
     ]);
-  });
-
-  it("filters pinned and unpinned agents across PCs without dropping hidden pins", async () => {
-    const first = roster()[0]!;
-    const machines: Machine[] = [first, { ...structuredClone(first), id: "vps", name: "VPS", kind: "hc" as const }].map((machine) => ({
-      ...machine,
-      snapshot: { ...machine.snapshot!, panes: machine.snapshot!.panes.map((pane) => pane.pane_id === paneId ? { ...pane, view: "work" as const } : pane) },
-    }));
-    const stored = new Map<string, string>();
-    Object.assign(window, { localStorage: {
-      getItem: (key: string) => stored.get(key) ?? null,
-      setItem: (key: string, value: string) => { stored.set(key, value); },
-      removeItem: (key: string) => { stored.delete(key); },
-    } });
-    const codingPin = "local:w1D:p1";
-    setSidebarPins([`local:${paneId}`, codingPin]);
-    const shown = () => renderer!.root.findAll((node) => typeof node.type === "string" && node.props["data-machine"] !== undefined && node.props["data-pane"] !== undefined)
-      .map((node) => `${node.props["data-machine"]}:${node.props["data-pane"]}`);
-    try {
-      await act(async () => { renderer = create(view(machines)); });
-      expect(shown()).not.toContain(`local:${paneId}`);
-      expect(shown()).not.toContain(`vps:${paneId}`);
-      expect(shown().some((key) => key.startsWith("local:"))).toBe(true);
-      expect(shown().some((key) => key.startsWith("vps:"))).toBe(true);
-      await act(async () => renderer!.unmount());
-      stored.set("ovis:sidebar-view", JSON.stringify("work"));
-      await act(async () => { renderer = create(view(machines)); });
-      expect(shown()).toEqual([`local:${paneId}`, `vps:${paneId}`]);
-      // Pin a visible Work row. Pruning must keep the other view's existing pin.
-      const row = renderer!.root.findByProps({ "data-machine": "vps", "data-pane": paneId });
-      await act(async () => { row.findByProps({ className: "sidebar-row-action row-menu-toggle" }).props.onClick({ currentTarget: anchor }); });
-      const items = renderer!.root.findByType(RowMenu).props.items as RowMenuItem[];
-      await act(async () => items.find((item) => item.id === "pin")!.run?.());
-      expect(currentSidebarPins()).toContain(codingPin);
-    } finally {
-      await act(async () => setSidebarPins([]));
-    }
   });
 
   it("offers no lock, and holds none, until Lock pinned agents is turned on (#2432)", async () => {

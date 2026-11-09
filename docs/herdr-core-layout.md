@@ -21,16 +21,9 @@ terminal (`hc label`, `terminal.label`; a label set to the empty string is remov
 | `ovis.workspace` | the workspace's name | Ovis, on each terminal of a renamed workspace |
 | `ovis.tab` | the tab's name | Ovis, on each terminal of a renamed tab |
 | `ovis.pane` | the pane's name (else the terminal's own `name`) | Ovis, on a renamed pane |
-| `ovis.view` | `work` puts the terminal in the sidebar's Work view; absent or any other value means Coding | any hc client, e.g. `hc run --label ovis.view=work` or `hc label <t> ovis.view=work` |
 
 `ovis.*` labels hold only small facts about one terminal. Nothing else Ovis keeps (approvals,
 prompt answers, conversations) is stored in hc.
-
-The sidebar's Coding | Work choice is saved on each browser device, defaulting to Coding. It
-filters workspaces and agents on every PC, including Other terminals; a PC with no work terminals
-is left out of Work rather than drawing an empty header. It does not filter attention badges or
-notifications, or change the open terminal. herdr (TUI) has no terminal labels, so all its
-terminals stay in Coding.
 
 ## The `ovis-layout` document
 

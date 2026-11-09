@@ -102,7 +102,8 @@ import { useConnectionChip, useServerMessageHandler } from "./lib/useConnectionC
 import { useHeaderConnection } from "./lib/headerConnection.ts";
 import { ConnectionRouteMark } from "./components/ConnectionRouteMark.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
-import { SidebarViewSwitch } from "./components/SidebarViewSwitch.tsx";
+import logoDark from "./assets/brand/logo-dark.png";
+import logoLight from "./assets/brand/logo-light.png";
 import { nextWaitingPane, sessionCounts, tabPosition } from "./lib/headerSessions.ts";
 import { selectionStill } from "./lib/selectionMark.ts";
 import { carryMovedPane, movedView } from "./lib/paneMove.ts";
@@ -174,6 +175,15 @@ function ConnectionChip({ connected, word, title, quiet }: { connected: boolean;
       <span className="conn-dot" aria-hidden="true" />
       <span className="conn-text">{shown}</span>
     </span>
+  );
+}
+
+/** The sidebar's head (from 769px): the Ovis wordmark in the theme's colours (ovis-site's logo pair). */
+function SidebarBrand({ dark }: { dark: boolean }) {
+  return (
+    <div className="brand sidebar-brand">
+      <img src={dark ? logoDark : logoLight} alt="Ovis" width="68" height="24" />
+    </div>
   );
 }
 
@@ -806,7 +816,7 @@ export function App() {
             .header-side is the sidebar's own top row from 769px (styles.css); below that its
             buttons sit in the bar */}
         <div className="header-side">
-          {wideScreen && !sidebarCollapsed && <SidebarViewSwitch />}
+          {wideScreen && !sidebarCollapsed && <SidebarBrand dark={resolvedTheme === "dark"} />}
           <button
             type="button"
             className="icon-button drawer-toggle"

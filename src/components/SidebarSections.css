@@ -1,5 +1,5 @@
 /* The sidebar's two sections, PCs and Agents (MachineSidebar.tsx, AgentSidebar.tsx): the PCs a list that
-   starts under the view switch, Agents a head that stays put and a list that scrolls under it. */
+   starts right under the logo, Agents a head that stays put and a list that scrolls under it. */
 
 /* The rows keep their own scroll viewport, the section's one grid row. A grid, not a column flexbox:
    Safari sizes a column flexbox's max-content (Sidebar.css caps the section at it) from its 0 flex
@@ -9,17 +9,6 @@
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   padding-top: var(--space-2);
-}
-
-.sidebar-view-mobile { display: none; }
-
-@media (max-width: 768px) {
-  .pcs-sidebar { grid-template-rows: auto minmax(0, 1fr); }
-
-  .sidebar-view-mobile {
-    display: flex;
-    padding: var(--space-2) var(--side-gutter);
-  }
 }
 
 /* A list fades at an edge only while rows lie past it (lib/useEdgeFades.ts): at its top it fades its foot
