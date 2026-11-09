@@ -324,12 +324,16 @@
   text-transform: uppercase;
 }
 
-/* what is left of the context: a ring that only shows (its number is in the tooltip), red when little is left */
+/* what is left of the context: a ring a tap opens the number of, red when little is left */
 .composer-context {
   display: inline-flex;
   flex: none;
   align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--text-dim);
+  cursor: pointer;
 }
 
 .composer-context svg {
