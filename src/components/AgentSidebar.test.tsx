@@ -40,7 +40,7 @@ describe("AgentSidebar phone sheet live row", () => {
   beforeEach(() => {
     originalTokens = currentAgentRowTokens();
     setAgentRowTokens(null);
-    for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) {
+    for (const key of ["window", "document", "navigator", "getComputedStyle", "CSS", "IS_REACT_ACT_ENVIRONMENT"]) {
       descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     }
     historyState = null;
@@ -48,6 +48,7 @@ describe("AgentSidebar phone sheet live row", () => {
     steppedBack = new Promise<void>((resolve) => { onBack = resolve; });
     const events = new EventTarget();
     const media = { matches: true, addEventListener() {}, removeEventListener() {} };
+    Object.defineProperty(globalThis, "CSS", { configurable: true, value: { escape: (value: string) => value } });
     Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
     Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["en-US"] } });
     Object.defineProperty(globalThis, "window", { configurable: true, value: {
