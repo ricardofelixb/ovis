@@ -14,6 +14,41 @@ export function tabTitle(title: string, agent: string | null | undefined): strin
   return rest ? `${mark}${rest}` : "";
 }
 
+/**
+ * A roster row drawn on two lines: what its pane is doing, and where under it. A shell's title
+ * is often just its folder, which says nothing a workspace's name does not say better, so that
+ * row leads with the workspace and keeps the second line for what is left to say.
+ */
+export function taskRowLines({ paneTitle, labelled, folder, workspace, alias }: {
+  /** the pane's title as the roster shows it */
+  paneTitle: string;
+  /** the user named the pane: the name is kept as it is */
+  labelled: boolean;
+  /** the last folder of the pane's working directory */
+  folder: string;
+  /** the workspace's row name: its label, which herdr makes from the branch until its owner names it */
+  workspace: string;
+  /** a linked worktree's branch, when the label does not already say it */
+  alias?: string | null;
+}): { title: string; place: string } {
+  const title = !labelled && paneTitle === folder ? workspace : paneTitle;
+  const where = [workspace === title ? "" : workspace, alias && alias !== title && alias !== workspace ? alias : ""].filter(Boolean).join(" · ");
+  const said = folder === title || folder === workspace || folder === alias;
+  return { title, place: placeLine(where, said ? "" : folder) };
+}
+
+/** A row's second line: its parts in order, each said once, none the name the first line already says. */
+export function unsaidLine(title: string, parts: readonly (string | null | undefined)[]): string {
+  const said = new Set([title]);
+  const line: string[] = [];
+  for (const part of parts) {
+    if (!part || said.has(part)) continue;
+    said.add(part);
+    line.push(part);
+  }
+  return line.join(" · ");
+}
+
 /** "workspace · folder", without saying the same name twice. */
 export function placeLine(workspace: string, folder: string): string {
   return !folder || folder === workspace ? workspace : !workspace ? folder : `${workspace} · ${folder}`;

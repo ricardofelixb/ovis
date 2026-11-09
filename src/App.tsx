@@ -1,5 +1,5 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bell, ChevronDown, CircleHelp, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, Search, SquareTerminal, Target, X } from "lucide-react";
+import { Bell, ChevronDown, Plus, CircleHelp, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, Search, SquareTerminal, Target, X } from "lucide-react";
 
 import type { HerdrPane, PaneDirection } from "../shared/protocol.ts";
 import { authenticate, createTab, movePaneBeside, moveTabToWorkspace, paneSessionKey, shareSeen, swapPaneWith } from "./lib/api.ts";
@@ -22,17 +22,22 @@ import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { SetupGuide, SetupGuideResume } from "./components/SetupGuide.tsx";
 import { useSetupGuide } from "./lib/useSetupGuide.ts";
 import { SessionHistory } from "./components/SessionHistory.tsx";
+import { WorktreeRequestDialog } from "./components/WorktreeDialog.tsx";
+import { worktreesStartHere } from "./lib/repositoryWorkspaces.ts";
 import { UnsentTextDialog } from "./components/UnsentText.tsx";
 import { useUnsentRecovery } from "./lib/useUnsentRecovery.ts";
 import { sessionHistoryAgent, sessionHistoryListAgent, sessionHistorySourcePane } from "./lib/sessionHistory.ts";
 import { usePreferencesSync } from "./lib/preferencesSync.ts";
 import { useTabLabelLearning } from "./lib/useTabLabelLearning.ts";
+import { customTabLabel, tabLabel } from "./lib/tabName.ts";
+import { agentName } from "./lib/runtimeMove.ts";
 import { TabStrip } from "./components/TabStrip.tsx";
 import { SettingsDialog } from "./components/SettingsDialog.tsx";
 import { loadedOnSettingsEntry } from "./lib/settingsHistory.ts";
 import { useSettingsDialog } from "./lib/useSettingsDialog.ts";
 import { usePhoneSheetBack } from "./lib/sheetHistory.ts";
 import { peekFor, type PeekRequest } from "./lib/terminalPeek.ts";
+import { SHEET_QUERY } from "./lib/sheets.ts";
 import { linksSomewhere, readLink } from "./lib/deepLink.ts";
 import { pageSearch } from "./lib/pageQuery.ts";
 import { copyText } from "./lib/clipboard.ts";
@@ -102,9 +107,11 @@ import { useConnectionChip, useServerMessageHandler } from "./lib/useConnectionC
 import { useHeaderConnection } from "./lib/headerConnection.ts";
 import { ConnectionRouteMark } from "./components/ConnectionRouteMark.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
+import { HeaderCounts } from "./components/HeaderCounts.tsx";
+import { PcLoadStatus } from "./components/MachineStats.tsx";
 import logoDark from "./assets/brand/logo-dark.png";
 import logoLight from "./assets/brand/logo-light.png";
-import { nextWaitingPane, sessionCounts, tabPosition } from "./lib/headerSessions.ts";
+import { nextWaitingTarget, sessionCountsAcross, tabPosition, useDrawerDialog, useWaitingRosters } from "./lib/headerSessions.ts";
 import { selectionStill } from "./lib/selectionMark.ts";
 import { carryMovedPane, movedView } from "./lib/paneMove.ts";
 import { useScreenWakeLock } from "./lib/wakeLock.ts";
@@ -170,7 +177,9 @@ function ConnectingNote() {
 function ConnectionChip({ connected, word, title, quiet }: { connected: boolean; word: string; title: string | undefined; quiet: boolean }) {
   const shown = useAnnouncedText(word);
   return (
-    // quiet: the title area says it in words (lib/headerConnection.ts), so the chip keeps only its dot
+    // quiet: the title area or the status bar says it in words (lib/headerConnection.ts), so the chip stays a live
+    // region out of the flow (.conn.conn-quiet in styles.css): a dot that appears beside the lens switch would move
+    // the switch and Files over by its width while reconnecting, and the header's controls hold their place (G-144).
     <span className={`conn ${connected ? "conn-live" : "conn-reconnecting"}${quiet ? " conn-quiet" : ""}`} role="status" title={title}>
       <span className="conn-dot" aria-hidden="true" />
       <span className="conn-text">{shown}</span>
@@ -262,7 +271,7 @@ export function App() {
   // a diff's line notes go to its own pane: none while this window only watches that pane
   const diffPaneObserving = usePaneObserving(diffViewing?.paneId ? paneStorageId(diffViewing.machineId, diffViewing.paneId) : null);
   const { settingsOpen, setSettingsOpen, settingsLinkPage, setSettingsLinkPage, settingsLinkSection, setSettingsLinkSection, settingsPage, settingsSection, setSettingsSection, closeSettings, onSettingsPage } = useSettingsDialog(initialLink);
-  const { newSessionOpen, setNewSessionOpen, newPrefill, setNewPrefill, newFields, setNewFields, pendingCreate, newTab, setNewTab, sessionHistory, setSessionHistory } = useNewSessionState({ initialLink });
+  const { newSessionOpen, setNewSessionOpen, newPrefill, setNewPrefill, newFields, setNewFields, pendingCreate, newTab, setNewTab, sessionHistory, setSessionHistory, worktreeFor, setWorktreeFor } = useNewSessionState({ initialLink, watching: auth?.role === "watch" });
   const { connected, setConnected, connectedBefore, setConnectedBefore, paneLost, outputStopped, setOutputStopped, reportedBy, setReportedBy } = useConnectionChip();
   const { notifications, setNotifications, pushOn, setPushOn, pushOnRef } = useNotificationState(alertsOn);
   // the shared settings and pins, the same in every browser of this server, once the app is in
@@ -364,7 +373,7 @@ export function App() {
           : swap.reason === "same_pane" ? t("Choose two different panes.")
           : swap.reason === "not_found" ? t("A pane is no longer available.")
           : swap.reason === "no_neighbor" ? t("There is no pane on that side.")
-          : t("Something went wrong. Try again.");
+          : t("The pane swap could not be completed. Try again.");
         setLayoutNotice(t("Pane swap was refused: {reason}", { reason }));
       }
       void load();
@@ -466,12 +475,6 @@ export function App() {
   const crumb = selectedPane && selectedTitle !== null
     ? headerCrumb({ machine: selectedMachine?.name ?? selectedMachineId, machineCount: machines.length, workspace: selectedWorkspace?.label ?? selectedPane.workspace_id, title: selectedTitle, cwd: selectedPane.cwd })
     : null;
-  // the selected PC's sessions as its sidebar draws them, and the tab's place in its strip. A PC that
-  // is not connected has only a cached roster, which its sidebar greys out: the header counts none of it
-  const rosterPanesShown = selectedMachine?.state === "connected" ? snapshot?.panes ?? [] : [];
-  const shownStatus = (pane: (typeof rosterPanesShown)[number]) => activity.status(selectedMachineId, pane);
-  const sessionTally = sessionCounts(rosterPanesShown, shownStatus);
-  const nextWaiting = nextWaitingPane(rosterPanesShown, shownStatus, selectedPaneId, snapshot?.layouts);
   const tabPlace = snapshot ? tabPosition(snapshot, selectedPaneId) : null;
   const position = tabPlace && { ...tabPlace, words: t("Tab {index} of {count}", { index: tabPlace.index, count: tabPlace.count }) };
 
@@ -635,6 +638,14 @@ export function App() {
         setDrawerOpen(false);
         setSessionHistory({ machineId: found.machineId, workspaceId: found.workspace.workspace_id, agent, paneId, askingPaneId, selectedPaneId: selected });
       },
+      openWorktree: (mode) => {
+        const found = newTabTarget();
+        // the workspaces the sidebar and the palette offer worktrees for (lib/repositoryWorkspaces.ts)
+        const machine = machinesRef.current.find((candidate) => candidate.id === found?.machineId);
+        if (!found || machine?.state !== "connected" || !worktreesStartHere(found.machineId, found.workspace)) return;
+        setDrawerOpen(false);
+        setWorktreeFor({ machineId: found.machineId, machineName: machine.name, workspace: found.workspace, mode });
+      },
       openPalette,
       agentStarted: (machineId, paneId) => lenses.startedAgent(lensOwner(machineId, paneId), window.matchMedia?.("(pointer: coarse)").matches === true),
       openFind: () => {
@@ -694,6 +705,12 @@ export function App() {
   // the PCs this device shows in its sidebar, Agents list and palette (Settings → Devices and PCs); every other
   // use of the roster keeps them all, so a link, an alert or a split still reaches a hidden PC's pane
   const sidebarMachines = useShownMachines({ machines, selectedMachineRef, selectTargetRef, picks, restored: !linkSelects(initialLink) });
+  // every connected PC's sessions as its sidebar draws them, so the "waiting for you" count and its next jump
+  // triage the same set the Agents list shows (G-002), and the selected PC's even when the sidebar hides it (lib/headerSessions.ts)
+  const waitingRosters = useWaitingRosters(sidebarMachines, machines.find((machine) => machine.id === selectedMachineId), activity.status);
+  const sessionTally = sessionCountsAcross(waitingRosters);
+  const nextWaiting = nextWaitingTarget(waitingRosters, { machineId: selectedMachineId, paneId: selectedPaneId });
+  const openNextWaiting = (): void => { if (nextWaiting !== null) selectTarget(nextWaiting.machineId, nextWaiting.paneId); };
 
   // a link to the New workspace dialog opens it once the PCs are in; one for a tab, once the
   // linked workspace's pane is selected (its folder is the workspace's, as the tab strip's + does)
@@ -720,6 +737,18 @@ export function App() {
   // the palette's shortcut, said beside its item where a hardware keyboard is likely (a fine pointer)
   const keyboardLikely = useMediaQuery("(hover: hover) and (pointer: fine)");
   const paletteKeys = keyboardLikely ? formatKeys(shortcutDisplayKeys("palette", settings.shortcutOverrides)).join("+") : "";
+  // A tooltip follows the platform and the current binding, including a removed shortcut.
+  const shortcutTitle = (label: string, id: "palette" | "toggle-sidebar" | "toggle-view"): string => {
+    const keys = formatKeys(shortcutDisplayKeys(id, settings.shortcutOverrides));
+    return keys.length === 0 ? label : `${label} (${keys.join("+")})`;
+  };
+  // a phone's More opens a bottom sheet, a dialog, not a menu (RowMenu at SHEET_QUERY): the button says which
+  const isSheetWidth = useMediaQuery(SHEET_QUERY);
+  // a phone's open drawer is a dialog over the pane (G-003): Tab stays in it, the pane column is inert under it, Escape
+  // closes it and the focus goes back to the toggle that opened it (lib/headerSessions.ts useDrawerDialog)
+  // only once the shell is drawn: a drawer a link opens behind the access gate takes its focus when it mounts
+  const drawerModal = locked === false && drawerOpen && !wideScreen;
+  const { ref: drawerRef } = useDrawerDialog(drawerModal, setDrawerOpen, [peekSidebarRef]);
   // a phone (the sheets' width) draws no tab row: the header's title lists the tabs (TabStrip's sheet),
   // as the Codex and Claude apps title a thread and list the others from it
   const { tabsInHeader, sheet: tabSheet, toggle: toggleTabSheet, close: closeTabSheet } = useTabSheet(selectedPane !== null && !guideShown ? JSON.stringify([selectedMachineId, selectedPane.workspace_id]) : null);
@@ -730,18 +759,22 @@ export function App() {
   const cramped = useCramped();
   const paneMenuInMore = selectedPane !== null
     && tabRowHidden(cramped, snapshot?.tabs.filter((tab) => tab.workspace_id === selectedPane.workspace_id).length ?? 0, tabsInHeader);
-  // The header draws no session counts (the sidebar and each tab say every agent's state): More's first
-  // item jumps to the next session waiting for you, and where no status bar says it, a waiting-coloured
-  // dot on its button says one is there
+  // More's first item jumps to the next session waiting for you, and where no status bar says it, a
+  // waiting-coloured dot on its button says how many. A phone's header also counts the running and the
+  // unseen finished sessions beside it (components/HeaderCounts.tsx); a wider screen's sidebar shows them
   const waitingInMore = sessionTally.waiting > 0;
+  const currentTabInMore = paneMenuInMore && selectedPane ? snapshot?.tabs.find((tab) => tab.tab_id === selectedPane.tab_id) : undefined;
+  const currentTabPlace = currentTabInMore && snapshot ? snapshot.tabs.filter((tab) => tab.workspace_id === selectedPane!.workspace_id).indexOf(currentTabInMore) + 1 : 1;
+  const currentTabName = currentTabInMore ? (customTabLabel(currentTabInMore, currentTabPlace) ?? tabLabel(currentTabInMore, t, currentTabPlace)) : null;
   const paneMoreItems = paneMenuInMore && selectedPane ? (paneActionsRef.current?.(selectedPane) ?? []).map((item, index): RowMenuItem => ({
     ...item, divider: index === 0 || item.divider,
+    ...(item.id === "rename-tab" && currentTabName ? { hint: currentTabName, title: `${item.label} · ${currentTabName}` } : {}),
     run: () => paneActionsRef.current?.(selectedPane).find((fresh) => fresh.id === item.id)?.run(),
   })) : [];
   const moreBase = alertsOffDot ? t("More · alerts are off") : t("More");
   const moreLabel = waitingInMore ? `${moreBase} · ${t("{count} waiting for you", { count: sessionTally.waiting })}` : moreBase;
   const moreItems: RowMenuItem[] = [
-    ...(waitingInMore && nextWaiting !== null ? [{ id: "next-waiting", label: t("Open the next session waiting for you"), hint: String(sessionTally.waiting), icon: CircleHelp, run: () => selectPane(nextWaiting) }] : []),
+    ...(waitingInMore && nextWaiting !== null ? [{ id: "next-waiting", label: t("Open the next session waiting for you"), hint: String(sessionTally.waiting), icon: CircleHelp, run: openNextWaiting }] : []),
     // first at every width: a phone's header has no palette button, and a touch screen no shortcut
     { id: "palette", label: t("Search panes and actions"), icon: Search, ...(paletteKeys ? { hint: paletteKeys } : {}), run: () => openPalette() },
     ...(selectedPane && screenMachineId === null ? [{ id: "view", label: t("Terminal"), checked: (terminalPeek !== null ? "terminal" : view) === "terminal", switch: true, title: terminalPeek !== null || view === "terminal" ? t("Switch to chat (⌘⇧J)") : terminalAttach ? t("Switch to terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there"), icon: SquareTerminal, run: actions.toggleView }] : []),
@@ -811,6 +844,7 @@ export function App() {
       ...(sidebarWidth === null ? {} : { "--sidebar-user-w": `${sidebarWidth}px` }),
       ...(filePanelWidth === null ? {} : { "--file-panel-user-w": `${filePanelWidth}px` }),
     } as CSSProperties}>
+      {selectedPane !== null && !guideShown && <h1 className="visually-hidden">{selectedTitle}</h1>}
       <header className={`app-header is-zoned${chatShown ? " is-chat" : ""}${stripInHeader ? " has-tab-row" : ""}`}>
         {/* is-zoned tells this header from the connecting shell's, which has no zones to draw.
             .header-side is the sidebar's own top row from 769px (styles.css); below that its
@@ -819,15 +853,20 @@ export function App() {
           {wideScreen && !sidebarCollapsed && <SidebarBrand dark={resolvedTheme === "dark"} />}
           <button
             type="button"
+            id="drawer-toggle"
             className="icon-button drawer-toggle"
             aria-label={t(drawerOpen ? "Close workspace list" : "Open workspace list")}
+            aria-haspopup="dialog"
             aria-expanded={drawerOpen}
             aria-controls="workspace-drawer"
             onClick={() => setDrawerOpen((open) => !open)}
           >
             {drawerOpen ? <X /> : <Menu />}
           </button>
-          <button type="button" className="icon-button palette-button" aria-label={t("Command palette")} title={t("Command palette (⌘⇧K)")} onClick={() => openPalette()}>
+          {((wideScreen && !sidebarCollapsed) || (!wideScreen && drawerOpen)) && settings.sidebarRows !== "two" && <button type="button" id="drawer-new-workspace" className="icon-button new-workspace-button" disabled={auth?.role === "watch" || selectedMachine?.state !== "connected"} aria-label={t("New workspace")} title={auth?.role === "watch" ? `${t("New workspace")} · ${t("View only")}` : t("New workspace")} onClick={() => actions.openNewSession()}>
+            <Plus aria-hidden="true" />
+          </button>}
+          <button type="button" className="icon-button palette-button" aria-label={t("Command palette")} title={shortcutTitle(t("Command palette"), "palette")} onClick={() => openPalette()}>
             <Search />
           </button>
           <button
@@ -835,7 +874,7 @@ export function App() {
             className="icon-button header-desktop-only sidebar-toggle"
             aria-label={t(sidebarCollapsed ? "Show workspace list" : "Hide workspace list")}
             aria-pressed={!sidebarCollapsed}
-            title={t("Toggle sidebar (⌘⇧B)")}
+            title={shortcutTitle(t("Toggle sidebar"), "toggle-sidebar")}
             onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
             ref={peekToggleRef}
             {...peekToggleHandlers}
@@ -867,7 +906,7 @@ export function App() {
           <div className={`context${headerConnection === null ? "" : " has-connection"}${tabsInHeader && selectedWorkspace && !guideShown ? " has-tabs" : ""}`} title={crumb.tooltip}>
             <div className="context-title">
               {selectedAgent && <AgentMark agent={selectedAgent} size={18} />}
-              <span className="context-title-text">{selectedTitle}</span>
+              <span className="context-title-text" role="group" aria-label={[selectedAgent ? agentName(selectedAgent) : null, crumb.fullContext].filter((part) => part !== null).join(" · ")}>{selectedTitle}</span>
               {position && <span className="context-position" title={position.words}>
                 <span aria-hidden="true">{position.index}/{position.count}</span>
                 <span className="visually-hidden">{position.words}</span>
@@ -880,6 +919,8 @@ export function App() {
             </div>
             {/* lost and back, the connection takes the crumb's place in words, in the same box: nothing moves */}
             <div className={`context-sub${headerConnection === null ? "" : ` context-connection is-${headerConnection}`}`}>
+              {/* a watching device says so where the status bar would (G-004): a phone has no status bar, so the crumb line leads with it, the connection's word kept after it */}
+              {auth?.role === "watch" && !statusBarShown && <><span className="context-watch">{t("View only")}</span><span className="context-sep" aria-hidden="true">·</span></>}
               {headerConnection !== null ? <span>{t(headerConnection === "connected" ? "Connected" : "Reconnecting…")}</span> : <>
                 {/* one PC needs no name: the sidebar leaves it out too, and More still says it */}
                 {crumb.showMachine && <><span className="machine-context-name">{crumb.machine}</span><span className="context-sep" aria-hidden="true">›</span></>}
@@ -926,6 +967,7 @@ export function App() {
               : localFreshness === "unavailable" && (health?.herdr.runtime === "herdr-core"
                 ? <span className="pill pill-offline" title={t("Open the Herdr app on this PC, or check HC_SESSION and HC_SOCKET.")}>{t("herdr-core unavailable")}</span>
                 : <span className="pill pill-offline" title={t("Start herdr on this PC, or check HERDR_SOCKET.")}>{t("herdr unavailable")}</span>)}
+          {isSheetWidth && <HeaderCounts counts={sessionTally} onOpen={() => setDrawerOpen(true)} />}
           <span className="header-more">
             <button
               type="button"
@@ -934,7 +976,7 @@ export function App() {
               data-terminal-soon={selectedPane && !terminalAttach || undefined}
               aria-label={moreLabel}
               title={moreLabel}
-              aria-haspopup="menu"
+              aria-haspopup={isSheetWidth ? "dialog" : "menu"}
               aria-expanded={more !== null}
               onClick={(event) => {
                 const anchor = event.currentTarget;
@@ -943,7 +985,8 @@ export function App() {
             >
               <Ellipsis />
             </button>
-            {waitingDot ? <span className="header-more-dot is-waiting" aria-hidden="true" /> : alertsOffDot && <span className="header-more-dot" aria-hidden="true" />}
+            {/* the waiting dot carries the count (G-015): the number a phone otherwise reads only inside More */}
+            {waitingDot ? <span className="header-more-dot is-waiting" data-count={sessionTally.waiting} aria-hidden="true" /> : alertsOffDot && <span className="header-more-dot" aria-hidden="true" />}
           </span>
         </div>
         {more && (
@@ -953,7 +996,9 @@ export function App() {
             header={crumb && screenMachineId === null ? (
               <div className="header-more-crumb">
                 {/* the status bar says where the pane is; the session's lines and the route stay here */}
-                {!statusBarShown && <span>{crumb.place}</span>}
+                {/* the pane's whole title, which the header cuts short: a phone has no tooltip, so More says it, with the agent (G-069) */}
+                {!statusBarShown && selectedTitle !== null && <span className="header-more-title">{selectedAgent ? `${agentName(selectedAgent)} · ${selectedTitle}` : selectedTitle}</span>}
+                {!statusBarShown && <span>{currentTabName ? `${crumb.place} › ${currentTabName}` : crumb.place}</span>}
                 {!statusBarShown && crumb.path !== null && <span className="header-more-path">{crumb.path}</span>}
                 {sessionLines !== null && <span className="header-more-session">
                   <span>{sessionLines.totals}</span>
@@ -971,12 +1016,14 @@ export function App() {
 
       <PanePressContext.Provider value={pressPane}>
       <div className="app-body">
-        <aside id="workspace-drawer" className={`sidebar${drawerOpen ? " is-open" : ""}${sidebarPeeking ? " is-peek" : ""}`} ref={peekSidebarRef} {...peekSidebarHandlers}>
+        <aside id="workspace-drawer" className={`sidebar${drawerOpen ? " is-open" : ""}${sidebarPeeking ? " is-peek" : ""}`} role={drawerModal ? "dialog" : undefined} aria-modal={drawerModal ? true : undefined} tabIndex={drawerModal ? -1 : undefined} aria-label={drawerModal ? t("Workspace list") : undefined}
+          // the header's toggle and + are drawn as the open drawer's top row: a screen reader that keeps to the modal finds them in it
+          aria-owns={drawerModal ? (settings.sidebarRows !== "two" ? "drawer-toggle drawer-new-workspace" : "drawer-toggle") : undefined} ref={drawerRef} {...peekSidebarHandlers}>
           {error && <div className="error-state" role="alert"><p>{error}</p><button className="btn" onClick={() => void load()}>{t("Retry")}</button></div>}
           {/* a sidebar that cannot be drawn leaves the panes working */}
           <RenderBoundary resetKey={null} fallback={(retry) => <RegionCrash message={t("The sidebar can't be shown.")} retry={retry} />}>
             <CrashProbe region="sidebar" />
-            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} allMachines={machines} pcLoad={pcLoadOn(settings, machines)} shown={wideScreen ? !sidebarCollapsed || sidebarPeeking : drawerOpen} watching={auth?.role === "watch"} appLayout={appLayoutOn} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={screenMachineId ?? selectedMachineId} selectedPaneId={screenMachineId === null ? selectedPaneId : null} screenMachineId={screenMachineId} onScreen={(id) => { setScreenMachineId((open) => open === id ? null : id); setDrawerOpen(false); }} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={(id) => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); }} /></ReorderContext.Provider>
+            <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} allMachines={machines} watching={auth?.role === "watch"} appLayout={appLayoutOn} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={screenMachineId ?? selectedMachineId} selectedPaneId={screenMachineId === null ? selectedPaneId : null} screenMachineId={screenMachineId} onScreen={(id) => { setScreenMachineId((open) => open === id ? null : id); setDrawerOpen(false); }} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={(id) => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); }} /></ReorderContext.Provider>
           </RenderBoundary>
           <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
         </aside>
@@ -988,7 +1035,7 @@ export function App() {
         <OpenFileContext.Provider value={selectedPaneId !== null ? viewFile : null}>
         <WebPanelContext.Provider value={openPaneLink}>
         {/* the Computer view covers the chat: the column is no chat's then, so the phone's glass header stays a bar over the desktop */}
-        <div className={`pane-column${chatShown && screenMachineId === null ? " is-chat" : ""}`}>
+        <div className={`pane-column${chatShown && screenMachineId === null ? " is-chat" : ""}`} inert={drawerModal || undefined}>
         {/* over the pane only: a bar across the window would cut the sidebar off from its top row in the header */}
         <UpdateNotice updates={updates} onOpen={() => { setSettingsSection("updates"); setSettingsOpen(true); }} />
         <TelemetryNotice enabled={locked === false} onOpen={() => { setSettingsLinkPage("about"); setSettingsLinkSection("telemetry"); setSettingsOpen(true); }} />
@@ -1094,7 +1141,7 @@ export function App() {
                 {!(slotSnapshot && pane && workspace) && slotBar}
                 {slotSnapshot && pane && workspace && !(active && stripInHeader) && (
                   <TabStrip snapshot={slotSnapshot} workspace={workspace} selectedPane={pane} panelId={slotPanelId} splitDrag={wideScreen} onSelectPane={onSelect}
-                    inHeader={tabsInHeader} sheet={active ? tabSheet : null} onSheetClose={closeTabSheet} end={slotEnd}
+                    inHeader={tabsInHeader} sheet={active ? tabSheet : null} onSheetClose={closeTabSheet} end={slotEnd} closable={auth?.role !== "watch"}
                     renameRequest={active && renameRequest?.machineId === machineId && renameRequest.paneId === pane.pane_id ? renameRequest : null}
                     onRenameHandled={clearRenameRequest}
                     onNewTab={() => actions.openNewTab(active ? undefined : { machineId, workspaceId: workspace.workspace_id })}
@@ -1144,6 +1191,8 @@ export function App() {
                         backgroundWait={item?.background_wait === true}
                         cwd={item?.cwd ?? null}
                         readsDrags={item ? programReadsDrags(item) : false}
+                        workspaceId={item?.workspace_id ?? null}
+                        workspaceLabel={slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item?.workspace_id)?.label ?? null}
                         machineName={machine?.name ?? machineId}
                         view={item ? lensOf(item) : slotView}
                         // the composer's way to the terminal: the selected pane's lens, or the pane's own remembered one
@@ -1182,8 +1231,10 @@ export function App() {
         </div>}
         {statusBarShown && selectedPane && crumb && <StatusBar machineId={selectedMachineId} workspaceId={selectedPane.workspace_id}
           machine={crumb.machine} place={crumb.folder === null ? crumb.workspace : `${crumb.workspace} › ${crumb.folder}`} path={crumb.path}
-          session={sessionShort.length > 0 ? sessionShort.join(" · ") : null} watching={auth?.role === "watch"}
-          waiting={sessionTally.waiting} onNextWaiting={nextWaiting === null ? null : () => selectPane(nextWaiting)}
+          session={sessionShort.length > 0 ? sessionShort.join(" · ") : null}
+          pcLoad={pcLoadOn(settings, machines) ? <PcLoadStatus key={selectedMachine?.id ?? ""} machine={selectedMachine ?? null} /> : null}
+          watching={auth?.role === "watch"}
+          waiting={sessionTally.waiting} onNextWaiting={nextWaiting === null ? null : openNextWaiting}
           connection={headerConnection ?? (connected ? "live" : "lost")}
           connectionWord={headerConnection === "reconnecting" ? t("Reconnecting…") : connected ? t("Connected") : connWord} />}
         </div>
@@ -1223,6 +1274,7 @@ export function App() {
       /></MachineContext.Provider>
       {sessionHistory && sessionHistoryWorkspace && <MachineContext.Provider value={sessionHistory.machineId}><SessionHistory
         workspace={sessionHistoryWorkspace.workspace}
+        machineName={machines.find((m) => m.id === sessionHistory.machineId)?.name}
         panes={sessionHistoryWorkspace.panes}
         agent={sessionHistory.agent}
         sourcePaneId={sessionHistory.paneId}
@@ -1276,7 +1328,12 @@ export function App() {
       {viewing !== null && !fileDocked && <MachineContext.Provider value={viewing.machineId}>
         <FileViewer key={fileViewerKey(viewing)} path={viewing.path} paneId={viewing.paneId} onClose={closeFile} onOpen={(path) => openFile({ ...viewing, path, presentation })} onKind={reportFileKind} onTogglePresentation={toggleFilePresentation} keyboardActive={!settingsOpen} editable={fileEditable} />
       </MachineContext.Provider>}
-      {unsentFor && <UnsentTextDialog machines={machines} canRecover={unsentFor.pane.agent != null} onClose={closeUnsent} onRecover={recover} />}
+      {worktreeFor && <WorktreeRequestDialog request={worktreeFor} onClose={() => setWorktreeFor(null)} onOpenPane={(paneId) => { setWorktreeFor(null); selectTarget(worktreeFor.machineId, paneId); }} onOpened={(opened) => {
+        setWorktreeFor(null);
+        if (opened.agent_started === true) actions.agentStarted(worktreeFor.machineId, opened.pane_id);
+        selectTarget(worktreeFor.machineId, opened.pane_id);
+      }} />}
+      {unsentFor && <UnsentTextDialog machines={machines} target={unsentFor} canRecover={unsentFor.pane.agent != null} onClose={closeUnsent} onRecover={recover} />}
       <PiVoiceView />
       <CommandPalette key={selectedMachineId} machines={sidebarMachines} onSelect={selectTarget} open={paletteOpen} initialQuery={paletteQuery} onClose={() => setPaletteOpen(false)} snapshot={snapshot} online={selectedMachine?.state === "connected"} selectedPaneId={selectedPaneId}
         // a peek shows the terminal: its toggle says Switch to chat, which ends the peek

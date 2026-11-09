@@ -1,6 +1,5 @@
 import { expect, it } from "bun:test";
-import { codexThreadTitle, folderName, placeLine, shortPathTitle, stripPaneChrome } from "./paneName.ts";
-import { tabTitle } from "./paneName.ts";
+import { codexThreadTitle, folderName, placeLine, shortPathTitle, tabTitle, taskRowLines, stripPaneChrome, unsaidLine } from "./paneName.ts";
 
 it("shows a path title as its last folder, and leaves any other title alone", () => {
   expect(shortPathTitle("/tmp/audit-oDjsU2/lms-backend")).toBe("lms-backend");
@@ -35,6 +34,28 @@ it("finds the folder of a Windows path as of a POSIX one", () => {
   expect(placeLine("api", folderName("C:\\work\\server"))).toBe("api · server");
 });
 
+it("draws a two-line row as the pane's title over its place, without repeating a name", () => {
+  expect(taskRowLines({ paneTitle: "Idempotent payments", labelled: false, folder: "api", workspace: "checkout-api" }))
+    .toEqual({ title: "Idempotent payments", place: "checkout-api · api" });
+  // the folder is the workspace's name: it is said once
+  expect(taskRowLines({ paneTitle: "Guard the export button", labelled: false, folder: "web-dashboard", workspace: "web-dashboard" }))
+    .toEqual({ title: "Guard the export button", place: "web-dashboard" });
+  // a shell titled by its folder leads with the workspace, and the folder follows when it is another name
+  expect(taskRowLines({ paneTitle: "api", labelled: false, folder: "api", workspace: "checkout-api" }))
+    .toEqual({ title: "checkout-api", place: "api" });
+  expect(taskRowLines({ paneTitle: "release", labelled: false, folder: "release", workspace: "release" }))
+    .toEqual({ title: "release", place: "" });
+  // a pane the user named keeps its name, also when it is the folder's
+  expect(taskRowLines({ paneTitle: "api", labelled: true, folder: "api", workspace: "checkout-api" }))
+    .toEqual({ title: "api", place: "checkout-api" });
+  // a linked worktree is placed by its workspace name, then its branch where the name does not say it
+  expect(taskRowLines({ paneTitle: "session-list", labelled: false, folder: "fix-session-list", workspace: "Hotfix", alias: "fix/session-list" }))
+    .toEqual({ title: "session-list", place: "Hotfix · fix/session-list · fix-session-list" });
+  // a pane named as its worktree's workspace does not have that name said again under it
+  expect(taskRowLines({ paneTitle: "Hotfix", labelled: true, folder: "fix-payment", workspace: "Hotfix", alias: "fix/payment" }))
+    .toEqual({ title: "Hotfix", place: "fix/payment · fix-payment" });
+});
+
 it("keeps the thread of a Codex title and drops the project folder Codex adds after it", () => {
   expect(codexThreadTitle("Respond to greeting | worktree-rapid-valley...")).toBe("Respond to greeting");
   expect(codexThreadTitle("Compare a | b outputs | herdr-web-ui")).toBe("Compare a | b outputs");
@@ -58,4 +79,11 @@ it("drops an omp title's glyph and spinner for a row, and keeps them for the bro
   // a shell's title has no mark to keep; a title that is only the mark leaves nothing
   expect(tabTitle("me@host:~/work/api", null)).toBe("api");
   expect(tabTitle("π ⠋ ", "omp")).toBe("");
+});
+
+it("says each part of a row's second line once, and never the name its first line leads with", () => {
+  // a linked worktree labelled Hotfix, its shell in fix-payment, on branch fix/payment: the Recent row leads with Hotfix
+  expect(unsaidLine("Hotfix", ["Hotfix", "fix/payment", "fix-payment"])).toBe("fix/payment · fix-payment");
+  expect(unsaidLine("api", ["Tab 2", "api"])).toBe("Tab 2");
+  expect(unsaidLine("vim", ["api", null, "api", ""])).toBe("api");
 });
