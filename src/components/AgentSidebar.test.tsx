@@ -143,7 +143,7 @@ describe("AgentSidebar phone sheet live row", () => {
 
   it("filters pinned and unpinned agents across PCs without dropping hidden pins", async () => {
     const first = roster()[0]!;
-    const machines: Machine[] = [first, { ...structuredClone(first), id: "vps", name: "VPS", kind: "hc" }].map((machine) => ({
+    const machines: Machine[] = [first, { ...structuredClone(first), id: "vps", name: "VPS", kind: "hc" as const }].map((machine) => ({
       ...machine,
       snapshot: { ...machine.snapshot!, panes: machine.snapshot!.panes.map((pane) => pane.pane_id === paneId ? { ...pane, view: "work" as const } : pane) },
     }));

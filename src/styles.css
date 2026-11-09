@@ -2735,7 +2735,7 @@ button {
     background: var(--bg-panel);
   }
 
-  .app:not(.sidebar-collapsed) .header-side .brand {
+  .app:not(.sidebar-collapsed) .header-side .sidebar-view-switch {
     margin-right: auto;
   }
 }

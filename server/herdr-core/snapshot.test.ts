@@ -19,7 +19,7 @@ describe("buildSnapshot", () => {
       terminal("unknown", { labels: { "ovis.view": "Work" } }),
       terminal("empty", { labels: { "ovis.view": "" } }),
     ], null, "0.1.17");
-    expect(snapshot.panes.map((pane) => [pane.pane_id, pane.view])).toEqual([
+    expect(snapshot.panes.map((pane) => [pane.pane_id, (pane as HerdrPane).view])).toEqual([
       ["work", "work"], ["coding", undefined], ["unknown", undefined], ["empty", undefined],
     ]);
   });
