@@ -37,7 +37,9 @@ const pcListLayout = (page: Page) => page.evaluate(() => {
   const grouped = document.querySelector(".sidebar-shell")!.classList.contains("is-agents-first");
   const end = document.querySelector<HTMLElement>(grouped ? ".sidebar-footer" : ".sidebar-split")!.getBoundingClientRect().top;
   const style = getComputedStyle(pcs);
-  const room = Math.max(0, end - pcs.getBoundingClientRect().top - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom));
+  // A phone reserves a grid row for Coding | Work; only the remaining room belongs to the list.
+  const viewHeight = pcs.querySelector(".sidebar-view-mobile")!.getBoundingClientRect().height;
+  const room = Math.max(0, end - pcs.getBoundingClientRect().top - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - viewHeight);
   list.scrollTop = 0;
   const viewport = list.getBoundingClientRect();
   const first = list.querySelector(".workspace-group")?.getBoundingClientRect();
