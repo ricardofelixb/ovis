@@ -11,6 +11,8 @@ import { Sidebar } from "./Sidebar.tsx";
 import { MachineStats } from "./MachineStats.tsx";
 import { AgentSidebar } from "./AgentSidebar.tsx";
 import { SidebarSplit } from "./SidebarSplit.tsx";
+import { SidebarViewSwitch } from "./SidebarViewSwitch.tsx";
+import { inSidebarView, sidebarSnapshot } from "../lib/sidebarView.ts";
 import { storedSidebarSplit, storeSidebarSplit, type SplitFold, type SplitOrder } from "../lib/sidebarSplit.ts";
 import { SidebarActivityProvider, type SidebarActivity } from "../lib/sidebarActivity.tsx";
 import { filterSuggestions, machineFilter, sidebarFilter, type SidebarBranchLabels } from "../lib/sidebarFilter.ts";
@@ -46,6 +48,11 @@ interface Props { machines: Machine[]; /** every PC of the roster, the hidden on
 export function MachineSidebar(props: Props) {
   const t = useT();
   const activity = props.activity;
+  const { settings } = useSettings();
+  // Work leaves out PCs with no work terminals, like PCs hidden on this device: empty headers add noise.
+  // Keep props.machines whole for pins, actions and attention; only display/search use these snapshots.
+  const viewMachines = useMemo(() => props.machines.map((machine) => ({ ...machine, snapshot: sidebarSnapshot(machine.snapshot, settings.sidebarView) }))
+    .filter((machine) => settings.sidebarView === "coding" || (machine.snapshot?.panes.length ?? 0) > 0), [props.machines, settings.sidebarView]);
   // the filter's query lives here and nowhere else: not in storage, not in the address, not past this
   // mount (lib/sidebarFilter.ts). The branch each roster row says comes up from the rosters, which read it.
   const [query, setQuery] = useState("");
@@ -63,16 +70,15 @@ export function MachineSidebar(props: Props) {
   }), []);
   // one PC shown, and it is the Host: there is no other PC to tell it from, so its group is drawn without its
   // header (MachineGroup), and its name, which no row then shows, is not searched
-  const loneHost = props.machines.length === 1 && props.machines[0]!.kind === "local" ? props.machines[0]!.id : null;
+  const loneHost = viewMachines.length === 1 && viewMachines[0]!.kind === "local" ? viewMachines[0]!.id : null;
   const unnamed = useMemo(() => new Set(loneHost === null ? [] : [loneHost]), [loneHost]);
-  const filter = useMemo(() => sidebarFilter(query, props.machines, { machineId: props.selectedMachineId, paneId: props.selectedPaneId }, t, branchLabels, unnamed), [query, props.machines, props.selectedMachineId, props.selectedPaneId, t, branchLabels, unnamed]);
+  const filter = useMemo(() => sidebarFilter(query, viewMachines, { machineId: props.selectedMachineId, paneId: props.selectedPaneId }, t, branchLabels, unnamed), [query, viewMachines, props.selectedMachineId, props.selectedPaneId, t, branchLabels, unnamed]);
   const filterView = useMemo(() => ({ filter, reportBranches }), [filter, reportBranches]);
   // the field offers the labels the rows show, as the browser's own suggestions: nothing typed is kept
-  const suggestions = useMemo(() => filterSuggestions(props.machines, branchLabels, unnamed), [props.machines, branchLabels, unnamed]);
+  const suggestions = useMemo(() => filterSuggestions(viewMachines, branchLabels, unnamed), [viewMachines, branchLabels, unnamed]);
   // Settings → Appearance → Sidebar filter off leaves the field out until the palette's Filter workspaces and
   // agents asks for it (`filterRequest`); it stays while it holds words, and goes on its close, Escape in it
   // empty, the focus leaving the sidebar while it is empty, or the phone's drawer closing
-  const { settings } = useSettings();
   const shell = useRef<HTMLDivElement>(null);
   const [filterAsked, setFilterAsked] = useState(false);
   const closable = !settings.sidebarFilter && filterAsked;
@@ -170,7 +176,7 @@ export function MachineSidebar(props: Props) {
   };
   const drawerOpen = props.drawerOpen === true;
   // The PCs this device keeps out are chosen in Settings → Devices and PCs → Show in sidebar
-  // (lib/hiddenMachines.ts); the list has no head of its own, so it starts right under the logo.
+  // (lib/hiddenMachines.ts); the list has no head of its own, so it starts right under the view switch.
   const hiddenIds = useHiddenMachines();
   const roster = props.allMachines ?? props.machines;
   const listId = useId();
@@ -218,10 +224,11 @@ export function MachineSidebar(props: Props) {
   const loadingWords = useAnnouncedText(props.machines.length === 0 ? t("Loading PCs…") : null);
   // PCs Tailscale says are offline wait behind one row, unless one of them is the PC in view
   const [showOffline, setShowOffline] = useState(false);
-  const offline = props.machines.filter((machine) => machine.tailnet_offline && machine.id !== props.selectedMachineId);
-  const online = props.machines.filter((machine) => !offline.includes(machine));
+  const shownMachines = props.machines.filter((machine) => viewMachines.some((shown) => shown.id === machine.id));
+  const offline = shownMachines.filter((machine) => machine.tailnet_offline && machine.id !== props.selectedMachineId);
+  const online = shownMachines.filter((machine) => !offline.includes(machine));
   // a PC whose roster has not come was not searched: the line says the answer is only of the PCs that answered
-  const unanswered = props.machines.some((machine) => machine.snapshot === null);
+  const unanswered = shownMachines.some((machine) => machine.snapshot === null);
   const noMatchWords = useAnnouncedText(filter.active && filter.matches === 0 && props.machines.length > 0 ? `${t(unanswered ? "No workspaces or agents match on the PCs that answered" : "No workspaces or agents match")}\n${t("Try other words, or clear the filter.")}` : null);
   // no top bar: a workspace starts from its PC's header (the lone Host's New workspace row), and Add PC lives in
   // Settings → Devices and PCs. The filter above the lists is a row of the same grid, one field and its clear, never
@@ -239,9 +246,9 @@ export function MachineSidebar(props: Props) {
     {/* Settings → Group agents by state: the agents come first on this device, the PCs under them */}
     {settings.agentGroups && agentList}
     {settings.agentGroups && <SidebarSplit shell={shell} order={order} split={splits[order]} controls={agentsListId} onSplit={changeSplit} onFold={foldSections} />}
-    {/* the PCs' list has no head: it starts right under the logo, and with several PCs each PC's own header
-        names it (MachineGroup); a lone Host is drawn without one */}
+    {/* Wide screens keep the switch in the sidebar's header; a phone puts it above the PC list. */}
     <section className="pcs-sidebar" aria-label={t("PCs")}>
+      <div className="sidebar-view-mobile"><SidebarViewSwitch /></div>
       <div ref={machineList} className="machine-list" id={listId} aria-label={t("PCs and workspaces")}>
         <p className={noMatchWords === null ? "visually-hidden" : "tree-state sidebar-filter-empty"} role="status">{noMatchWords}</p>
         {online.map((machine) => <MachineGroup key={machine.id} {...props} machine={machine} headerless={machine.id === loneHost} canHide={canHideMachine(roster, hiddenIds, machine.id)} onHide={() => hideMachine(machine.id)} />)}
@@ -392,7 +399,8 @@ function MachineGroup({ machine, headerless = false, canHide, onHide, ...props }
   };
   // what the header says at rest, in the +'s cell that a hover or the focus gives its actions: how many agents
   // run on this PC, the rows the Agents list holds for it
-  const agentCount = useMemo(() => sidebarAgents(machine.snapshot).length, [machine.snapshot]);
+  const { settings } = useSettings();
+  const agentCount = useMemo(() => sidebarAgents(machine.snapshot).filter((entry) => inSidebarView(entry.pane, settings.sidebarView)).length, [machine.snapshot, settings.sidebarView]);
   // the PC's name is the head of its workspaces, and the caret beside its + the one fold over them
   const screen = props.screenMachineId === machine.id;
   return <section className={`machine-group${props.selectedMachineId === machine.id ? " is-current" : ""}${screen ? " is-screen" : ""}${online ? "" : " is-offline"}${context ? " is-filter-context" : ""}${headerless ? " is-headerless" : ""}${folded ? " is-folded" : ""}`} hidden={hidden} aria-label={t("PC {name}", { name: machine.name })}>
