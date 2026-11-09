@@ -13,7 +13,7 @@ import { openSettingsPage } from "./settings-page.ts";
 // connected PCs, the Host "Laptop" and "Work PC"; no herdr session is opened. Hiding Work PC takes
 // it out of the sidebar, the Agents list and the command palette on this device, moves the
 // selection off it, keeps the last PC shown, survives a reload, and leaves a link to its pane
-// working; Settings brings it back. The PCs list has no head: it starts under the view switch, and says
+// working; Settings brings it back. The PCs list has no head: it starts right under the logo, and says
 // nothing of the PCs it hides. On three PCs at 390 and 1280, light and dark, Settings lists the hidden ones off,
 // shows one again in place, and keeps the last PC shown locked on.
 // Screenshots go to UI_EVIDENCE_DIR when it is set.
@@ -96,8 +96,8 @@ async function open(browser: Browser, width: number, query: string, options: Ope
   return { page, errors, phone, close: () => context.close() };
 }
 
-/** No PCs head or hidden count; the phone's view switch remains above the list. */
-const pcsHead = (page: Page) => page.locator(".pcs-sidebar > :not(.machine-list, .sidebar-view-mobile)");
+/** whatever the PCs list draws above its PCs: nothing any more, no head, no hidden count */
+const pcsHead = (page: Page) => page.locator(".pcs-sidebar > :not(.machine-list)");
 const storedHidden = (page: Page): Promise<unknown> => page.evaluate(() => JSON.parse(localStorage.getItem("ovis:hidden-pcs") ?? "null"));
 const group = (page: Page, name: string) => page.locator(`section.machine-group[aria-label="PC ${name}"]`);
 // the demo's timeline raises a finish droplet at its own moment; the shots are of the sidebar
@@ -167,8 +167,7 @@ try {
           assert.equal(await page.locator('.agent-item[data-machine="work"]').count(), 0, "and the Agents list");
           assert.ok(await page.locator('.agent-item[data-machine="local"]').count() > 0);
           // the list has no head to say it: Settings is where hidden PCs are seen and shown again
-          assert.equal(await pcsHead(page).count(), 0, "no PCs head or hidden count is drawn above the PCs");
-          assert.equal(await page.locator(".sidebar-view-switch:visible").count(), 1, "hiding a PC keeps the view switch");
+          assert.equal(await pcsHead(page).count(), 0, "nothing is drawn above the PCs");
           assert.equal(await page.locator(".machine-hidden-note").count(), 0, "no line under the PCs says it either");
           if (evidence) { await still(page); await page.screenshot({ path: join(evidence, `hide-pc-sidebar-${width}.png`) }); }
 
@@ -244,7 +243,7 @@ try {
         } finally { await close(); }
       }
 
-      // Three PCs, two hidden and a third id stored for a PC since removed: the list has no PC heading
+      // Three PCs, two hidden and a third id stored for a PC since removed: the list starts right under the logo
       // with no head and no count, and Settings lists the hidden ones off, shows one again, and keeps the last PC shown on
       for (const width of [390, 1280]) {
         for (const theme of ["light", "dark"] as const) {
@@ -253,9 +252,9 @@ try {
             await sidebar(page, phone);
             assert.equal(await group(page, "Work PC").count() + await group(page, "Lab PC").count(), 0, "both hidden PCs are out of the sidebar");
             assert.equal(await pcsHead(page).count(), 0, "no PCs head, no hidden count");
-            const list = (await page.locator(".machine-list").boundingBox())!;
+            const section = (await page.locator(".pcs-sidebar").boundingBox())!;
             const first = (await group(page, "Laptop").boundingBox())!;
-            assert.ok(first.y - list.y >= 0 && first.y - list.y < 16, `the first PC starts the list, with no PCs head above it (${first.y - list.y}px)`);
+            assert.ok(first.y - section.y < 16, `the first PC starts the PCs' section, with no head above it (${first.y - section.y}px)`);
             if (evidence) { await still(page); await page.screenshot({ path: join(evidence, `hidden-pcs-sidebar-${width}-${theme}.png`), style: NO_DROPLET }); }
 
             await page.locator(".sidebar-footer-settings").click();
@@ -279,7 +278,7 @@ try {
             assert.deepEqual(errors, []);
           } finally { await close(); }
         }
-        console.log(`PASS ${width}px: no PCs head or hidden count, the list has no PC heading, Settings shows a hidden PC again and keeps the last one shown, light and dark`);
+        console.log(`PASS ${width}px: no PCs head or hidden count, the list starts under the logo, Settings shows a hidden PC again and keeps the last one shown, light and dark`);
       }
     } finally { await browser.close(); }
   } finally { await server.stop(true); }

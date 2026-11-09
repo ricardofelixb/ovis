@@ -331,8 +331,7 @@ async function withScenario(browser: Awaited<ReturnType<typeof chromium.launch>>
       await openMenu(page, managed, scenario);
       await item(page, "Hide on this device").click();
       await managed.waitFor({ state: "detached" });
-      assert.equal(await page.locator(".pcs-sidebar > :not(.machine-list, .sidebar-view-mobile)").count(), 0, "no PCs head or hidden count");
-      assert.equal(await page.locator(".sidebar-view-switch:visible").count(), 1, "one view switch, in the desktop head or above the phone's PCs");
+      assert.equal(await page.locator(".pcs-sidebar > :not(.machine-list)").count(), 0, "no PCs head or hidden count");
       await page.waitForFunction(() => document.activeElement?.closest(".machine-list") !== null, undefined, { timeout: 5000 })
         .catch(async () => assert.fail(`the focus fell to ${await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80) ?? "nothing")}`));
       assert.deepEqual(JSON.parse(await page.evaluate(() => localStorage.getItem("ovis:hidden-pcs") ?? "[]")), ["sidebar-managed-fixture"], "the PC is hidden on this device only");

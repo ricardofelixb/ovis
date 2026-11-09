@@ -30,7 +30,6 @@ import { useSidebarActivity } from "../lib/sidebarActivity.tsx";
 import { filterWorkspaceGroups, machineFilter } from "../lib/sidebarFilter.ts";
 import { useSidebarFilter } from "../lib/sidebarFilterContext.ts";
 import { useSettings } from "../lib/settings.ts";
-import { sidebarSnapshot } from "../lib/sidebarView.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { useAnnouncedText } from "../lib/useAnnouncedText.ts";
 import { useWorktreeBranches } from "../lib/useWorktreeBranches.ts";
@@ -255,7 +254,6 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   const { settings } = useSettings();
   // Settings > Appearance > Agents under workspaces: each workspace's agents hang under its row (#773)
   const agentTree = settings.sidebarAgentTree;
-  const viewSnapshot = useMemo(() => sidebarSnapshot(snapshot, settings.sidebarView), [snapshot, settings.sidebarView]);
   const machineId = useMachineId();
   const pressPane = useContext(PanePressContext);
   // what the PC's herdr answers for its workspaces (lib/machineContext.tsx): herdr-core has no worktrees, and
@@ -412,12 +410,12 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   }, [snapshot, machineId]);
 
   const orderedWorkspaces = useMemo(() => {
-    if (!viewSnapshot) return [];
-    const byId = new Map(viewSnapshot.workspaces.map((workspace) => [workspace.workspace_id, workspace]));
+    if (!snapshot) return [];
+    const byId = new Map(snapshot.workspaces.map((workspace) => [workspace.workspace_id, workspace]));
     return workspaceOrder.map((id) => byId.get(id)).filter((workspace): workspace is WorkspaceInfo => workspace !== undefined);
-  }, [viewSnapshot, workspaceOrder]);
-  const roster = useMemo(() => rosterPanes(viewSnapshot?.panes ?? [], selectedPaneId), [viewSnapshot?.panes, selectedPaneId]);
-  const agentRows = useMemo(() => sidebarAgents(viewSnapshot), [viewSnapshot]);
+  }, [snapshot, workspaceOrder]);
+  const roster = useMemo(() => rosterPanes(snapshot?.panes ?? [], selectedPaneId), [snapshot?.panes, selectedPaneId]);
+  const agentRows = useMemo(() => sidebarAgents(snapshot), [snapshot]);
   const agentByPane = useMemo(() => new Map(agentRows.map((entry) => [entry.pane.pane_id, entry])), [agentRows]);
   const agentNames = useMemo(() => workspaceAgentLabels(agentRows), [agentRows]);
   // a repository's worktree workspaces hang under one on its main checkout (lib/workspaceOrder.ts)

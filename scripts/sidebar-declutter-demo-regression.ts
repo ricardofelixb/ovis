@@ -190,8 +190,7 @@ async function twoPcs(browser: Browser, scene: Scene): Promise<void> {
     try {
       await newRow(page).waitFor();
       assert.equal(await headers(page).count(), 0, "the Host shown alone of two has no header");
-      assert.equal(await page.locator(".pcs-sidebar > :not(.machine-list, .sidebar-view-mobile)").count(), 0, "no PCs head or hidden count above the list");
-      assert.equal(await page.locator(".sidebar-view-switch:visible").count(), 1, "the view switch stays when only one PC is shown");
+      assert.equal(await page.locator(".pcs-sidebar > :not(.machine-list)").count(), 0, "no PCs head or hidden count above the list");
       await capture(page, scene, "host-shown-of-two");
       assert.deepEqual(errors, []);
     } finally { await context.close(); }

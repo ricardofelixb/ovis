@@ -2214,10 +2214,11 @@ button {
   }
 }
 
-/* Coding | Work uses the same pressed segments as Settings; leave room for the head's two tools. */
-.sidebar-view-switch {
-  flex: 0 1 auto;
-  min-width: 0;
+/* the Ovis wordmark at the head of the sidebar (App.tsx SidebarBrand), the theme's own pair */
+.sidebar-brand img {
+  display: block;
+  width: auto;
+  height: 24px;
 }
 
 /* the pane's tools at the end of the header's row: Chat/Terminal, Files (and More beside them) as
@@ -2735,7 +2736,7 @@ button {
     background: var(--bg-panel);
   }
 
-  .app:not(.sidebar-collapsed) .header-side .sidebar-view-switch {
+  .app:not(.sidebar-collapsed) .header-side .brand {
     margin-right: auto;
   }
 }

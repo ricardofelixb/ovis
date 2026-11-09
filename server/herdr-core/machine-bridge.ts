@@ -12,6 +12,9 @@ export interface HcMachine {
   id: string;
   /** what this core calls it: its terminals are `<name>/t3` */
   name: string;
+  /** what `hc machine add` was given to reach it (an ssh destination), and the host name it answers to */
+  target: string;
+  host: string;
   connected: boolean;
   /** why it is not connected, in hc's words; null when hc gives none */
   why: string | null;
@@ -20,7 +23,7 @@ export interface HcMachine {
 export async function listHcMachines(hc: Pick<HcConnection, "call">): Promise<HcMachine[]> {
   const { machines } = await hc.call("machine.list", {});
   return machines.filter((machine) => machine.temporary !== true)
-    .map((machine) => ({ id: machine.id, name: machine.name, connected: machine.state === "connected", why: machine.why ?? (machine.state === "connected" ? null : machine.state) }));
+    .map((machine) => ({ id: machine.id, name: machine.name, target: machine.target, host: machine.host, connected: machine.state === "connected", why: machine.why ?? (machine.state === "connected" ? null : machine.state) }));
 }
 
 /** A machine's own server (machine-entry.ts), on loopback for this one, and how to end it. */

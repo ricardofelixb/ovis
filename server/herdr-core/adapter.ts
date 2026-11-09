@@ -11,7 +11,7 @@ import { foreignLayout, leaves, neighbour, OVIS_LAYOUT_DOC, type OvisLayout, typ
 import { paneSession, titleStatus } from "../agent-identity.ts";
 import { piSessionName } from "../pi.ts";
 import { PiSessionReader } from "../pi-session-metadata.ts";
-import { agentInfoOf, agentOf, agentOfStatus, type CoreHost, coreHost, agentStatusOf, foregroundOf, type HcForeground, buildSnapshot, type FirstTurn, keptLayout, opencodeRecords, type SessionOf, reportedFacts, type HcStatus, type HcTerminal, hcKeyName, HERDR_PROTOCOL, isRecord, keyBytes, LAYOUT_DOC, onOtherMachine, OTHER_WORKSPACE_ID, PANE_NAME_LABEL, processInfoOf, SEEN_LABEL, shownStatusOf, SPACE_LABEL, TAB_LABEL, TAB_NAME_LABEL, WORKSPACE_NAME_LABEL } from "./snapshot.ts";
+import { agentInfoOf, agentOf, agentOfStatus, type CoreHost, coreHost, agentStatusOf, foregroundOf, type HcForeground, buildSnapshot, type FirstTurn, keptLayout, opencodeRecords, type SessionOf, reportedFacts, type HcStatus, type HcTerminal, hcKeyName, HERDR_PROTOCOL, hiddenTerminal, isRecord, keyBytes, LAYOUT_DOC, onOtherMachine, OTHER_WORKSPACE_ID, PANE_NAME_LABEL, processInfoOf, SEEN_LABEL, shownStatusOf, SPACE_LABEL, TAB_LABEL, TAB_NAME_LABEL, WORKSPACE_NAME_LABEL } from "./snapshot.ts";
 import { checkoutHolding, defaultCheckoutPath, factsOf, git, gitDirIdentity, labeledWorktree, realPath, type Checkout, type Repository, repositoryOf, WORKTREE_LABEL, WorktreeError, worktreeFolder, worktreeLabel } from "./worktrees.ts";
 import type { AgentStatus, SessionSnapshot } from "../../shared/herdr-api.generated.ts";
 import type { WorktreeInfo } from "../herdr/client.ts";
@@ -1314,7 +1314,7 @@ async function subscribe(hc: HcConnection, socket: Socket<ConnectionState>, requ
     }
   };
   const lifecycle = (event: string, type: string, paneId?: string) => {
-    if (structure) emit(event, { type, ...(paneId ? { pane_id: paneId } : {}) });
+    if (structure && !hidden(paneId)) emit(event, { type, ...(paneId ? { pane_id: paneId } : {}) });
   };
   /**
    * What each terminal's status is shown from, as the snapshot shows it (snapshot.ts
@@ -1336,7 +1336,10 @@ async function subscribe(hc: HcConnection, socket: Socket<ConnectionState>, requ
     known.set(record["address"], { status, front: foregroundOf(record["foreground"]), cwd: typeof record["cwd"] === "string" ? record["cwd"] : undefined, argv: Array.isArray(record["argv"]) && record["argv"].every((word) => typeof word === "string") ? record["argv"] : undefined, pid: typeof record["pid"] === "number" ? record["pid"] : null, title: typeof record["title"] === "string" ? record["title"] : null, turn, first, labels, shown: shownStatusOf(status, turn, labels, first) });
     observeSeen?.(record["address"], turn, labels);
   };
+  /** a hidden terminal (snapshot.ts `hiddenTerminal`) is in no snapshot, so no event about it is told either */
+  const hidden = (paneId: string | undefined): boolean => paneId !== undefined && hiddenTerminal(known.get(paneId)?.labels);
   const tell = (paneId: string, status: HcStatus | null, shown: AgentStatus) => {
+    if (hidden(paneId)) return;
     const entry = known.get(paneId);
     emit(STATUS_EVENT, { pane_id: paneId, agent_status: shown, agent: agentNow(status, entry) });
   };
@@ -1403,8 +1406,8 @@ async function subscribe(hc: HcConnection, socket: Socket<ConnectionState>, requ
         lifecycle("pane.closed", "pane_closed", paneId);
         return;
       case "removed":
-        if (paneId) { known.delete(paneId); reported.delete(paneId); }
         lifecycle("pane.closed", "pane_closed", paneId);
+        if (paneId) { known.delete(paneId); reported.delete(paneId); }
         return;
       case "lost":
       case "restarted":

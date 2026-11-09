@@ -1039,7 +1039,16 @@ macOS). See [INSTALL.md](../INSTALL.md#2-choose-the-install-method).
   and the folder picker are refused for it. A folder typed for a new workspace there is passed to
   that machine as written (empty: its home). Pins and "seen" are not shared with the Herdr app
   there. Temporary machines (`hc machine add --temp`) are not shown, and
-  PCs added over SSH or through the relay keep working beside them.
+  PCs added over SSH or through the relay keep working beside them. A machine that is the same
+  computer as an SSH or relay PC of this server (the same whole host in its `hc machine add` target
+  or host name and in the SSH PC's destination, as written or as `ssh -G` resolves each; the same
+  name only where no host tells them apart, and never when their hosts differ) is shown once: the SSH or relay PC stays, as it has the files and chat history, and Ovis starts no
+  server for the core's machine. Remove that PC and the core's machine shows again.
+- **Hidden terminals:** a terminal labeled `ovis.view=work` (`hc run --label ovis.view=work`, or
+  `hc label <terminal> ovis.view=work`), such as an assistant a gateway keeps for your phone, is
+  not shown anywhere in Ovis: not in workspaces, **Other terminals**, **Agents**, alerts or the
+  attention counts. It keeps running, and `hc attach` still reaches it. Only that exact value
+  hides a terminal.
 
 ## Configuration
 
