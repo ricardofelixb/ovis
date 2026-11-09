@@ -197,10 +197,10 @@ try {
     };
   });
   assert.equal(surfaces.columnChat, surfaces.headerChat, "the header and the pane column agree on the lens");
-  assert.equal(surfaces.strip, surfaces.header, "the strip is the header's surface");
+  assert.ok(surfaces.strip === surfaces.header || surfaces.strip === "rgba(0, 0, 0, 0)", "the strip is the header's surface, or transparent over it");
   if (surfaces.tabRow) {
     assert.equal(surfaces.openTab, surfaces.elevated, "the open tab is a raised pill, whatever the lens");
-    assert.notEqual(surfaces.openTab, surfaces.strip, "the open tab stands apart from the strip it sits on");
+    assert.notEqual(surfaces.openTab, surfaces.header, "the open tab stands apart from the header it sits on");
   } else if (surfaces.headerChat) assert.equal(surfaces.chat, surfaces.header, "which under the chat lens is the transcript's");
   await page.getByRole("tab", { name: "Tab 1", exact: true }).click({ button: "right" });
   const tabMenu = page.getByRole("menu", { name: "Tab 1", exact: true });

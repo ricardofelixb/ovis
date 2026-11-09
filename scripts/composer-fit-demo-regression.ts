@@ -1026,9 +1026,8 @@ try {
       });
       await withCard(browser, 390, { agent: "codex", model: "gpt-5.6", showUsage: true }, async (page) => {
         assert.equal(await page.locator(".composer-status .composer-usage").count(), 0, "mobile omits the desktop quota even when sidebar limits are enabled");
-        assert.equal(await page.locator(".composer-context").evaluate((node) => node.tagName === "BUTTON" && node.getAttribute("aria-expanded") === "false"), true, "mobile keeps only the context ring");
+        assert.equal(await page.locator(".composer-context").evaluate((node) => node.tagName === "SPAN" && !node.hasAttribute("aria-expanded")), true);
       });
-      console.log("PASS desktop quota is read-only and session-first with weekly fallback; mobile keeps only the context ring");
       // a pi pane draws on the plan of the provider its conversation runs at, and on none without one
       for (const [agent, provider, text, account] of [["pi", "openai-codex", "5h 22%", /sam@work\.example/], ["omo", "anthropic-subscription", "5h 38%", /Claude · sam@example\.com/]] as const) {
         await withCard(browser, 1440, { agent, model: "gpt-5.6", provider, showUsage: true }, async (page) => {
@@ -1043,7 +1042,7 @@ try {
         await page.locator(".composer-status").waitFor();
         assert.equal(await page.locator(".composer-status .composer-usage").count(), 0, "no plan without a provider that names one");
       });
-      console.log("PASS a pi pane follows its provider's plan");
+      console.log("PASS desktop quota is read-only and session-first with weekly fallback; mobile keeps only the inert context ring; a pi pane follows its provider's plan");
 
       // The message box is typed at the transcript's size (Settings → Chat font size): with a mouse
       // exactly, on a phone never under 16px, the smallest size iOS does not zoom the page for
