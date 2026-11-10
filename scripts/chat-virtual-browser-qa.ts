@@ -359,7 +359,8 @@ try {
     const newest = page.locator("[data-chat-row]").filter({ hasText: "FOLD-CHAT-END" });
     const block = newest.locator(".work-block-head");
     if (await block.getAttribute("aria-expanded") === "false") await block.click();
-    const testRow = newest.locator(".work-row").filter({ has: page.locator(".work-row-head", { hasText: "bun test" }) });
+    await openWorkRuns(newest);
+    const testRow = newest.locator(".work-row:not(.work-run)").filter({ has: page.locator(".work-row-head", { hasText: "bun test" }) });
     await testRow.locator(".work-row-head").click();
     const more = testRow.locator(".chat-tool-result-more");
     await more.waitFor();
@@ -406,7 +407,7 @@ try {
     assert.ok((await testOutput.evaluate((node) => (node as HTMLElement).innerText)).includes("(pass) test 100"), "a find match in the tail unfolds the output");
     console.log(`PASS ${width}: a folded output's tail stays findable and a match unfolds it`);
     // one very long line folds by its length, with the same row
-    const longLine = newest.locator(".work-row").filter({ has: page.locator(".work-row-head", { hasText: "cat big.json" }) });
+    const longLine = newest.locator(".work-row:not(.work-run)").filter({ has: page.locator(".work-row-head", { hasText: "cat big.json" }) });
     await longLine.locator(".work-row-head").click();
     const longMore = longLine.locator(".chat-tool-result-more");
     await longMore.waitFor();

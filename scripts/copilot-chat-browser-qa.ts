@@ -109,6 +109,10 @@ console.log("fixture ready");`);
   await log.getByText("Proceed with this choice?").waitFor();
   await log.locator(".chat-ask-options").getByText("Yes", { exact: true }).waitFor();
   await log.locator(".chat-ask-options").getByText("No", { exact: true }).waitFor();
+  // Return from the expanded output to following the end before testing new turns.
+  if (await head.getAttribute("aria-expanded") === "true") await head.click();
+  const jump = page.getByRole("button", { name: "Jump to latest", exact: true });
+  if (await jump.isVisible()) await jump.click();
   appendFileSync(transcript, event("session.resume", { selectedModel: "fixture-model" })
     + event("user.message", { content: "Follow-up prompt" })
     + event("assistant.message", { content: "Follow-up answer.", phase: "final_answer", model: "fixture-model" }));

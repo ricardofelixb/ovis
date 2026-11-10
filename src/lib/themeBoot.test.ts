@@ -3,7 +3,7 @@ import { DEFAULT_SETTINGS, loadSettings, resolveTheme, sanitizeSettings } from "
 import { applyThemeEntry, CUSTOM_ROWS_STORAGE_KEY, CUSTOM_THEMES_STORAGE_KEY, DEFAULT_APPEARANCE, readStoredAppearance, savedThemeEntry, SETTINGS_STORAGE_KEY, storedAppearance, THEME_VARS, THEMES_STORAGE_KEY } from "./themeBoot.ts";
 import { bootRows, customRow, drawnTheme, NO_CUSTOM_THEMES, readThemeFile, withTheme, type CustomTheme } from "./customThemes.ts";
 import { themeFor } from "./themeFor.ts";
-import { rowFor, SUPPORTED_ENTRIES, THEME_IDS, type DrawnTheme, type ThemeEntry } from "./themes.ts";
+import { rowFor, SUPPORTED_ENTRIES, THEME_IDS, type DrawnTheme } from "./themes.ts";
 
 // The page's boot script and the app read the same two records; whatever they hold, both must draw
 // the same row, or the first frame is not the one the app goes on showing.
