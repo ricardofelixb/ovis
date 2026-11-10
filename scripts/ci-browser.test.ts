@@ -205,6 +205,7 @@ const MANUAL_BROWSER_SCRIPTS = [
   "scripts/output-browser-qa.ts", // docs/terminal-flow-control.md
   "scripts/reconnect-header-demo-regression.ts", // upstream's connection line in the header's crumb: this fork's header has tabs and no crumb
   "scripts/skill-activity-browser-qa.ts", // docs/chat-skill-activity.md
+  "scripts/tab-agent-mark-demo-regression.ts", // upstream's agent logo in a header tab (.tab-strip-agent): this fork's tabs show the agent's friend in .tab-strip-faces
   "scripts/terminal-file-links-regression.ts",
   "scripts/update-browser-qa.ts", // a private Git remote and install (docs/app-updates.md)
   "scripts/windows-lens-browser-qa.ts",

@@ -169,6 +169,8 @@ const BASE: Record<string, string> = {
   "Choosing this PC's Ovis server over SSH requires Linux or macOS": "SSH로 이 PC의 Ovis 서버를 선택하려면 Linux 또는 macOS가 필요합니다",
   "Browse files": "파일 찾아보기",
   "Copy link": "링크 복사",
+  "Find…": "찾기…",
+  "Pane and tab…": "패널·탭…",
   "Goal: {objective}": "목표: {objective}",
   "Transcript size unknown": "대화 기록 크기 알 수 없음",
   "Transcript {size}": "대화 기록 {size}",
@@ -417,7 +419,7 @@ const BASE: Record<string, string> = {
   "Selected": "선택됨",
   // Recover unsent text (components/UnsentText.tsx)
   "Unsent text · {destination}": "보내지 않은 글 · {destination}",
-  "Text you had not sent when herdr restarted. A new herdr gives pane IDs out again, so it waits here rather than in a pane it was not written for. Nothing here is sent.": "재시작 전에 보내지 못한 글입니다. 대상 패널을 확인한 뒤 입력창에 넣으세요.",
+  "Text you had not sent before herdr restarted. Copy it and paste it where you need it. Nothing here is sent.": "재시작 전에 보내지 못한 글입니다. 복사해서 필요한 곳에 붙여 넣으세요. 자동으로 보내지 않습니다.",
   "Put in message box adds this text to {destination}. Nothing is sent.": "입력창에 넣기를 누르면 {destination}에 글이 들어갑니다. 보내지는 않습니다.",
   "Put in message box": "입력창에 넣기",
   "Adds the text to this pane's message box. Nothing is sent.": "이 패널의 입력창에 글을 추가합니다. 보내지는 않습니다.",
@@ -580,6 +582,9 @@ const BASE: Record<string, string> = {
   "Close pane {name}?": "{name} 패널을 닫을까요?",
   "The pane's running processes will stop. Closing its last pane also closes the workspace.": "패널에서 실행 중인 프로세스가 종료됩니다. 마지막 패널을 닫으면 워크스페이스도 닫힙니다.",
   "Close pane": "패널 닫기",
+  "Plan · {plan}": "플랜 · {plan}",
+  "{used}/{max} PCs": "PC {used}/{max}대",
+  "{used} / {cap} relay data": "릴레이 데이터 {used} / {cap}",
 };
 
 /** The parts KO is made of; src/lib/i18n.test.ts fails when a key is in two parts, since a spread keeps only the last. */

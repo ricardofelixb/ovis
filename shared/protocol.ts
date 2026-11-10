@@ -46,7 +46,7 @@ export interface HerdrUiConfig {
 export type HerdrWorkspace = WorkspaceInfo;
 export type HerdrTab = TabInfo;
 /**
- * `background_tasks`: an OmO pane's `task` children, or a Claude Code pane's subagents and background commands, still running, counted by the server; absent when none.
+ * `background_tasks`: an OmO pane's `task` children, a Claude Code or OpenCode pane's subagents and background commands, or an agy or grok pane's background tasks, still running, counted by the server; absent when none.
  * `background_wait`: the pane is at rest while work its turn started still runs, and the turn goes on when it ends (server/background-wait.ts); absent when not.
  * `plan`: how far the pane's agent's task list or checklist has progressed; absent when it keeps none.
  * `context`: how much of its context a Claude Code or Codex pane's last request filled, read from its transcript as the chat's ring reads it; absent before one reports it.
@@ -609,6 +609,19 @@ export interface RelayStatus {
     /** false while the pass in use says new client sessions to this PC are not allowed and the relay says it holds; absent otherwise */
     readonly new_sessions?: false;
   };
+}
+
+/**
+ * The account service's GET /v1/account/limits, as Settings → Account reads it: the account's plan
+ * name, PC slot limit, and optional relay data allowance as reported by the account service.
+ */
+export interface AccountLimits {
+  readonly plan: string;
+  readonly pcs_max: number;
+  readonly pcs_used?: number;
+  readonly data_cap_bytes?: number;
+  readonly data_used_bytes?: number | null;
+  readonly until?: number | null;
 }
 
 /** POST /api/devices/pair's answer to a request that accepts JSON: the device's own credential. */
