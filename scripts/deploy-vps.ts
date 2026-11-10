@@ -18,7 +18,10 @@
  *    gets it the "Restart it there" banner;
  * 3. waits until the server runs HEAD, then checks from omarchy that the tailnet address serves the
  *    new bundle;
- * 4. restarts the Ovis app on the Xiaomi over adb, since the Android app ignores a reload.
+ * 4. updates the Ovis of every PC this server reaches over SSH (`~/.local/share/ovis/app`, install.sh's checkout)
+ *    to the same commit and restarts it, since this Ovis refuses a PC whose Ovis is older, and those PCs only
+ *    update themselves to a release tag;
+ * 5. restarts the Ovis app on the Xiaomi over adb, since the Android app ignores a reload.
  *
  * It also sets OVIS_AUTO_UPDATE=1 in `~/.config/ovis/env`, which every start of the unit reads (this
  * one, and the one at login after a reboot): from then on the VPS's updater installs by itself every newer plain
@@ -116,6 +119,26 @@ if (!remote.ok) fail(`could not reach ${publicUrl} from ${checkHost}: ${remote.o
 if (bundleOf(remote.out) !== bundle) fail(`${checkHost} gets ${bundleOf(remote.out) ?? "no bundle"} from ${publicUrl}, not ${bundle}`);
 console.log(`deploy-vps: ${checkHost} gets ${bundle} at ${publicUrl}`);
 
+// The PCs whose own Ovis this server bridges to: each must run this commit too, or this server refuses it.
+const machines = await (await fetch(`${local}api/machines`)).json() as { machines?: { name: string; kind: string; target?: { destination?: string; own_ovis?: string } }[] };
+const pcs = (machines.machines ?? []).filter((machine) => machine.kind === "ssh" && machine.target?.own_ovis && machine.target.destination);
+const stale: string[] = [];
+for (const pc of pcs) {
+  console.log(`deploy-vps: updating ${pc.name}'s Ovis to ${head.slice(0, 8)}`);
+  const steps = [
+    ...pullMainSteps("$HOME/.local/share/ovis/app"),
+    `test "$(git rev-parse HEAD)" = ${head} || { echo "deploy-vps: origin/main there is not ${head.slice(0, 8)}" >&2; exit 1; }`,
+    ". scripts/bun-path.sh",
+    "bun install --frozen-lockfile",
+    "bun run build",
+    "if systemctl --user cat ovis.service >/dev/null 2>&1; then systemctl --user restart ovis.service; elif launchctl print gui/$(id -u)/sh.ovis.server >/dev/null 2>&1; then HERDR_PLUGIN_STATE_DIR=$HOME/.local/state/ovis HERDR_PLUGIN_CONFIG_DIR=$HOME/.config/ovis bun scripts/plugin.ts stop && launchctl kickstart -k gui/$(id -u)/sh.ovis.server; else echo 'deploy-vps: no ovis.service or sh.ovis.server there' >&2; exit 1; fi",
+    `port=$(sed -n 's/^PORT=//p' "$HOME/.config/ovis/env" 2>/dev/null | tail -1); for i in $(seq 90); do curl -s -m 2 "http://127.0.0.1:\${port:-7317}/api/updates" | grep -q '"current_revision":"${head}"' && exit 0; sleep 1; done; echo 'deploy-vps: its server does not run the new commit after 90s' >&2; exit 1`,
+  ];
+  const done = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", pc.target!.destination!, `bash -lc ${shellQuote(steps.join(" && "))}`]);
+  if (done.ok) console.log(`deploy-vps: ${pc.name} runs ${head.slice(0, 8)}`);
+  else { stale.push(pc.name); console.error(`deploy-vps: ${pc.name} was not updated: ${done.out.slice(-400)}`); }
+}
+
 const adbOnPath = run(["sh", "-c", "command -v adb"]).out;
 const adb = adbOnPath || join(homedir(), "Android/Sdk/platform-tools/adb");
 if (!existsSync(adb)) fail("no adb here: restart the Ovis app on the Xiaomi by hand (swipe it away, reopen it)");
@@ -126,4 +149,5 @@ if (run([adb, "-s", adbSerial, "get-state"]).out !== "device") {
 run([adb, "-s", adbSerial, "shell", "am", "force-stop", androidApp]);
 run([adb, "-s", adbSerial, "shell", "monkey", "-p", androidApp, "-c", "android.intent.category.LAUNCHER", "1"]);
 await waitFor("the Ovis app to start on the Xiaomi", 15_000, () => run([adb, "-s", adbSerial, "shell", "pidof", androidApp]).ok);
-console.log(`deploy-vps: deployed ${head.slice(0, 8)}; the Xiaomi app restarted. Desktop windows only need a reload.`);
+if (stale.length) fail(`deployed ${head.slice(0, 8)} on the VPS and the Xiaomi, but not on ${stale.join(", ")}, which this server refuses until they run it too`);
+console.log(`deploy-vps: deployed ${head.slice(0, 8)}; the Xiaomi app and ${pcs.length} PC(s) restarted. Desktop windows only need a reload.`);
