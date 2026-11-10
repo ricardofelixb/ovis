@@ -76,7 +76,8 @@ import type { AppActions, PaneView, PaneControls } from "./lib/actions.ts";
 import { removePushSubscription } from "./lib/push.ts";
 import { resetPushHealth } from "./lib/pushHealth.ts";
 import { useUpdates } from "./lib/updates.ts";
-import { UpdateNotice } from "./components/UpdateControls.tsx";
+import { useDesktopUpdate } from "./lib/desktopUpdate.ts";
+import { DesktopUpdateNotice, UpdateNotice } from "./components/UpdateControls.tsx";
 import { LanExposureNotice } from "./components/LanExposureNotice.tsx";
 import { PushHealthNotice } from "./components/PushHealthNotice.tsx";
 import { RelayNotice } from "./components/RelayNotice.tsx";
@@ -248,6 +249,7 @@ export function App() {
   const { locked, setLocked, lockReason, pairCode, consumePairCode, pairingUnconfirmed, onPaired, auth, canSignOut, security, readBridgeHealth } = useAccessState({ ui: settings.uiFontFamily, chat: settings.chatFontFamily });
   const { pairedNotices, setPairedNotices, dismissPairedNotice, relayPairings, setRelayPairings, remotePairings, setRemotePairings, removedNotices, setRemovedNotices, dismissRemovedNotice } = usePairedNotices();
   const updates = useUpdates(locked === false);
+  const desktopUpdate = useDesktopUpdate();
   const { selectedPaneId, setSelectedPaneId, notificationViewTarget, setNotificationViewTarget, terminalPeek, setTerminalPeek, endPeek, pendingLink, linkLanded, setLinkLanded, rosterSeq, linkSince, selectionSince, rosterTick, setRosterTick, linkTick, setLinkTick } = useSelectionState({ initialLink });
   // a PC's desktop (ComputerView) over the pane area, opened from its sidebar header; any pick closes it
   const [screenMachineId, setScreenMachineId, keptScreenId] = useComputerView();
@@ -652,7 +654,7 @@ export function App() {
         const found = newTabTarget();
         // the workspaces the sidebar and the palette offer worktrees for (lib/repositoryWorkspaces.ts)
         const machine = machinesRef.current.find((candidate) => candidate.id === found?.machineId);
-        if (!found || machine?.state !== "connected" || !worktreesStartHere(found.machineId, found.workspace)) return;
+        if (!found || machine?.state !== "connected" || !worktreesStartHere(found.machineId, found.workspace, machine.snapshot?.herdr_lifetime)) return;
         setDrawerOpen(false);
         setWorktreeFor({ machineId: found.machineId, machineName: machine.name, workspace: found.workspace, mode });
       },
@@ -1062,6 +1064,7 @@ export function App() {
         <div className={`pane-column${chatShown && screenMachineId === null ? " is-chat" : ""}`} inert={drawerModal || undefined}>
         {/* over the pane only: a bar across the window would cut the sidebar off from its top row in the header */}
         <UpdateNotice updates={updates} onOpen={() => { setSettingsSection("updates"); setSettingsOpen(true); }} />
+        <DesktopUpdateNotice update={desktopUpdate} />
         <TelemetryNotice enabled={locked === false} onOpen={() => { setSettingsLinkPage("about"); setSettingsLinkSection("telemetry"); setSettingsOpen(true); }} />
         <MachineActionBanner machines={machines} onSetup={(machine, update = false) => { setDrawerOpen(false); setUpdateRemote(update); setMachineDialog(machine); }} />
         {layoutNotice && <p className="pane-notice" role="alert">{layoutNotice}</p>}

@@ -15,15 +15,19 @@ export type TerminalColors = { readonly background: string; readonly foreground:
   & Readonly<Partial<Record<keyof typeof LIGHT_ANSI_ROLES, string>>>;
 
 /**
- * A row as the page draws it: a table row, or one derived from a device's Omarchy theme
- * (lib/omarchyTheme.ts) over the default theme's row of its mode, with `tokens` set inline over it.
+ * What a row gives the page: a built-in theme's entry, or the row derived from an imported theme
+ * (customThemes.ts), which carries its colours itself.
  */
 export interface DrawnTheme {
-  readonly id: ThemeId;
+  readonly id: string;
   readonly mode: Mode;
+  readonly terminal: TerminalColors;
   readonly bgPanel: string;
   readonly bg: string;
-  readonly terminal: TerminalColors;
+  readonly preview: { readonly elevated: string; readonly border: string; readonly text: string; readonly textDim: string; readonly accent: string; readonly primary: string };
+  /** an imported theme's colours by role name, set on the document as custom properties; a built-in row's are in src/styles.css */
+  readonly vars?: Readonly<Record<string, string>>;
+  /** Device-local Omarchy overrides, with full custom property names. */
   readonly tokens?: Readonly<Record<string, string>>;
 }
 
