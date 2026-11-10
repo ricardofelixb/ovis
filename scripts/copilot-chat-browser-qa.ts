@@ -43,9 +43,10 @@ try {
     + event("assistant.message", { content: "Native Copilot answer.", phase: "final_answer", model: "fixture-model" }));
   // A Node script named copilot is a genuine foreground process with a PID-held native
   // marker; its stdin remains the pane's PTY so the regular composer can reach it.
+  // It keeps node's own process name, like an npm-installed Copilot: on WSL herdr leaves
+  // out the argv of a process named after an agent, which Copilot ownership cannot prove.
   writeFileSync(executable, `import { appendFileSync, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
-process.title = "copilot";
 const home = process.env.COPILOT_HOME;
 const marker = join(home, "session-state", process.argv[2], \`inuse.\${process.pid}.hold\`);
 mkdirSync(join(home, "session-state", process.argv[2]), { recursive: true });
@@ -101,11 +102,17 @@ console.log("fixture ready");`);
   await openWorkRuns(log);
   await log.locator(".work-row-head").first().click();
   await log.locator(".chat-tool-more").click();
+  // a long whole output opens folded to its head: its own Show all unfolds it
+  await log.locator(".chat-tool-io.is-whole + .chat-tool-result-more[aria-expanded=false]").click();
   await log.getByText(/COPILOT_OUTPUT_END/).waitFor();
   await log.locator(".work-row-head").nth(1).click();
   await log.getByText("Proceed with this choice?").waitFor();
   await log.locator(".chat-ask-options").getByText("Yes", { exact: true }).waitFor();
   await log.locator(".chat-ask-options").getByText("No", { exact: true }).waitFor();
+  // Return from the expanded output to following the end before testing new turns.
+  if (await head.getAttribute("aria-expanded") === "true") await head.click();
+  const jump = page.getByRole("button", { name: "Jump to latest", exact: true });
+  if (await jump.isVisible()) await jump.click();
   appendFileSync(transcript, event("session.resume", { selectedModel: "fixture-model" })
     + event("user.message", { content: "Follow-up prompt" })
     + event("assistant.message", { content: "Follow-up answer.", phase: "final_answer", model: "fixture-model" }));

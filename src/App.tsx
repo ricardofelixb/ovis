@@ -1,8 +1,10 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Bell, ChevronDown, Plus, CircleHelp, Ellipsis, FolderOpen, Link, Menu, MessageSquare, PanelLeft, Search, SquareTerminal, Target, X } from "lucide-react";
+import { PanelsTopLeft, TextSearch } from "lucide-react";
 
 import type { HerdrPane, PaneDirection } from "../shared/protocol.ts";
 import { authenticate, createTab, movePaneBeside, moveTabToWorkspace, paneSessionKey, shareSeen, swapPaneWith } from "./lib/api.ts";
+import { openGroupItems, useGroupClosedWhenEmpty, useMoreMenu } from "./lib/moreMenu.ts";
 import { layoutActions } from "./lib/layoutActions.ts";
 import { displayPaneTitle, storedBackgroundFolded, storedWorktreeCollapsed, tabPaneTitle } from "./components/Sidebar.tsx";
 import { endSignIn } from "./lib/signOut.ts";
@@ -74,9 +76,11 @@ import type { AppActions, PaneView, PaneControls } from "./lib/actions.ts";
 import { removePushSubscription } from "./lib/push.ts";
 import { resetPushHealth } from "./lib/pushHealth.ts";
 import { useUpdates } from "./lib/updates.ts";
-import { UpdateNotice } from "./components/UpdateControls.tsx";
+import { useDesktopUpdate } from "./lib/desktopUpdate.ts";
+import { DesktopUpdateNotice, UpdateNotice } from "./components/UpdateControls.tsx";
 import { LanExposureNotice } from "./components/LanExposureNotice.tsx";
 import { PushHealthNotice } from "./components/PushHealthNotice.tsx";
+import { RelayNotice } from "./components/RelayNotice.tsx";
 import { InstallHint } from "./components/InstallHint.tsx";
 import { DevicePairedNotice, DeviceRemovedNotice } from "./components/DevicePairedNotice.tsx";
 import { RelayPairingPrompt } from "./components/RelayPairingPrompt.tsx";
@@ -90,6 +94,8 @@ import { usePaneLinkOpener, WebPanelContext } from "./lib/webPanel.ts";
 import { RepoDiffViewer } from "./components/RepoDiffViewer.tsx";
 import { noteBlock, noteBlockWord } from "./lib/diffLineNotes.ts";
 import { directHostOf, useDirectNotice } from "./lib/directNotice.ts";
+import { relayNoticeOf, useRelayNotice } from "./lib/relayNotice.ts";
+import { useAccountSignedIn } from "./lib/account/useAccountSignedIn.ts";
 import { usePaneObserving } from "./lib/paneObserving.ts";
 import { OpenFileContext } from "./lib/filePaths.ts";
 import { useAccessState, useLockedRef, usePairFromAddress } from "./lib/useAccess.ts";
@@ -233,12 +239,17 @@ export function App() {
   const { health, localFreshness, shownHealth, readLocalHealth } = useLocalHealth();
   const exposure = health?.lan_exposure ?? health?.direct_exposure;
   const exposureDirect = !health?.lan_exposure || health.lan_exposure.direct === true;
-  const directNotice = useDirectNotice(serverIdOfPath(window.location.pathname) ?? "", directHostOf(health));
+  const noticeScope = serverIdOfPath(window.location.pathname) ?? "";
+  const directNotice = useDirectNotice(noticeScope, directHostOf(health));
+  const accountSignedIn = useAccountSignedIn();
+  const relayNoticeInfo = relayNoticeOf(health, accountSignedIn !== null);
+  const relayNotice = useRelayNotice(noticeScope, relayNoticeInfo);
   const { error, setError } = useRosterError();
   const { layoutNotice, setLayoutNotice } = useLayoutNotice();
   const { locked, setLocked, lockReason, pairCode, consumePairCode, pairingUnconfirmed, onPaired, auth, canSignOut, security, readBridgeHealth } = useAccessState({ ui: settings.uiFontFamily, chat: settings.chatFontFamily });
   const { pairedNotices, setPairedNotices, dismissPairedNotice, relayPairings, setRelayPairings, remotePairings, setRemotePairings, removedNotices, setRemovedNotices, dismissRemovedNotice } = usePairedNotices();
   const updates = useUpdates(locked === false);
+  const desktopUpdate = useDesktopUpdate();
   const { selectedPaneId, setSelectedPaneId, notificationViewTarget, setNotificationViewTarget, terminalPeek, setTerminalPeek, endPeek, pendingLink, linkLanded, setLinkLanded, rosterSeq, linkSince, selectionSince, rosterTick, setRosterTick, linkTick, setLinkTick } = useSelectionState({ initialLink });
   // a PC's desktop (ComputerView) over the pane area, opened from its sidebar header; any pick closes it
   const [screenMachineId, setScreenMachineId, keptScreenId] = useComputerView();
@@ -262,8 +273,9 @@ export function App() {
   // the Rename tab shortcut and palette action: the tab strip of the selected pane opens its name field
   const { renameRequest, requestRename, clearRenameRequest } = useRenameRequest(selectedMachineId, selectedPaneId);
   // the header's More menu: its button
-  const [more, setMore] = useState<{ anchor: HTMLElement } | null>(null);
-  const closeMore = useCallback(() => setMore(null), []);
+  // and, on a phone, the two groups it folds its find items and the pane's and tab's actions into (G-143)
+  const moreMenu = useMoreMenu();
+  const { more, setMore, closeMore, group: moreGroup, openGroup: openMoreGroup, closeGroup: closeMoreGroup } = moreMenu;
   // the pane canvas's actions, for the phone's tab menu (TabStrip)
   const paneActionsRef = useRef<((target: HerdrPane) => RowMenuItem[]) | null>(null);
   const { filesOpen, setFilesOpen, filesDocked, filesCovered, revealFiles, viewing, openFile, closeFile, leaveFile, restoreFile, fileFromPop, forgetLeftFiles, diffViewing, openDiff, closeDiff, releaseDiff, presentation, fileDocked, webPage, closeWebPage, openWebPage, openDiffFile, reportFileKind, toggleFilePresentation, viewFile } = useFilePanels({ settings, filePanelAvailable, selectedPaneId, selectedMachineId });
@@ -642,7 +654,7 @@ export function App() {
         const found = newTabTarget();
         // the workspaces the sidebar and the palette offer worktrees for (lib/repositoryWorkspaces.ts)
         const machine = machinesRef.current.find((candidate) => candidate.id === found?.machineId);
-        if (!found || machine?.state !== "connected" || !worktreesStartHere(found.machineId, found.workspace)) return;
+        if (!found || machine?.state !== "connected" || !worktreesStartHere(found.machineId, found.workspace, machine.snapshot?.herdr_lifetime)) return;
         setDrawerOpen(false);
         setWorktreeFor({ machineId: found.machineId, machineName: machine.name, workspace: found.workspace, mode });
       },
@@ -773,18 +785,31 @@ export function App() {
   })) : [];
   const moreBase = alertsOffDot ? t("More · alerts are off") : t("More");
   const moreLabel = waitingInMore ? `${moreBase} · ${t("{count} waiting for you", { count: sessionTally.waiting })}` : moreBase;
+  const findInTerminal: RowMenuItem[] = selectedPane && !selectedPane.restore_error ? [{ id: "find", label: t("Find in terminal"), icon: Search, run: actions.openFind }] : [];
+  // at a phone's width, the find items and the pane's and tab's actions fold into one item each, More keeping the
+  // palette, Files, Copy link, Alerts and the tab's panes in sight (G-143); a group of one is not folded
+  const findGroup = [...findInTerminal, ...paneMoreItems.filter((item) => item.id === "search-conversation")].map((item) => ({ ...item, divider: false }));
+  // a group open when the window widens past a phone's closes: More lists its items itself there
+  const paneGroup = paneMoreItems.filter((item) => item.id !== "search-conversation" && !item.id.startsWith("pane:"));
+  const foldFind = isSheetWidth && findGroup.length > 1;
+  const foldPane = isSheetWidth && paneGroup.length > 1;
+  const groupItems = openGroupItems(moreGroup?.kind ?? null, isSheetWidth, findGroup, paneGroup);
+  useGroupClosedWhenEmpty(moreMenu, groupItems.length === 0);
   const moreItems: RowMenuItem[] = [
     ...(waitingInMore && nextWaiting !== null ? [{ id: "next-waiting", label: t("Open the next session waiting for you"), hint: String(sessionTally.waiting), icon: CircleHelp, run: openNextWaiting }] : []),
     // first at every width: a phone's header has no palette button, and a touch screen no shortcut
     { id: "palette", label: t("Search panes and actions"), icon: Search, ...(paletteKeys ? { hint: paletteKeys } : {}), run: () => openPalette() },
     ...(selectedPane && screenMachineId === null ? [{ id: "view", label: t("Terminal"), checked: (terminalPeek !== null ? "terminal" : view) === "terminal", switch: true, title: terminalPeek !== null || view === "terminal" ? t("Switch to chat (⌘⇧J)") : terminalAttach ? t("Switch to terminal (⌘⇧J)") : t("Live terminal: coming to Windows PCs once herdr can attach there"), icon: SquareTerminal, run: actions.toggleView }] : []),
-    ...(selectedPane && !selectedPane.restore_error ? [{ id: "find", label: t("Find in terminal"), icon: Search, run: actions.openFind }] : []),
+    ...(foldFind && more ? [{ id: "find-group", label: t("Find…"), icon: TextSearch, run: () => openMoreGroup("find", more.anchor) }] : findInTerminal),
     // from 769px Files has its own button beside the lens switch; a phone keeps it here
     ...(selectedPane && !wideScreen ? [{ id: "files", label: t("Browse files"), icon: FolderOpen, run: () => setFilesOpen(true) }] : []),
     // the address says where the app is (lib/deepLink.ts); a phone has no address bar to copy it from
     { id: "copy-link", label: t("Copy link"), icon: Link, run: () => void copyText(window.location.href).then((ok) => { if (ok) setHeaderNote("copied"); }) },
     { id: "alerts", label: t("Alerts"), hint: bell.state, checked: bell.on, title: bell.title, icon: Bell, run: () => void bell.run() },
-    ...paneMoreItems,
+    // what is left of the pane's items in More itself, a hairline over the first as before
+    ...paneMoreItems.filter((item) => !(foldFind && item.id === "search-conversation") && (!foldPane || item.id.startsWith("pane:")))
+      .map((item, index) => index === 0 ? { ...item, divider: true } : item),
+    ...(foldPane && more ? [{ id: "pane-group", label: t("Pane and tab…"), icon: PanelsTopLeft, divider: true, run: () => openMoreGroup("pane", more.anchor) }] : []),
   ];
 
   // the chat's surface is what the pane column shows: the header's pane zone and the tab strip
@@ -977,7 +1002,7 @@ export function App() {
               aria-label={moreLabel}
               title={moreLabel}
               aria-haspopup={isSheetWidth ? "dialog" : "menu"}
-              aria-expanded={more !== null}
+              aria-expanded={more !== null || groupItems.length > 0}
               onClick={(event) => {
                 const anchor = event.currentTarget;
                 setMore((open) => (open ? null : { anchor }));
@@ -1012,6 +1037,7 @@ export function App() {
             onClose={closeMore}
           />
         )}
+        {moreGroup && groupItems.length > 0 && <RowMenu anchor={moreGroup.anchor} title={t(moreGroup.kind === "find" ? "Find…" : "Pane and tab…")} items={groupItems} onClose={closeMoreGroup} />}
       </header>
 
       <PanePressContext.Provider value={pressPane}>
@@ -1038,11 +1064,13 @@ export function App() {
         <div className={`pane-column${chatShown && screenMachineId === null ? " is-chat" : ""}`} inert={drawerModal || undefined}>
         {/* over the pane only: a bar across the window would cut the sidebar off from its top row in the header */}
         <UpdateNotice updates={updates} onOpen={() => { setSettingsSection("updates"); setSettingsOpen(true); }} />
+        <DesktopUpdateNotice update={desktopUpdate} />
         <TelemetryNotice enabled={locked === false} onOpen={() => { setSettingsLinkPage("about"); setSettingsLinkSection("telemetry"); setSettingsOpen(true); }} />
         <MachineActionBanner machines={machines} onSetup={(machine, update = false) => { setDrawerOpen(false); setUpdateRemote(update); setMachineDialog(machine); }} />
         {layoutNotice && <p className="pane-notice" role="alert">{layoutNotice}</p>}
         {/* the last answer that got through: a listener does not stop because herdr's ping failed */}
         {exposure && !(exposureDirect && directNotice.dismissed) && <LanExposureNotice host={exposure.host} direct={exposureDirect} onOpen={() => { setSettingsLinkPage("devices"); setSettingsOpen(true); }} onDismiss={directNotice.dismiss} />}
+        {relayNoticeInfo && !relayNotice.dismissed && <RelayNotice notice={relayNoticeInfo} onOpen={() => { setSettingsLinkPage("devices"); setSettingsLinkSection("account"); setSettingsOpen(true); }} onDismiss={relayNotice.dismiss} />}
         <PushHealthNotice onRepair={repairNotifications} onOpen={() => { setSettingsLinkPage("alerts"); setSettingsOpen(true); }} />
         <InstallHint />
         {setupGuide.guide !== null && setupGuide.paused && <SetupGuideResume onResume={setupGuide.resume} />}

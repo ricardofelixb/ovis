@@ -84,7 +84,8 @@ export function drawnOmarchyTheme(theme: OmarchyTheme): DrawnTheme {
     brightBlack: c.muted, brightRed: c.bright_red, brightGreen: c.bright_green, brightYellow: c.bright_yellow,
     brightBlue: c.bright_blue, brightMagenta: c.bright_magenta, brightCyan: c.bright_cyan, brightWhite: c.bright_foreground,
   };
-  return { id: DEFAULT_THEME, mode: theme.mode, bgPanel: panel, bg: c.dark_background, terminal, tokens };
+  return { id: DEFAULT_THEME, mode: theme.mode, bgPanel: panel, bg: c.dark_background, terminal, tokens,
+    preview: { elevated: tokens["--bg-elevated"]!, border: tokens["--border"]!, text: c.foreground, textDim: tokens["--text-dim"]!, accent: c.accent, primary: c.accent } };
 }
 
 /** The last theme this device was told, kept for the boot script's first frame. */

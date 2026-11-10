@@ -49,13 +49,13 @@ import terminalFixture from "./fixtures/terminal.json";
 /**
  * The fictional access facts the Phone & devices page shows, picked by `?demo_security=` when the
  * demo loads, or by `ovis:demo-security` in this tab's sessionStorage, which a check changes to see
- * the next answer replace the last (scripts/security-summary-demo-regression.ts); none of them is
+ * the next answer replace the last (scripts/security-summary-demo-run.ts); none of them is
  * any real server's. `older` answers without facts, `error` fails the bridge health and `loading`
  * never answers it.
  */
 /**
  * `?demo_runtime=both`: the PC has herdr's TUI and the Herdr app's core (hc) both installed, serving
- * herdr, so Settings > About offers the switch between them (scripts/settings-pages-demo-regression.ts).
+ * herdr, so Settings > About offers the switch between them (scripts/settings-rows-demo-regression.ts).
  */
 const DEMO_RUNTIME_FACTS = new URLSearchParams(location.search).get("demo_runtime") === "both" ? {
   herdr_runtime: { serving: "herdr" as const, source: "detected" as const, tui: { installed: true, running: true }, app_installed: true, switch_to: "herdr-core" as const, locked: null },
@@ -1150,7 +1150,7 @@ function usageReport(): UsageReport {
  * and start a pairing that a fictional phone completes a moment later, which is what sends the
  * `device-paired` event every open window shows as a line (src/components/DevicePairedNotice.tsx).
  * All of it answers only with `?demo_devices=`: without it the demo has no device list (its
- * /api/devices is a 404, which scripts/security-summary-demo-regression.ts relies on). `list` is the
+ * /api/devices is a 404, which scripts/security-summary-demo-run.ts relies on). `list` is the
  * fictional devices below; another value picks a state for the browser lane's captures: `empty` (nothing paired),
  * `watch` (this browser is a device that only watches), `slow` (the list is held until the page calls
  * `herdrDemoReleaseDevices()`, so a capture of the loading state never races the answer) or `error`
@@ -1248,13 +1248,36 @@ const DEMO_RELAY_APP = "https://app.ovis.sh";
 /** 32 made-up key bytes, in the canonical base64 the offer's validator accepts */
 const DEMO_RELAY_PUBLIC_KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, index) => (index * 37 + 11) & 0xff)));
 /** `?demo_relay=on` opens the demo with the relay already online, as a PC that turned it on before */
-let demoRelayOnline = new URLSearchParams(location.search).get("demo_relay") === "on";
+const DEMO_RELAY_PARAM = new URLSearchParams(location.search).get("demo_relay");
+const DEMO_RELAY_PASS = new URLSearchParams(location.search).get("demo_relay_pass");
+let demoRelayOnline = DEMO_RELAY_PARAM === "on" || DEMO_RELAY_PASS !== null;
 let demoRelayIdentities = 1;
 const demoRelayServerId = (): string => `${demoRelayIdentities.toString(16).padStart(4, "0")}5e1f1d0ff3ab1e0ff3ab1e5e1f1d`;
 /** direct connections on the PC's network: on by default; the demo listens nowhere, and names a made-up home address while the relay is on */
 let demoRelayDirect = true;
-const demoRelayStatus = (): RelayStatus => ({ phase: demoRelayOnline ? "online" : "off", relay: DEMO_RELAY, app: DEMO_RELAY_APP, sessions: 0, blocked: null, error: null,
-  direct: { on: demoRelayDirect, carriers: demoRelayDirect && demoRelayOnline ? ["ws://192.168.0.10:7319"] : [] } });
+function demoRelayPass(): RelayStatus["pass"] | undefined {
+  switch (DEMO_RELAY_PASS) {
+    // passes needed from a month on: the reminder names that date
+    case "grace": return { state: "no_account", relay: "missing", enforce_at: new Date(Date.now() + 30 * 86_400_000).toISOString(), refused: false };
+    case "required": return { state: "no_account", relay: null, enforce_at: null, refused: true };
+    case "not-listed": return { state: "not_listed", relay: null, enforce_at: null, refused: true };
+    case "limit": return { state: "limit", relay: null, enforce_at: null, refused: true };
+    // passes needed since yesterday: the data limit holds now
+    case "data-limit": return { state: "ok", relay: "ok", enforce_at: new Date(Date.now() - 86_400_000).toISOString(), refused: false, new_sessions: false };
+    default: return undefined;
+  }
+}
+const demoRelayStatus = (): RelayStatus => {
+  const pass = demoRelayOnline ? demoRelayPass() : undefined;
+  const refused = pass?.refused === true;
+  return {
+    phase: !demoRelayOnline ? "off" : refused ? "error" : "online",
+    relay: DEMO_RELAY, app: DEMO_RELAY_APP, sessions: 0, blocked: null,
+    error: refused ? "The Ovis relay needs an Ovis account." : null,
+    direct: { on: demoRelayDirect, carriers: demoRelayDirect && demoRelayOnline ? ["ws://192.168.0.10:7319"] : [] },
+    ...(pass ? { pass } : {}),
+  };
+};
 /** POST /api/relay/offer: the pending code inside an offer for the fictional identity, as the server reuses it */
 function demoRelayOffer(): Response {
   if (!demoRelayOnline) return error("relay_off", "Start the relay before pairing.", 409);
@@ -1374,7 +1397,7 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
   if (path === "/api/portal") return json(demoPortal(), 200, { "cache-control": "no-store" });
   if (path === "/api/relay") return json(demoRelayStatus(), 200, { "cache-control": "no-store" });
   if (path === "/api/relay/start" || path === "/api/relay/stop" || path === "/api/relay/offer" || path === "/api/relay/reset-identity"
-    || path === "/api/relay/link" || path === "/api/relay/pairing" || path === "/api/relay/code" || path === "/api/relay/code/cancel" || path === "/api/relay/direct") {
+    || path === "/api/relay/link" || path === "/api/relay/link/close" || path === "/api/relay/pairing" || path === "/api/relay/code" || path === "/api/relay/code/cancel" || path === "/api/relay/direct") {
     if (method !== "POST") return error("method_not_allowed", "Use GET for status and POST for relay actions.", 405);
     if (demoAuth.role === "watch") return error("read_only", "this device can only watch", 403);
     if (path === "/api/relay/offer") return demoRelayOffer();
@@ -1389,6 +1412,7 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
       return json({ code: "7K3QD-M2XHA", expires_at: pairing.expires_at, server_id: demoRelayServerId() }, 200, { "cache-control": "no-store" });
     }
     if (path === "/api/relay/code/cancel") return json({ ok: true }, 200, { "cache-control": "no-store" });
+    if (path === "/api/relay/link/close") return json({ ok: true }, 200, { "cache-control": "no-store" });
     // no phone ever compares digits with the demo, so none is waiting to be approved
     if (path === "/api/relay/pairing") return error("relay_pairing_gone", "That phone is no longer waiting: it left, was decided, or its time ran out.", 404);
     if (path === "/api/relay/direct") {

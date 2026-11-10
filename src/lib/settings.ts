@@ -13,14 +13,14 @@ import { SPEECH_DEFAULT_VOICE, SPEECH_VOICES, type SpeechVoice } from "../../sha
 import { isPiVoice, type PiVoice } from "../../shared/pi-voice.ts";
 import { currentOmarchyTheme, drawnOmarchyTheme, subscribeOmarchyTheme } from "./omarchyTheme.ts";
 import type { OmarchyTheme } from "../../shared/omarchy-theme.ts";
+import { bootRows, drawnTheme, NO_CUSTOM_THEMES, sanitizeCustomThemes, type CustomThemes } from "./customThemes.ts";
 import { LANGUAGE_SETTINGS, LOCALE_TAGS, resolveLanguage, setCurrentLanguage, type Language, type LanguageSetting } from "./i18n.ts";
 import type { AlertPrefs, DoneAlerts } from "../../shared/notify-policy.ts";
 import { chatFontStack, sanitizeFontFamily } from "./fontFamily.ts";
 import { fontScale, sanitizeUiFontSize, uiFontStack } from "./typography.ts";
 import { sanitizeKeyBarExtras, type KeyBarExtra } from "./keys.ts";
-import { themeFor } from "./themeFor.ts";
 import { DEFAULT_KEY_BAR_ITEMS, migrateKeyBarItems, sanitizeKeyBarItems, type KeyBarItem } from "./keyBar.ts";
-import { applyThemeEntry, DARK_QUERY, defaultThemeSetting, readStoredAppearance, resolveTheme, sanitizeAppearance, SETTINGS_STORAGE_KEY, THEMES_STORAGE_KEY, type ResolvedTheme, type ThemeSetting } from "./themeBoot.ts";
+import { applyThemeEntry, CUSTOM_ROWS_STORAGE_KEY, CUSTOM_THEMES_STORAGE_KEY, DARK_QUERY, defaultThemeSetting, readStoredAppearance, resolveTheme, sanitizeAppearance, SETTINGS_STORAGE_KEY, THEMES_STORAGE_KEY, type ResolvedTheme, type ThemeSetting } from "./themeBoot.ts";
 
 export { resolveTheme };
 export type { ResolvedTheme, ThemeSetting };
@@ -140,6 +140,8 @@ export interface Settings {
   lightTheme: ThemeId;
   /** draw this device in its own Omarchy theme, when its theme-set hook sends one (lib/omarchyTheme.ts), over the chosen theme */
   followOmarchy: boolean;
+  /** the themes imported from a file, and the one drawn on either side in place of that side's theme above (lib/customThemes.ts) */
+  customThemes: CustomThemes;
   /** xterm font size in px */
   terminalFontSize: number;
   /** mouse reports sent to herdr per wheel event in the terminal: 1 is what xterm sends by itself */
@@ -316,7 +318,7 @@ type TelemetrySourceSettings = Omit<Settings,
   | "quickReplies" | "agentLocks" | "lockedAgents" | "opencodeParentEnds" | "ompHeldFiles" | "restoreReplacedServer" | "agentNamedGroups" | "agentGroupNames" | "agentGroupOf" | "usageOrder" | "usageHidden" | "fileOpen" | "filesPanel" | "webLinks" | "reuseExternalLinkTab" | "claudeLaunchMode" | "codexLaunchMode"
   | "claudeLaunchModel" | "claudeLaunchEffort" | "codexLaunchModel" | "codexLaunchEffort"
   | "followHerdrFocus" | "sidebarPeek" | "sidebarBackgroundWorkspaces" | "codexDrag" | "composerArtifacts" | "composerPasteSend" | "composerBtw" | "terminalMirrorWrap" | "sidebarFilter" | "sidebarContext" | "sidebarAgentTree" | "foldHelpers" | "pcLoad"
-  | "expandThinking" | "foldWork" | "autoTabNames" | "voiceEngine" | "agentGroups" | "agentGroupSort" | "terminalImages" | "terminalAttachButton"
+  | "expandThinking" | "foldWork" | "customThemes" | "autoTabNames" | "voiceEngine" | "agentGroups" | "agentGroupSort" | "terminalImages" | "terminalAttachButton"
   | "followOmarchy" | "contextCircle" | "speechVoice" | "liveVoice" | "openLiveWork"
   | "terminalKeyboardOnRequest" | "terminalFoldKeyBar" | "fileFontSize" | "fileFontBase" | "editTextFiles" | "reopenFileOnReturn">;
 
@@ -449,6 +451,8 @@ export const SETTING_SCOPE = {
   // a new agent starts the same way whichever device opened it
   claudeLaunchMode: "shared", codexLaunchMode: "shared",
   claudeLaunchModel: "shared", claudeLaunchEffort: "shared", codexLaunchModel: "shared", codexLaunchEffort: "shared",
+  // a theme imported on one device is there to pick on the others, as the side's theme is
+  customThemes: "shared",
 } as const satisfies Record<keyof Settings, "shared" | "device">;
 
 /** The shared part of `settings`, by the names shared/preferences.ts lists. */
@@ -491,6 +495,7 @@ export const DEFAULT_SETTINGS: Settings = {
   paletteDark: DEFAULT_THEME,
   darkTheme: DEFAULT_THEME,
   lightTheme: DEFAULT_THEME,
+  customThemes: NO_CUSTOM_THEMES,
   terminalFontSize: 13,
   terminalWheelSpeed: 1,
   terminalFontFamily: "",
@@ -720,6 +725,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     statusIndicators: record["statusIndicators"] === "classic" || record["statusIndicators"] === "dots" || record["statusIndicators"] === "symbols" ? record["statusIndicators"] : DEFAULT_SETTINGS.statusIndicators,
     darkTheme,
     lightTheme,
+    customThemes: sanitizeCustomThemes(record["customThemes"]),
     palette: mirrorPalette(theme, darkTheme, lightTheme),
     paletteLight: lightTheme,
     paletteDark: darkTheme,
@@ -984,6 +990,15 @@ function readChosen(key: string): boolean | null {
   }
 }
 
+/** The imported themes, from their own key (themeBoot.ts): none where the record is missing, damaged or cannot be read. */
+function readCustomThemes(): CustomThemes {
+  try {
+    return sanitizeCustomThemes(JSON.parse(window.localStorage.getItem(CUSTOM_THEMES_STORAGE_KEY) ?? "null"));
+  } catch {
+    return NO_CUSTOM_THEMES;
+  }
+}
+
 function readChatFold(key: string, fallback: boolean): boolean {
   try {
     const raw = window.localStorage.getItem(key);
@@ -1076,6 +1091,7 @@ export function loadSettings(): Settings {
     terminalAttachButton: readChatFold(TERMINAL_ATTACH_BUTTON_STORAGE_KEY, merged.terminalAttachButton),
     terminalKeyboardOnRequest: readChatFold(TERMINAL_KEYBOARD_ON_REQUEST_STORAGE_KEY, merged.terminalKeyboardOnRequest),
     terminalFoldKeyBar: readChatFold(TERMINAL_FOLD_KEY_BAR_STORAGE_KEY, merged.terminalFoldKeyBar),
+    customThemes: readCustomThemes(),
   };
 }
 
@@ -1087,7 +1103,8 @@ export function saveSettings(settings: Settings): boolean {
       darkTheme: mirrored.darkTheme, lightTheme: mirrored.lightTheme,
       mirror: { palette: mirrored.palette, paletteDark: mirrored.paletteDark, paletteLight: mirrored.paletteLight },
     }));
-    const { uiFontFamily, terminalMirrorWrap, sidebarFilter, sidebarContext, sidebarAgentTree, foldHelpers, pcLoad, voiceEngine, agentGroups, agentGroupSort, fileFontSize, fileFontBase, composerArtifacts, composerPasteSend, composerBtw, expandThinking, foldWork, reuseExternalLinkTab, filesPanel, terminalImages, terminalAttachButton, terminalKeyboardOnRequest, terminalFoldKeyBar, ...main } = mirrored;
+    const { uiFontFamily, terminalMirrorWrap, sidebarFilter, sidebarContext, sidebarAgentTree, foldHelpers, pcLoad, voiceEngine, agentGroups, agentGroupSort, fileFontSize, fileFontBase, composerArtifacts, composerPasteSend, composerBtw, expandThinking, foldWork, reuseExternalLinkTab, filesPanel, terminalImages, terminalAttachButton, terminalKeyboardOnRequest, terminalFoldKeyBar, customThemes, ...main } = mirrored;
+    window.localStorage.setItem(CUSTOM_THEMES_STORAGE_KEY, JSON.stringify(customThemes));
     window.localStorage.setItem(VOICE_ENGINE_STORAGE_KEY, JSON.stringify(voiceEngine));
     window.localStorage.setItem(UI_FONT_STORAGE_KEY, JSON.stringify(uiFontFamily));
     window.localStorage.setItem(MIRROR_WRAP_STORAGE_KEY, JSON.stringify(terminalMirrorWrap));
@@ -1125,6 +1142,19 @@ export function saveSettings(settings: Settings): boolean {
 
 type TerminalColors = { background: string; foreground: string; cursor: string; selectionBackground: string };
 
+/**
+ * Keeps the rows of the imported themes chosen for either side where the page's boot script reads
+ * them (themeBoot.ts savedThemeEntry), so a cold launch opens in those colours; no record while no
+ * side draws one. Storage that refuses the write leaves the first frame to the built-in theme.
+ */
+export function saveBootRows(custom: CustomThemes): void {
+  try {
+    const rows = bootRows(custom);
+    if (Object.keys(rows).length > 0) window.localStorage.setItem(CUSTOM_ROWS_STORAGE_KEY, JSON.stringify(rows));
+    else if (window.localStorage.getItem(CUSTOM_ROWS_STORAGE_KEY) !== null) window.localStorage.removeItem(CUSTOM_ROWS_STORAGE_KEY);
+  } catch { /* private mode or a full quota */ }
+}
+
 export function terminalTheme(theme: ResolvedTheme, palette: Palette = "amber"): TerminalColors {
   return { ...terminalColors(palette, theme) };
 }
@@ -1140,7 +1170,8 @@ export function applyToDocument(settings: Settings, entry: DrawnTheme, language:
   applyThemeEntry(root, entry);
   // the boot script's background (src/theme-bootstrap.ts) holds the row's surface until the stylesheet's theme
   // blocks own it; a stylesheet that never loaded leaves the page to it, kept on the row drawn now
-  if (getComputedStyle(root).getPropertyValue("--bg").trim() !== "") root.style.removeProperty("background-color");
+  // (an imported row sets --bg itself, so there the stylesheet is told by a token only it sets)
+  if (getComputedStyle(root).getPropertyValue(entry.vars === undefined ? "--bg" : "--pdf-page").trim() !== "") root.style.removeProperty("background-color");
   else root.style.backgroundColor = entry.bg;
   root.dataset["density"] = settings.density;
   root.dataset["chatWidth"] = settings.chatWidth;
@@ -1223,8 +1254,12 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const resolvedTheme: ResolvedTheme = settings.theme === "system" ? (systemDark ? "dark" : "light") : settings.theme;
 
   const omarchyTheme = useSyncExternalStore(subscribeOmarchyTheme, currentOmarchyTheme, () => null);
-  const tableEntry = themeFor(settings, resolvedTheme);
+  const tableEntry = drawnTheme(settings, resolvedTheme);
   const resolvedEntry = useMemo(() => settings.followOmarchy && omarchyTheme !== null ? drawnOmarchyTheme(omarchyTheme) : tableEntry, [settings.followOmarchy, omarchyTheme, tableEntry]);
+  // the rows the page's boot script draws an imported theme from, as this build derives them: written when the
+  // themes or the choice change, not at every other setting's change (the list is a new object after each)
+  const customKey = JSON.stringify(settings.customThemes);
+  useEffect(() => saveBootRows(sanitizeCustomThemes(JSON.parse(customKey))), [customKey]);
 
   const [browserLanguages, setBrowserLanguages] = useState<readonly string[]>(() => (typeof navigator !== "undefined" ? navigator.languages : []));
   useEffect(() => {

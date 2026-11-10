@@ -4,9 +4,10 @@ import { CHECKOUT_CHANGED_REASON, DESKTOP_APP_UPDATES, SUMMARY_GROUPS, type Summ
 import { useHerdrUpdate } from "../lib/herdrUpdate.ts";
 import { runningAppVersion, runningHerdrVersion, staleClientVersion, versionLabel } from "../lib/runningVersion.ts";
 import { useSettings } from "../lib/settings.ts";
-import { announcesUpdate, readAnnounced, summaryFor, watchAnnounced, writeAnnounced } from "../lib/updateNotes.ts";
+import { announcesUpdate, readAnnounced, readOfferClosed, summaryFor, watchAnnounced, watchOfferClosed, writeAnnounced, writeOfferClosed } from "../lib/updateNotes.ts";
 import { describeUpdate } from "../lib/updateProgress.ts";
 import type { UpdatesModel } from "../lib/updates.ts";
+import type { DesktopUpdateLine } from "../lib/desktopUpdate.ts";
 import { lazyChunkFailed, onLazyChunkFailure } from "../lib/lazyChunk.ts";
 import { Markdown } from "./Markdown.tsx";
 import { RenderBoundary } from "./RenderBoundary.tsx";
@@ -226,6 +227,9 @@ export function UpdateNotice({ updates, onOpen }: { updates: UpdatesModel; onOpe
   const [announced, setAnnounced] = useState(readAnnounced);
   // subscribed first, then read: a dismissal in another tab between this tab's first read and its subscription is not lost
   useEffect(() => { const stop = watchAnnounced(setAnnounced); setAnnounced(readAnnounced()); return stop; }, []);
+  // the release whose offer this device closed (G-102), as the done line is closed: the next release offers again
+  const [closedOffer, setClosedOffer] = useState(readOfferClosed);
+  useEffect(() => { const stop = watchOfferClosed(setClosedOffer); setClosedOffer(readOfferClosed()); return stop; }, []);
   // the check an install starts with reports nothing available until it is done: the line this
   // button sits on must not leave between the tap and the first step
   const [started, setStarted] = useState(false);
@@ -277,6 +281,9 @@ export function UpdateNotice({ updates, onOpen }: { updates: UpdatesModel; onOpe
   // unseen. An install names the release this render offered.
   const install = failure === null ? offered : null;
   const changed = failure === "offer-changed";
+  // only the plain offer closes: a failure or a changed offer stays until it is dealt with, and Settings still offers the release
+  const offer = !failed && !changed && !attempted ? status?.latest_revision ?? null : null;
+  if (offer !== null && offer === closedOffer) return null;
   const text = changed ? t("A newer release was published after you chose this update, so nothing was installed. Check again to review it.") : failed ? t("The update could not be installed.") : status?.latest_version ? t("Ovis v{version} is available.", { version: status.latest_version }) : t("An Ovis update is available.");
   return <div className={changed ? "update-notice is-line is-warning" : "update-notice is-line"} role="status">
     <span title={text}>{text}</span>
@@ -286,6 +293,33 @@ export function UpdateNotice({ updates, onOpen }: { updates: UpdatesModel; onOpe
       setAttempted(true); setStarted(install !== null);
       void request(install !== null ? { command: "install", expected_revision: install } : { command: "check" });
     }}>{t(failed ? "Try again" : "Update")}</button>
+    {offer !== null && <button type="button" className="icon-button update-notice-dismiss" aria-label={t("Dismiss")} title={t("Dismiss")} onClick={(event) => {
+      // the line goes with its Close: a keyboard's focus moves to the header's More beside where it was, not to the page
+      const focused = event.currentTarget === document.activeElement;
+      writeOfferClosed(offer); setClosedOffer(offer);
+      if (focused) document.querySelector<HTMLElement>(".header-more-button")?.focus();
+    }}><X /></button>}
+  </div>;
+}
+
+/**
+ * The desktop app's line for an update it has downloaded (lib/desktopUpdate.ts), on the release
+ * line's row: the server such an app carries offers no release of its own. Restart to Update is
+ * the tray's; closed, the line stays closed for that version, in the app.
+ */
+export function DesktopUpdateNotice({ update }: { update: DesktopUpdateLine | null }) {
+  const t = useT();
+  if (update === null) return null;
+  const text = t("Ovis {version} is ready.", { version: update.version });
+  return <div className="update-notice is-line" role="status">
+    <span title={text}>{text}</span>
+    <button type="button" className="btn btn-primary" disabled={update.installing} onClick={update.install}>{t("Restart to Update")}</button>
+    <button type="button" className="icon-button update-notice-dismiss" aria-label={t("Dismiss")} title={t("Dismiss")} onClick={(event) => {
+      // as the release line's Close: a keyboard's focus moves to the header's More, not to the page
+      const focused = event.currentTarget === document.activeElement;
+      update.close();
+      if (focused) document.querySelector<HTMLElement>(".header-more-button")?.focus();
+    }}><X /></button>
   </div>;
 }
 

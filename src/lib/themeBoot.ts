@@ -3,10 +3,11 @@
  * page's boot script (src/theme-bootstrap.ts, run before the first paint) and loadSettings use, so
  * the theme the page is first drawn in is the one the app goes on drawing.
  */
-import { cachedOmarchyTheme, drawnOmarchyTheme } from "./omarchyTheme.ts";
 import { shellMode } from "./shellMode.ts";
-import { DEFAULT_THEME, isThemeId, type DrawnTheme, type ThemeId } from "./themes.ts";
+import { INDICATOR_ROLES, LIGHT_ANSI_ROLES, ROLES } from "./themeRoles.ts";
+import { DEFAULT_THEME, isThemeId, type DrawnTheme, type Mode, type ThemeId } from "./themes.ts";
 import { themeFor } from "./themeFor.ts";
+import { cachedOmarchyTheme, drawnOmarchyTheme } from "./omarchyTheme.ts";
 
 export type ThemeSetting = "dark" | "light" | "system";
 export type ResolvedTheme = "dark" | "light";
@@ -88,30 +89,88 @@ export function resolveTheme(setting: ThemeSetting): ResolvedTheme {
   return typeof window !== "undefined" && window.matchMedia?.(DARK_QUERY).matches === false ? "light" : "dark";
 }
 
+/**
+ * The imported themes and the one chosen for either side (customThemes.ts), in a key of their own:
+ * an older tab of this browser saving the whole main record does not drop them.
+ */
+export const CUSTOM_THEMES_STORAGE_KEY = "ovis:custom-themes";
+
+/**
+ * The rows of the imported themes chosen for either side (customThemes.ts), as the app last
+ * derived them: the boot script draws a saved one from here, so it carries no derivation and a
+ * cold launch still opens in the imported colours.
+ */
+export const CUSTOM_ROWS_STORAGE_KEY = "ovis:custom-theme-rows";
+
+/** The custom properties a row may set on the document: every role, the notice tint, the state colours and a light row's ANSI colours. */
+export const THEME_VARS: readonly string[] = [...Object.keys(ROLES), "notice-tint", ...INDICATOR_ROLES, ...Object.values(LIGHT_ANSI_ROLES)];
+
+/** A stored colour or shadow as the derivation writes them: hex, rgba(), lengths and var(--border), and nothing that fetches. */
+const SAFE_VALUE = /^[#a-z0-9(),.\s-]{1,120}$/i;
+const isColor = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-f]{6}$/.test(value);
+
+/** A stored row as the app wrote it; null for anything else, which the built-in theme then stands in for. */
+function storedRow(value: unknown, id: string): DrawnTheme | null {
+  if (typeof value !== "object" || value === null) return null;
+  const row = value as Record<string, unknown>;
+  const { vars, terminal, preview } = row as { vars?: unknown; terminal?: unknown; preview?: unknown };
+  if (row["id"] !== id || (row["mode"] !== "dark" && row["mode"] !== "light") || !isColor(row["bg"]) || !isColor(row["bgPanel"])) return null;
+  if (typeof vars !== "object" || vars === null || typeof terminal !== "object" || terminal === null || typeof preview !== "object" || preview === null) return null;
+  const names = Object.keys(vars);
+  if (!names.every((name) => THEME_VARS.includes(name)) || !Object.values(vars).every((entry) => typeof entry === "string" && SAFE_VALUE.test(entry) && !/url/i.test(entry))) return null;
+  if (!Object.values(terminal).every(isColor) || !Object.values(preview).every(isColor)) return null;
+  return value as DrawnTheme;
+}
+
+/** The imported theme the stored list draws on `side`, as the id its row is stored under; null when that side draws a built-in theme. */
+function customChoice(storage: () => Pick<Storage, "getItem">, side: Mode): string | null {
+  try {
+    const custom: unknown = JSON.parse(storage().getItem(CUSTOM_THEMES_STORAGE_KEY) ?? "null");
+    const id = typeof custom === "object" && custom !== null ? (custom as Record<string, unknown>)[side] : null;
+    return typeof id === "string" && /^[0-9a-f]{8}$/.test(id) ? `custom:${id}` : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Whether the main record follows this device's Omarchy theme (Settings → Appearance). */
 export function followsOmarchy(stored: StoredAppearance): boolean {
   const record = stored.main?.value;
   return typeof record === "object" && record !== null && (record as Record<string, unknown>)["followOmarchy"] === true;
 }
 
-/** The row the saved appearance draws now: the device's last Omarchy theme when it follows one. */
+/** The row the saved appearance draws now. */
 export function savedThemeEntry(storage: () => Pick<Storage, "getItem">): DrawnTheme {
   const stored = readStoredAppearance(storage);
   const omarchy = followsOmarchy(stored) ? cachedOmarchyTheme(storage) : null;
   if (omarchy !== null) return drawnOmarchyTheme(omarchy);
   const appearance = storedAppearance(stored);
-  return themeFor(appearance, resolveTheme(appearance.theme));
+  const side = resolveTheme(appearance.theme);
+  const custom = customChoice(storage, side);
+  if (custom !== null) {
+    try {
+      const rows: unknown = JSON.parse(storage().getItem(CUSTOM_ROWS_STORAGE_KEY) ?? "null");
+      const row = typeof rows === "object" && rows !== null ? storedRow((rows as Record<string, unknown>)[side], custom) : null;
+      if (row) return row;
+    } catch { /* denied or damaged storage: the side's built-in theme */ }
+  }
+  return themeFor(appearance, side);
 }
 
-/** The tokens the last drawn row set inline, taken off before the next row's. */
 let inlineTokens: readonly string[] = [];
 
-/** Puts a row on the document: the attributes src/styles.css keys its tokens on, its own tokens, and the browser's own colors. */
+/** Puts a row on the document: the attributes src/styles.css keys its tokens on, an imported row's own colours, and the browser's own colors. */
 export function applyThemeEntry(root: HTMLElement, entry: DrawnTheme): void {
   root.dataset["theme"] = entry.mode;
-  root.dataset["palette"] = entry.id;
+  // an imported row has no block in the stylesheet: its side's base block is under the colours it sets itself
+  root.dataset["palette"] = entry.vars === undefined ? entry.id : "custom";
   root.style.colorScheme = entry.mode;
   for (const name of inlineTokens) root.style.removeProperty(name);
+  for (const name of THEME_VARS) {
+    const value = entry.vars?.[name];
+    if (value === undefined) root.style.removeProperty(`--${name}`);
+    else root.style.setProperty(`--${name}`, value);
+  }
   const tokens = Object.entries(entry.tokens ?? {});
   for (const [name, value] of tokens) root.style.setProperty(name, value);
   inlineTokens = tokens.map(([name]) => name);

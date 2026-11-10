@@ -167,8 +167,8 @@
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 
-.setup-choice:hover:not(:disabled),
-.setup-choice:focus-visible {
+/* the accent border is the pointer's; keyboard focus is the shared ring alone, never both lines */
+.setup-choice:hover:not(:disabled) {
   border-color: var(--accent);
 }
 
@@ -357,6 +357,11 @@
 
   .setup-welcome {
     padding-top: var(--space-4);
+  }
+
+  /* a phone reaches Start sooner: the agents screen's blocks sit a step closer (G-192) */
+  .setup-step {
+    gap: var(--space-3);
   }
 
   /* Start, then Connect your phone below it, each the full width */
