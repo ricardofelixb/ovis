@@ -41,7 +41,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { sourceBundleVersion } from "../server/bundle-version.ts";
-import { type DeployMachine, onMainSteps, pullMainSteps, rollOut, settingOf, withSetting } from "./deploy-helpers.ts";
+import { machinesOf, onMainSteps, pullMainSteps, rollOut, settingOf, withSetting } from "./deploy-helpers.ts";
 
 const repo = join(import.meta.dir, "..");
 const publicUrl = process.env.OVIS_DEPLOY_URL ?? "https://vps.tailb4e5ae.ts.net:8443/";
@@ -114,7 +114,7 @@ const local = `http://127.0.0.1:${port}/`;
 // The PCs whose own Ovis this server bridges to: each must run this commit too, or this server refuses it.
 // They are updated before the server restarts: one started while a PC still runs the old code parks it
 // in "error" and never retries (reconnecting is owner-only), so the list comes from the server still running.
-const listMachines = async (signal: AbortSignal) => ((await (await fetch(`${local}api/machines`, { signal })).json()) as { machines?: DeployMachine[] }).machines ?? [];
+const listMachines = async (signal: AbortSignal) => machinesOf(await fetch(`${local}api/machines`, { signal }));
 const { pcs, stale, waiting } = await rollOut({
   listMachines,
   updatePc: (pc) => {

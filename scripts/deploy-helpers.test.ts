@@ -216,7 +216,8 @@ describe("machinesOf", () => {
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
   it("gives the roster of an answered /api/machines", async () => {
-    expect(await machinesOf(json({ machines: [{ id: "a" }] }))).toEqual([{ id: "a" }]);
+    const pc = { id: "a", name: "a", kind: "ssh", state: "connected", error: null };
+    expect(await machinesOf(json({ machines: [pc] }))).toEqual([pc]);
     expect(await machinesOf(json({ machines: [] }))).toEqual([]);
   });
 

@@ -55,6 +55,14 @@ export function notConnected(machines: { id: string; name: string; state: string
   });
 }
 
+/** The roster in a `/api/machines` answer. An error answer (a 401 without the token) or one without a roster is refused, not read as no PCs: the deploy would then update none and restart anyway. */
+export async function machinesOf(response: Response): Promise<DeployMachine[]> {
+  if (!response.ok) throw new Error(`/api/machines answered ${response.status}`);
+  const body = await response.json().catch(() => null) as { machines?: unknown } | null;
+  if (!Array.isArray(body?.machines)) throw new Error("/api/machines answered without a machine roster");
+  return body.machines as DeployMachine[];
+}
+
 export interface RollOutSteps {
   /** the server's `/api/machines`; aborted by `signal` when the wait for connections runs out */
   listMachines(signal: AbortSignal): Promise<DeployMachine[]>;
