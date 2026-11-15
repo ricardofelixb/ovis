@@ -66,7 +66,8 @@ import { composerUsage, formatPercent, formatResetIn, HIGH_PERCENT, isCurrent, m
 import { Artifacts } from "./Artifacts.tsx";
 import { OmpBtw } from "./OmpBtw.tsx";
 import { BackgroundTasks } from "./BackgroundTasks.tsx";
-import { AgentMark, modelMark } from "./AgentMark.tsx";
+import { AgentMark } from "./AgentMark.tsx";
+import { modelMark } from "../fork/modelMark.ts";
 import { RowMenu } from "./RowMenu.tsx";
 import { ThinkingSlider } from "./ThinkingSlider.tsx";
 import { MicButton, VoiceRecordingPill, useDictation } from "./VoiceInput.tsx";

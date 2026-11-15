@@ -305,9 +305,6 @@ export function visibleWorkParts(parts: ConversationPart[], showThinking: boolea
   return parts.filter((part) => part.kind !== "skill" && (showThinking || part.kind !== "thinking"));
 }
 
-// Compatibility exports for fork-only callers; upstream's work-block logic stays unchanged.
-export { workItems, runCounts, type WorkItem, type RunCount } from "../fork/workRuns.tsx";
-
 /**
  * Whether the open work block's head says the agent waits for the user ("Needs you") instead of
  * "Working…". By the pane's status, not by a parsed prompt: a blocked pane whose menu no reader
