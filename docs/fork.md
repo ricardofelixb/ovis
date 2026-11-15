@@ -91,7 +91,7 @@ A small import-and-call is possible for a self-contained component, not for ever
 
 ## Regression ownership
 
-Upstream `scripts/*-regression.ts` and `scripts/*-qa.ts` previously adapted to fork-only controls were restored to the merge-base versions. Fork preference/migration coverage lives in `scripts/fork-preferences-regression.ts`, registered with the browser runner. Pure migration, model-mark, compact-run, branch-storage and chat-presentation regressions live under `src/fork/`.
+Upstream `scripts/*-regression.ts` and `scripts/*-qa.ts` previously adapted to fork-only controls were restored to the merge-base versions. Fork preference/migration coverage lives in `scripts/fork-preferences-regression.ts`. `scripts/fork-features-regression.ts` exercises read-aloud playback controls, the Computer viewer/settings/keyboard, pull-request checkout/reopening and Pi voice start/mute/end, plus the fresh-install disabled paths. Both are registered with the browser runner. Pure migration, model-mark, compact-run, branch-storage and chat-presentation regressions live under `src/fork/`.
 
 The browser runner uses the CI image and a `git ls-files` tar, isolated test sessions and temporary state. Standalone upstream QA scripts absent from the serial lane are registered only inside the disposable verification snapshot, not added to normal CI. The SSH-profile QA needs its external SSH fixture and is explicitly excluded from the local parallel batch. See the validation appendix for exact scope and results.
 
@@ -105,7 +105,7 @@ git diff --name-only "$base" HEAD -- src server shared | wc -l
 git diff --name-status "$base" HEAD -- src server shared
 ```
 
-At the starting commit: **176 modified upstream files, 82 added fork files and 2 deleted upstream files** (260 paths). After extraction: **123 modified upstream files, 131 added fork files, no deletions** (254 paths). This removes 53 modified-file collision surfaces and restores both deleted upstream modules. The merge check is recorded with validation below. Restoring an upstream file removes a collision surface; adding a fork module does not create one.
+At the starting commit: **176 modified upstream files, 82 added fork files and 2 deleted upstream files** (260 paths). After extraction: **123 modified upstream files, 131 added fork files, no deletions** (254 paths). After the review follow-up: **124 modified upstream files, 132 added fork files, no deletions** (256 paths). The extra upstream file is the sidebar integration test, which now asserts default and opt-in menus; the addition is the provider-independent fork cache test. This removes 52 modified-file collision surfaces and restores both deleted upstream modules. The merge check is recorded with validation below. Restoring an upstream file removes a collision surface; adding a fork module does not create one.
 
 ## Complete starting-file inventory
 
@@ -210,6 +210,24 @@ After these fixes:
 - The failures were three menu expectations in `src/components/Sidebar.appLayout.test.tsx`, which still expect the now-opt-in `pull-requests` item, and eight tests in `src/lib/useWorktreeBranches.hook.test.ts`, which throw `useSettings needs a SettingsProvider above it`. Each file was rerun alone in the image on both the corrected snapshot and the pre-fix commit `dbb90bb7`; all four commands exited 1 with the same 3/8 failure split. These pre-existing branch failures were reported, not changed in this fixture-only fix. No second full fast run was made.
 
 Logs, the JSON report and the runnable `fast.sh` / `compare.sh` recipes are retained at `$HOME/.cache/ovis-verification/fork-sep-type-fix-e3cd58/`. The fast container used CPUs 0-3 because this Docker daemon exposes only CPUs 0-7; the initial request for CPUs 64-95 was rejected before a container or check started. Browser regressions were not rerun for these fixture-only edits.
+
+### Review follow-up
+
+All three subsequent findings were reproduced and addressed:
+
+1. All eight original `src/lib/useWorktreeBranches.hook.test.ts` cases threw `useSettings needs a SettingsProvider above it`. The polling hook now takes an optional `persistBranches` argument instead of reading settings. Sidebar and CommandPalette pass the cache opt-in explicitly. The upstream polling tests remain unchanged, and `src/fork/worktreeBranches.hook.test.ts` verifies both cache settings without a provider.
+2. Three sidebar menu tests still expected the opt-in action under default settings. Those cases now run with `pullRequests` both false and true, including locked agents, so close/delete assertions complete in both modes.
+3. The preferences browser script checked only control presence. The new fork-features script actually plays/pauses/resumes/stops fixture speech, loads the desktop iframe and sends quality/keyboard updates, checks out and reopens a demo pull request without duplicating its worktree, and starts/mutes/unmutes/ends Pi voice. Fresh defaults expose none of these actions and make no feature service requests. Pi uses Chromium's fake microphone and a local protocol peer; this does not test OpenAI audio or contact a real PC.
+
+Scoped checks:
+
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-review-e3cd58 bun test src/lib/useWorktreeBranches.hook.test.ts src/fork/worktreeBranches.hook.test.ts src/components/Sidebar.appLayout.test.tsx src/components/CommandPalette.appLayout.test.tsx src/fork/branchStorage.test.ts src/conventions.test.ts` exited 0: **55 passed**.
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-review-e3cd58 bun test scripts/ci-browser-parallel.test.ts` exited 0: **12 passed**.
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-review-e3cd58 bun node_modules/typescript/bin/tsc --ignoreConfig --noEmit --strict --noUncheckedIndexedAccess --noUnusedLocals --skipLibCheck --module ESNext --moduleResolution Bundler --target ES2022 --resolveJsonModule --allowImportingTsExtensions --types bun scripts/fork-features-regression.ts` exited 0. The first invocation needed TypeScript's `--ignoreConfig` flag; the second exposed Bun's extra fetch type member, resolved with the same browser-fetch cast as the existing demo transport.
+- `bash -n scripts/ci-browser.sh` and `git diff --check` exited 0.
+- A `git ls-files` tar ran as the image's `runner` user in `herdr-ci-runner:local`, with `--entrypoint bash`, CPUs 0-3, a locked install, a disposable git snapshot and `bun run build`. `BROWSER_SCRIPTS=scripts/fork-features-regression.ts,scripts/fork-preferences-regression.ts,scripts/sidebar-branch-line-demo-regression.ts,scripts/sidebar-machine-layout-demo-regression.ts,scripts/palette-machines-demo-regression.ts BROWSER_WORKERS=4 BROWSER_RETRY=0 bun scripts/ci-browser-parallel.ts` exited 0: **5/5 passed**, with no retries. Preparation and all scripts exited 0. Only browser-only type annotations and this record changed after the snapshot.
+
+Recipes, red/green unit logs, browser summary and per-script logs are retained in `$HOME/.cache/ovis-verification/fork-review-e3cd58/`. The temporary root and container were removed after verification. Full fast, whole-project typecheck, integration/native checks and another merge dry run were not repeated for this scoped review follow-up. No live build, service, real session, push or deployment was used.
 
 ### Browser commands and results
 
