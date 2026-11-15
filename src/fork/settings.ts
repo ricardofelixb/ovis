@@ -1,6 +1,11 @@
 import { isPiVoice, type PiVoice } from "../../shared/pi-voice.ts";
 import { SPEECH_DEFAULT_VOICE, SPEECH_VOICES, type SpeechVoice } from "../../shared/speech.ts";
 
+import { DEFAULT_KEY_BAR_ITEMS, type KeyBarItem } from "../lib/keyBar.ts";
+
+const legacyKeyBarItems: KeyBarItem[] = DEFAULT_KEY_BAR_ITEMS.flatMap((item): KeyBarItem[] =>
+  item.type === "modifier" && item.modifier === "shift" ? [item, { type: "modifier", modifier: "super" }] : [item]);
+
 /** Fork choices. New devices keep upstream's behavior. */
 export interface ForkSettings {
   followOmarchy: boolean;
@@ -54,7 +59,7 @@ export function migrateForkSettings(raw: unknown): unknown {
   const record = raw as Record<string, unknown>;
   if (!["contextCircle", "speechVoice", "liveVoice", "followOmarchy", "enterKey"].some((key) => Object.hasOwn(record, key))) return raw;
   // Once a new setting is explicit it always wins, including false and a reset to upstream defaults.
-  return { phoneTabs: "header", contextCircle: true, squareCorners: true, moreViewToggle: true, agentNamedTabs: true,
+  return { phoneTabs: "header", keyBarItems: legacyKeyBarItems, contextCircle: true, squareCorners: true, moreViewToggle: true, agentNamedTabs: true,
     agentFriends: true, composerExtras: true, compactWorkRuns: true, chatMotion: true,
     piLiveVoice: true, computerView: true, pullRequests: true, readAloud: true, headerBranch: true, collapseOfflinePcs: true, expandedPrompts: true, ...record };
 }
