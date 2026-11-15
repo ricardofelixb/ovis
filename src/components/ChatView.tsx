@@ -32,11 +32,12 @@ import { turnSkills } from "../lib/skillActivity.ts";
 import { ApiError, pinPaneConversation, unpinPaneConversation } from "../lib/api.ts";
 import { copyText } from "../lib/clipboard.ts";
 import { SpeakButton } from "../fork/SpeakButton.tsx";
+import { WorkRun } from "../fork/workRuns.tsx";
 import type { GalleryImage } from "../lib/imageViewer.ts";
 import { toolGalleryImage, userGalleryImages } from "../lib/chatImages.ts";
 import { useMachineApi } from "../lib/machineContext.tsx";
 import { toTranscriptMessages, type TranscriptMessage } from "../lib/transcript.ts";
-import { answerItems, endedOnAnswer, foldedRequestsMatch, isLiveWorkTurn, isWaitingWorkTurn, formatWorkDuration, runCounts, runNames, splitTurn, turnSegments, type WorkSegment, todoGroups, visibleWorkParts, workBlockStartsOpen, workFailed, workItems, workSummary, type RunCount, type ThinkingPart, type TodoAttempt, type TodoGroup, type ToolPart as ToolPartType } from "../lib/workBlocks.ts";
+import { answerItems, endedOnAnswer, foldedRequestsMatch, isLiveWorkTurn, isWaitingWorkTurn, formatWorkDuration, runNames, splitTurn, turnSegments, type WorkSegment, todoGroups, visibleWorkParts, workBlockStartsOpen, workFailed, workItems, workSummary, type ThinkingPart, type TodoAttempt, type TodoGroup, type ToolPart as ToolPartType } from "../lib/workBlocks.ts";
 import { phaseRows, planRows, taskRows, todoRows, type ChecklistRow } from "../lib/checklist.ts";
 import { isTodoTool, parseTodoAnswer, todoCallSummary, type TodoItem, type TodoStatus } from "../lib/todos.ts";
 import { formatGoalTime, goalWaitSources, goalWaitUntil, turnGoal, type GoalState, type GoalStatus } from "../lib/goals.ts";
@@ -838,21 +839,10 @@ function ThinkingRow({ text, stateKey, defaultOpen }: { text: string; stateKey: 
 function WorkRunRow({ paneId, run, work, stateKeyOf, live, expandThinking }: { paneId: string; run: (ToolPartType | ThinkingPart)[]; work: TurnWork; stateKeyOf: (part: ConversationPart) => string; live: boolean; expandThinking: boolean }) {
   const { at } = work;
   const [chosen, setOpen] = useChatRowToggle(`run:${at.get(run[0]!)}`, null);
-  // with Expand thinking on, a run that holds reasoning starts open, so the reasoning shows
-  const open = chosen ?? (expandThinking && run.some((part) => part.kind === "thinking"));
-  const { done, failed, running } = runCounts(run, live);
-  const counts = (list: RunCount[]) => list.map(({ name, count }) => `${name} ×${count}`).join(", ");
-  const groupsShown = [["done", "✓", done], ["failed", "✗", failed], ["running", "•", running]] as const;
-  return <div className="work-row work-run">
-    <button type="button" className="work-run-head" aria-expanded={open} onClick={() => setOpen(!open)}>
-      <span className="work-row-caret" aria-hidden="true">{open ? <ChevronDown /> : <ChevronRight />}</span>
-      <span className="work-run-counts">{groupsShown.filter(([, , list]) => list.length > 0).map(([outcome, mark, list], index) =>
-        <span key={outcome} className={`work-run-${outcome}`}>{index > 0 && " · "}<span className="work-run-mark">{mark}</span> {counts(list)}</span>)}</span>
-    </button>
-    {open && <div className="work-run-rows">{run.map((part) =>
-      part.kind === "thinking" ? <ThinkingRow key={`thinking:${at.get(part)}`} stateKey={`thinking:${at.get(part)}`} text={part.text} defaultOpen={expandThinking} />
-        : <WorkRow key={stateKeyOf(part)} stateKey={stateKeyOf(part)} paneId={paneId} part={part} />)}</div>}
-  </div>;
+  return <WorkRun run={run} live={live} expandThinking={expandThinking} chosen={chosen} setOpen={setOpen}>
+    {run.map((part) => part.kind === "thinking" ? <ThinkingRow key={`thinking:${at.get(part)}`} stateKey={`thinking:${at.get(part)}`} text={part.text} defaultOpen={expandThinking} />
+      : <WorkRow key={stateKeyOf(part)} stateKey={stateKeyOf(part)} paneId={paneId} part={part} />)}
+  </WorkRun>;
 }
 
 /**
@@ -916,6 +906,7 @@ function WorkBlockView({ paneId, parts, work, memoryKey, duration, startedAt = n
   const toolKey = (part: ConversationPart) => `tool:${at.get(part)}`;
   const images = useMemo(() => linePictures(parts), [parts]);
   const visible = visibleWorkParts(parts, showThinking);
+  const compact = useSettings().settings.compactWorkRuns;
   if (visible.length === 0) return live && !waiting && pendingHead ? <PendingWorkHead title={t("Working…")} /> : null;
   const summary = workSummary(parts);
   const failed = workFailed(parts);
@@ -936,8 +927,10 @@ function WorkBlockView({ paneId, parts, work, memoryKey, duration, startedAt = n
     </div>
     {/* the rows open and fold at the block's measured height; folded and settled, they are not drawn */}
     <AnimatedHeight open={open} animateContent={false}>
-      <div className="work-block-rows" onFocus={keepOpen} onPointerDown={keepOpen}>{workItems(visible.filter((part) => !grouped.has(part)), parts, (part) => part.kind === "tool" && groups.has(part)).map((item) =>
+      <div className="work-block-rows" onFocus={keepOpen} onPointerDown={keepOpen}>{workItems(visible.filter((part) => !grouped.has(part)), parts, (part) => part.kind === "tool" && groups.has(part) || !compact).map((item) =>
         item.kind === "run" ? <WorkRunRow key={`run:${at.get(item.parts[0]!)}`} paneId={paneId} run={item.parts} work={work} stateKeyOf={toolKey} live={live} expandThinking={expandThinking} />
+          : item.part.kind === "thinking" ? <ThinkingRow key={`thinking:${at.get(item.part)}`} stateKey={`thinking:${at.get(item.part)}`} text={item.part.text} defaultOpen={expandThinking} />
+          : item.part.kind === "tool" && !groups.has(item.part) ? <WorkRow key={toolKey(item.part)} stateKey={toolKey(item.part)} paneId={paneId} part={item.part} />
           : item.part.kind === "text" ? <div key={`text:${at.get(item.part)}`} className="work-narration"><Markdown>{item.part.text}</Markdown></div>
             // a run of todo updates keeps its own row (TodoGroupRow), between the runs it breaks
             : item.part.kind === "tool" && groups.has(item.part) ? <TodoGroupRow key={groups.get(item.part)!.id} paneId={paneId} group={groups.get(item.part)!} stateKeyOf={toolKey} /> : null)}
