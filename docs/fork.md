@@ -176,6 +176,28 @@ The following inventory is a static record of this refactor, not a release manif
 
 Total inventoried: **284 upstream-owned paths** (282 modified and 2 deleted at the starting commit). The 148 originally added paths are fork-owned and do not collide with an upstream path; their feature families are described above.
 
+## CI
+
+`fork-ci.yml` runs on PRs, pushes to main and manual dispatch, on `ubuntu-24.04`. New runs cancel older runs for the ref. Independent jobs check types/generated types/themes/build, run four deterministic unit-file shards, and build/run fork browser regressions plus changed regression/QA scripts whose bytes differ from upstream. Changes are measured against the PR base or push's previous commit. Each job has a 10-minute timeout; **`Fork CI`** is the final, always-run gate and fails unless every job succeeds. Dependencies, Node and hosted Chromium follow upstream's pinned setup/cache paths. There are no integration/native/release jobs.
+
+Expected warm-cache wall times (not GitHub measurements): typecheck/build **1-2 minutes**, each unit shard **1-3 minutes**, normal fork-only browser **1-3 minutes**, final gate **under 15 seconds**. The target is **2-3 minutes total**, not a guarantee for large diffs or cold Chromium installs. After filtering restored upstream copies, this migration PR selects **4 scripts**: `file-viewer-regression.ts`, `fork-features-regression.ts`, `fork-preferences-regression.ts` and `inbox-mode-demo-regression.ts`. None needs the external Docker SSH fixture. Inbox previously took 294 seconds, so this PR's browser job is more likely **5-7 minutes**, still subject to the 10-minute cap. No Copilot exclusion is present.
+
+`fork-unit-shard.ts` mirrors upstream's unit file boundary and keeps each file in an isolated process/group. `--shard k/4 --list` prints a dry-run JSON list. If upstream changes its test roots or integration exceptions, update this fork-owned adapter. `fork-browser.ts --list` previews selection. The job shallow-fetches upstream main by URL and compares changed scripts byte-for-byte with that fetched commit; scripts absent upstream and all `fork-*-regression.ts` scripts run. If fetching fails, it logs a warning and runs all changed scripts. Selected scripts missing from the serial list are registered only in the disposable CI checkout and the file is restored on success or failure. No upstream workflow was edited.
+
+**Repository settings completed by the maintainer:** all upstream workflows are disabled, and main's sole required check is **`Fork CI`**, from the GitHub Actions app. `fork-full.yml` is manual-only and calls `./.github/workflows/ci.yml` via `workflow_call`; disabled workflows still run when called. Full checks are optional, not part of the gate. This implementation did not change repository settings.
+
+To undo the settings change, deliberately re-enable upstream workflows (including release/deploy workflows), then replace the fork gate with the project's three upstream required checks. These commands are documentation only; they were not run:
+
+```sh
+for file in .github/workflows/*.yml; do
+  case "$file" in .github/workflows/fork-*) continue ;; esac
+  gh workflow enable "${file##*/}" --repo ricardofelixb/ovis
+done
+gh api --method PATCH repos/ricardofelixb/ovis/branches/main/protection/required_status_checks --input - <<'JSON'
+{"checks":[{"context":"Fast checks","app_id":15368},{"context":"Integration and browser","app_id":15368},{"context":"Native Windows install","app_id":15368}]}
+JSON
+```
+
 ## Local validation
 
 No push, PR, merge, deployment or native-device check was performed. All browser builds ran in `herdr-ci-runner:local`, as its normal user, with only a disposable snapshot and verification-artifact mount. The live checkout and services were not used.
@@ -227,7 +249,19 @@ Scoped checks:
 - `bash -n scripts/ci-browser.sh` and `git diff --check` exited 0.
 - A `git ls-files` tar ran as the image's `runner` user in `herdr-ci-runner:local`, with `--entrypoint bash`, CPUs 0-3, a locked install, a disposable git snapshot and `bun run build`. `BROWSER_SCRIPTS=scripts/fork-features-regression.ts,scripts/fork-preferences-regression.ts,scripts/sidebar-branch-line-demo-regression.ts,scripts/sidebar-machine-layout-demo-regression.ts,scripts/palette-machines-demo-regression.ts BROWSER_WORKERS=4 BROWSER_RETRY=0 bun scripts/ci-browser-parallel.ts` exited 0: **5/5 passed**, with no retries. Preparation and all scripts exited 0. Only browser-only type annotations and this record changed after the snapshot.
 
-Recipes, red/green unit logs, browser summary and per-script logs are retained in `$HOME/.cache/ovis-verification/fork-review-e3cd58/`. The temporary root and container were removed after verification. Full fast, whole-project typecheck, integration/native checks and another merge dry run were not repeated for this scoped review follow-up. No live build, service, real session, push or deployment was used.
+Recipes, unit logs, browser summary and per-script logs are retained in `$HOME/.cache/ovis-verification/fork-review-e3cd58/`. The temporary root and container were removed after verification. Full fast, whole-project typecheck, integration/native checks and another merge dry run were not repeated for this scoped review follow-up. No live build, service, real session, push or deployment was used.
+
+### Fork CI follow-up
+
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-ci-e3cd58 bun test scripts/fork-unit-shard.test.ts scripts/fork-browser.test.ts scripts/ci-setup.test.ts scripts/light-runner-workflow.test.ts scripts/workflow-needs.test.ts scripts/ci-browser.test.ts scripts/ci-browser-parallel.test.ts` exited 0: **72 passed** after the upstream-copy filter was added. Initial test-only commits failed with missing-module/export errors; the unit runner also reproduced an incorrectly accepted empty test file before its output check was added.
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-ci-e3cd58 bun node_modules/typescript/bin/tsc --ignoreConfig --noEmit --strict --noUncheckedIndexedAccess --noUnusedLocals --skipLibCheck --module ESNext --moduleResolution Bundler --target ES2022 --resolveJsonModule --allowImportingTsExtensions --types bun scripts/fork-unit-shard.ts scripts/fork-unit-shard.test.ts scripts/fork-browser.ts scripts/fork-browser.test.ts` exited 0.
+- Actionlint 1.7.12, downloaded and SHA-256 verified, validated `.github/workflows/fork-ci.yml` and `.github/workflows/fork-full.yml`, exit 0. The release archive's SHA-256 was `8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8`.
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-ci-e3cd58 bun scripts/fork-unit-shard.ts --shard k/4 --list` exited 0 for each `k` in 1, 2, 3, 4. Comparing the concatenated lists with `selectUnitFiles()` proved **988 files, 247 per shard, 988 unique**, with Copilot included. The actual four full shards were not run locally.
+- The isolated CI image installed/built successfully, then `bun run check run -- bun scripts/fork-browser.ts` exited 0 with manual-dispatch selection: **2/2 passed in 22.7 seconds**, including cleanup. The separate earlier review batch passed 5/5. The initial PR selector returned 71 scripts. After the requested upstream-copy filter, the final dry run returned the four scripts listed in the CI section; that whole list was not rerun. The job uses `git fetch --depth=1 https://github.com/devswha/ovis.git main`. Host validation used a full `git fetch --no-tags https://github.com/devswha/ovis.git main` to avoid changing the worktrees' shared shallow boundary, then `FORK_BROWSER_EVENT=pull_request FORK_BROWSER_BASE=$(git rev-parse origin/main) FORK_BROWSER_UPSTREAM=$(git rev-parse FETCH_HEAD) bun scripts/fork-browser.ts --list`, exit 0. The fetched upstream commit was `b969ea870244eb83526c5c0644b69aa11c7959db`.
+- **Known blocker:** `HERDR_TEST_MODE=unit bun test server/copilot.test.ts` in the image exited 1, **132 pass / 1 fail**: `keeps a logged binding when only the log's timestamps change` at line 740. The same command on a fresh snapshot of pre-CI commit `081b5562` exited 1 with the same assertion and counts. Copilot was neither edited nor excluded; its gate treatment needs the maintainer's decision.
+- `git diff --exit-code 081b5562 -- .github/workflows ':(exclude).github/workflows/fork-*.yml'` and `git diff --check` exited 0: upstream workflow files are unchanged by this follow-up.
+
+The container recipe's aggregate exit was 1 solely because of the explicitly checked Copilot failure; the browser/check-wrapper exit was 0. Logs, scripts and exact validation commands are retained in `$HOME/.cache/ovis-verification/fork-ci-e3cd58/`. No full fast/typecheck, integration/native suite, upstream workflow, repository setting or deployment was run/changed in this CI follow-up.
 
 ### Browser commands and results
 
@@ -279,4 +313,5 @@ Validation artifacts, the runnable container scripts, and `check-command-history
 - Security: no new dependencies or credentials. Authentication, origin and observe guards retain their route order; device revocation still closes screen/voice sockets. UI preferences are not access controls. No automatic input, focus or takeover was introduced.
 - Performance: fork listeners/polling are disabled with their features; the steady-keyboard listeners are not subscribed by default. No new transcript rebuild, PTY ownership or cache was added.
 - Clarity/scope: small compatibility facades are intentional; moved large modules were not gratuitously rewritten. Pure helpers and optional controls have focused unit or browser coverage. No Bigpowers plan/state files were created. The skill's spec-output and project-wide-check requirements are superseded by this task's explicit instructions.
+- CI follow-up: read-only token permissions, pinned actions, no persisted checkout credentials or new dependencies. Shards preserve per-file process isolation and failure exits. Browser selection tests cover PR/push bases, upstream byte comparisons, missing scripts, fetch fallback and restoration of temporary registration. Copilot remains visible; it was not removed to make the gate green.
 - The tempting shortcut was to treat all failed browsers as baseline failures. The baseline comparison instead identified the new menu/helper/keyboard failures, which were fixed; only the four reproduced failures above remain blocked.
