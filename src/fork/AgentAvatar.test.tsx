@@ -10,10 +10,18 @@ import { useAgentFriends } from "./friends.ts";
 const machine = { id: "m1", state: "connected", snapshot: { panes: [{ pane_id: "p1", agent: "claude" }, { pane_id: "p2", agent: "codex" }] } } as unknown as Machine;
 
 /** the stored settings this device has, and the friends /api/friends answers */
+const asks = { started: 0, answered: 0 };
 function device(agentFriends: boolean, friends: Record<string, string>) {
+  asks.started = 0;
+  asks.answered = 0;
   const win = globalThis.window as unknown as { localStorage: Pick<Storage, "getItem" | "setItem" | "removeItem"> };
   win.localStorage = { getItem: (key) => key === "ovis:settings" ? JSON.stringify({ agentFriends }) : null, setItem() {}, removeItem() {} };
-  globalThis.fetch = (async () => new Response(JSON.stringify({ friends }), { headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+  globalThis.fetch = (async () => {
+    asks.started += 1;
+    const answer = new Response(JSON.stringify({ friends }), { headers: { "content-type": "application/json" } });
+    asks.answered += 1;
+    return answer;
+  }) as unknown as typeof fetch;
 }
 
 function Asking({ children }: { children: React.ReactNode }) {
@@ -54,8 +62,14 @@ describe("AgentAvatar", () => {
 
   const draw = async (avatar: React.ReactNode): Promise<string> => {
     await act(async () => { renderer = create(<SettingsProvider><Asking>{avatar}</Asking></SettingsProvider>); });
-    // the answer to /api/friends lands after the first paint
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    // the answer to /api/friends lands after the first paint: wait for it, bounded
+    const deadline = Date.now() + 2_000;
+    while (asks.answered < asks.started) {
+      if (Date.now() > deadline) throw new Error("/api/friends was not answered");
+      await Bun.sleep(5);
+    }
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await Promise.resolve(); });
     return JSON.stringify(renderer!.toJSON());
   };
 
