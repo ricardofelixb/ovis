@@ -30,12 +30,12 @@ it.each([false, true])("restores branches only when opted in, without a Settings
   const snapshot: SessionSnapshot = { protocol: 1, version: "test", layouts: [], tabs: [], panes: [], agents: [],
     workspaces: [{ workspace_id: "w1", active_tab_id: "", agent_status: "IDLE", focused: false, label: "one", number: 1, pane_count: 0, tab_count: 0 }] };
   const unmarked = new Set(["w1"]);
-  let shown: string | null = null;
+  const result: { branch: string | null } = { branch: null };
   function Probe() {
-    shown = useWorktreeBranches(snapshot, false, false, unmarked, false, undefined, persist).branches.get("w1")?.branch ?? null;
+    result.branch = useWorktreeBranches(snapshot, false, false, unmarked, false, undefined, persist).branches.get("w1")?.branch ?? null;
     return null;
   }
   await act(async () => { renderer = create(createElement(Probe)); });
-  expect(shown).toBe(persist ? "feature/one" : null);
+  expect(result.branch).toBe(persist ? "feature/one" : null);
   expect(read).toEqual(persist ? ["ovis:branches:local"] : []);
 });
