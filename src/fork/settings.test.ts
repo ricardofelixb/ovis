@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { migrateKeyBarItems } from "../lib/keyBar.ts";
 import { DEFAULT_SETTINGS, loadSettings, PHONE_TABS_STORAGE_KEY, sanitizeSettings, saveSettings } from "../lib/settings.ts";
 
 /** Defaults change only for new devices; existing fork installations keep their choices. */
@@ -37,6 +38,11 @@ describe("fork settings compatibility", () => {
     expect(loadSettings().keyBarItems).toContainEqual({ type: "modifier", modifier: "super" });
     expect(records.get("ovis:settings")).toBe(raw);
     expect(records.size).toBe(1);
+  });
+
+  it.each([{ extras: ["home-end"] }, { extras: [] }] as const)("preserves an extras-only fork key bar: %j", ({ extras }) => {
+    records.set("ovis:settings", JSON.stringify({ contextCircle: true, keyBarExtras: extras }));
+    expect(loadSettings().keyBarItems).toEqual(migrateKeyBarItems(extras));
   });
 
   it("keeps explicit choices through saving, reload and reset", () => {
