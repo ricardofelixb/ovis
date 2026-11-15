@@ -20,6 +20,8 @@ export interface ForkSettings {
   pullRequests: boolean;
   readAloud: boolean;
   headerBranch: boolean;
+  collapseOfflinePcs: boolean;
+  expandedPrompts: boolean;
 }
 
 export const FORK_DEFAULTS: ForkSettings = {
@@ -27,7 +29,7 @@ export const FORK_DEFAULTS: ForkSettings = {
   speechVoice: SPEECH_DEFAULT_VOICE, liveVoice: "pi",
   squareCorners: false, moreViewToggle: false, agentNamedTabs: false, agentFriends: false,
   composerExtras: false, compactWorkRuns: false, chatMotion: false, piLiveVoice: false,
-  computerView: false, pullRequests: false, readAloud: false, headerBranch: false,
+  computerView: false, pullRequests: false, readAloud: false, headerBranch: false, collapseOfflinePcs: false, expandedPrompts: false,
 };
 
 export const FORK_SCOPE = {
@@ -54,7 +56,7 @@ export function migrateForkSettings(raw: unknown): unknown {
   // Once a new setting is explicit it always wins, including false and a reset to upstream defaults.
   return { phoneTabs: "header", contextCircle: true, squareCorners: true, moreViewToggle: true, agentNamedTabs: true,
     agentFriends: true, composerExtras: true, compactWorkRuns: true, chatMotion: true,
-    piLiveVoice: true, computerView: true, pullRequests: true, readAloud: true, headerBranch: true, ...record };
+    piLiveVoice: true, computerView: true, pullRequests: true, readAloud: true, headerBranch: true, collapseOfflinePcs: true, expandedPrompts: true, ...record };
 }
 
 /** Kept apart from the main record: an older upstream tab must not erase fork choices on save. */
@@ -72,7 +74,7 @@ export function saveForkSettings(settings: ForkSettings): void {
 
 /** Attributes own all fork CSS; switching a feature off removes its styling immediately. */
 export function applyForkSettings(settings: ForkSettings, root: HTMLElement): void {
-  for (const key of ["squareCorners", "moreViewToggle", "agentFriends", "composerExtras", "compactWorkRuns", "chatMotion", "readAloud", "piLiveVoice", "headerBranch"] as const) {
-    root.dataset[`fork${key.charAt(0).toUpperCase()}${key.slice(1)}`] = String(settings[key]);
+  for (const key of Object.keys(FORK_DEFAULTS) as (keyof ForkSettings)[]) {
+    if (typeof settings[key] === "boolean") root.dataset[`fork${key.charAt(0).toUpperCase()}${key.slice(1)}`] = String(settings[key]);
   }
 }

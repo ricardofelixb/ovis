@@ -241,7 +241,8 @@ export function MachineSidebar(props: Props) {
   const loadingWords = useAnnouncedText(props.machines.length === 0 ? t("Loading PCs…") : null);
   // PCs Tailscale says are offline wait behind one row, unless one of them is the PC in view
   const [showOffline, setShowOffline] = useState(false);
-  const offline = props.machines.filter((machine) => machine.tailnet_offline && machine.id !== props.selectedMachineId);
+  const collapseOffline = useSettings().settings.collapseOfflinePcs;
+  const offline = collapseOffline ? props.machines.filter((machine) => machine.tailnet_offline && machine.id !== props.selectedMachineId) : [];
   const online = props.machines.filter((machine) => !offline.includes(machine));
   // a PC whose roster has not come was not searched: the line says the answer is only of the PCs that answered
   const unanswered = props.machines.some((machine) => machine.snapshot === null);

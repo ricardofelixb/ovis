@@ -21,6 +21,8 @@ export function ForkFeatures() {
     ["pullRequests", t("Pull requests")],
     ["readAloud", t("Read aloud")],
     ["headerBranch", t("Branch in the header")],
+    ["collapseOfflinePcs", t("Collapse offline PCs")],
+    ["expandedPrompts", t("Taller prompt cards")],
   ] as const;
   return <SettingsGroup title={t("Fork features")} section="fork-features">
     {choices.map(([key, label]) => <SettingsRow key={key} label={label} reset={[key]}>
