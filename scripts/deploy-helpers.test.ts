@@ -174,7 +174,9 @@ describe("rollOut", () => {
     const run = steps();
     const result = await rollOut(run.steps, { connectMs: 500, pollMs: 1 });
     expect(run.trace).toEqual(["list", "update a", "update b", "restart", "after", "poll"]);
-    expect(result).toEqual({ stale: [], waiting: [] });
+    expect(result.stale).toEqual([]);
+    expect(result.waiting).toEqual([]);
+    expect(result.pcs.map((pc) => pc.id)).toEqual(["a", "b"]);
   });
 
   it("keeps waiting while a PC is not connected, and reports it by id when the time is up", async () => {
@@ -192,7 +194,7 @@ describe("rollOut", () => {
   });
 
   it("fails at the deadline when /api/machines accepts a request and never answers", async () => {
-    const run = steps({ after: () => new Promise(() => {}) });
+    const run = steps();
     const hanging = { ...run.steps, listMachines: async (signal: AbortSignal) => {
       if (!run.trace.includes("restart")) return [local, pcA];
       return await new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted"))));
