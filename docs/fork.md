@@ -25,6 +25,7 @@ A file can contain more than one pile. The inventory below lists every upstream-
 | Persistent branch names in the header | `src/fork/HeaderBranch.tsx`, `src/fork/branchStorage.ts` | Settings: Branch in the header. Branch storage is neither read nor written with this option off. |
 | Offline-PC collapsing and extra sidebar actions | Small guarded branches in `src/components/MachineSidebar.tsx` and `src/components/AgentSidebar.tsx` | Settings: Collapse offline PCs and Sidebar pane actions. |
 | Generic runtime fixes | Conversation deltas, receipt whitespace, hidden-page throttling, independent machine reconnect, source bridges, favicon discovery, terminal/IME fixes | These fix transport or data interpretation, not personal layout. Their coupled upstream integrations and tests are retained; see limits below. |
+| Copilot partial-log truncation within one timestamp tick | `server/copilot-store.ts`; existing regression in `server/copilot.test.ts` | Compare truncations against both complete-line and observed sizes. Coarse file timestamps can stay unchanged when a partial line is appended and removed. Generic upstream bug fix, no setting or test exclusion. |
 | Portable native improvements | Android call lifecycle, notification permissions, friend pictures and multi-window handling | Native-app contribution candidates. They are not Xiaomi-only changes. Native files were not rewritten by this refactor. |
 
 ### Preferences (pile B)
@@ -105,7 +106,7 @@ git diff --name-only "$base" HEAD -- src server shared | wc -l
 git diff --name-status "$base" HEAD -- src server shared
 ```
 
-At the starting commit: **176 modified upstream files, 82 added fork files and 2 deleted upstream files** (260 paths). After extraction: **123 modified upstream files, 131 added fork files, no deletions** (254 paths). After the review follow-up: **124 modified upstream files, 132 added fork files, no deletions** (256 paths). The extra upstream file is the sidebar integration test, which now asserts default and opt-in menus; the addition is the provider-independent fork cache test. This removes 52 modified-file collision surfaces and restores both deleted upstream modules. The merge check is recorded with validation below. Restoring an upstream file removes a collision surface; adding a fork module does not create one.
+At the starting commit: **176 modified upstream files, 82 added fork files and 2 deleted upstream files** (260 paths). After extraction: **123 modified upstream files, 131 added fork files, no deletions** (254 paths). After the review follow-up: **124 modified upstream files, 132 added fork files, no deletions** (256 paths). The extra upstream file is the sidebar integration test, which now asserts default and opt-in menus; the addition is the provider-independent fork cache test. The generic Copilot fix makes the final totals **125 modified upstream files and 132 added fork files**, with no deletions, or 257 paths. This removes 51 modified-file collision surfaces and restores both deleted upstream modules. The merge check is recorded with validation below. Restoring an upstream file removes a collision surface; adding a fork module does not create one.
 
 ## Complete starting-file inventory
 
@@ -258,10 +259,22 @@ Recipes, unit logs, browser summary and per-script logs are retained in `$HOME/.
 - Actionlint 1.7.12, downloaded and SHA-256 verified, validated `.github/workflows/fork-ci.yml` and `.github/workflows/fork-full.yml`, exit 0. The release archive's SHA-256 was `8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8`.
 - `TMPDIR=$HOME/.cache/ovis-tmp/fork-ci-e3cd58 bun scripts/fork-unit-shard.ts --shard k/4 --list` exited 0 for each `k` in 1, 2, 3, 4. Comparing the concatenated lists with `selectUnitFiles()` proved **988 files, 247 per shard, 988 unique**, with Copilot included. The actual four full shards were not run locally.
 - The isolated CI image installed/built successfully, then `bun run check run -- bun scripts/fork-browser.ts` exited 0 with manual-dispatch selection: **2/2 passed in 22.7 seconds**, including cleanup. The separate earlier review batch passed 5/5. The initial PR selector returned 71 scripts. After the requested upstream-copy filter, the final dry run returned the four scripts listed in the CI section; that whole list was not rerun. The job uses `git fetch --depth=1 https://github.com/devswha/ovis.git main`. Host validation used a full `git fetch --no-tags https://github.com/devswha/ovis.git main` to avoid changing the worktrees' shared shallow boundary, then `FORK_BROWSER_EVENT=pull_request FORK_BROWSER_BASE=$(git rev-parse origin/main) FORK_BROWSER_UPSTREAM=$(git rev-parse FETCH_HEAD) bun scripts/fork-browser.ts --list`, exit 0. The fetched upstream commit was `b969ea870244eb83526c5c0644b69aa11c7959db`.
-- **Known blocker:** `HERDR_TEST_MODE=unit bun test server/copilot.test.ts` in the image exited 1, **132 pass / 1 fail**: `keeps a logged binding when only the log's timestamps change` at line 740. The same command on a fresh snapshot of pre-CI commit `081b5562` exited 1 with the same assertion and counts. Copilot was neither edited nor excluded; its gate treatment needs the maintainer's decision.
+- The initial `HERDR_TEST_MODE=unit bun test server/copilot.test.ts` in the image exited 1, **132 pass / 1 fail**: `keeps a logged binding when only the log's timestamps change` at line 740. The same command on a fresh snapshot of pre-CI commit `081b5562` exited 1 with the same assertion and counts. Copilot was not excluded. The observed-size truncation fix below resolves this blocker.
 - `git diff --exit-code 081b5562 -- .github/workflows ':(exclude).github/workflows/fork-*.yml'` and `git diff --check` exited 0: upstream workflow files are unchanged by this follow-up.
 
 The container recipe's aggregate exit was 1 solely because of the explicitly checked Copilot failure; the browser/check-wrapper exit was 0. Logs, scripts and exact validation commands are retained in `$HOME/.cache/ovis-verification/fork-ci-e3cd58/`. No full fast/typecheck, integration/native suite, upstream workflow, repository setting or deployment was run/changed in this CI follow-up.
+
+### Copilot truncation follow-up
+
+The existing timestamp-refresh regression failed before the fix, **132 pass / 1 fail**. A partial append raises `observedSize` without advancing the complete-line checkpoint. Truncating back to that checkpoint inside one filesystem timestamp tick leaves mtime/ctime unchanged. The change detector now compares the file size against both checkpoint sizes, so the next scan creates a fresh generation. The test is unchanged and Copilot remains in Fork CI.
+
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-copilot-fix bun test server/copilot.test.ts` exited 1 before the fix and 0 on each of three runs afterwards: **133 passed each**.
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-copilot-fix bun scripts/fork-unit-shard.ts --shard k/4 --list` exited 0 for each `k` in 1, 2, 3, 4. The concatenated lists exactly match the unit file list: **988 unique files, 247 per shard, Copilot included exactly once in shard 4**.
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-copilot-fix bun test scripts/fork-unit-shard.test.ts server/conventions.test.ts` exited 0: **25 passed**.
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-copilot-fix bun test src/lib/useWorktreeBranches.hook.test.ts src/components/Sidebar.appLayout.test.tsx` exited 0: **23 passed**, reconfirming the two earlier review fixes. The browser coverage results above remain unchanged.
+- `git diff --check` exited 0. Self-audit checked the new invalidation path, security, performance and clarity. No new test, setting, dependency or generated file was needed.
+
+Exact commands and logs are retained in `$HOME/.cache/ovis-verification/fork-copilot-fix/`. Full fast, full unit shards, browser builds, whole-project typecheck, integration/native suites and another merge dry run were not repeated for this two-file fix. The full Fork CI will run on the PR after review.
 
 ### Browser commands and results
 
