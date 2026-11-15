@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { changedBrowserScripts, selectForkBrowserScripts } from "./fork-browser.ts";
+import { changedBrowserScripts, excludeUpstreamBrowserCopies, selectForkBrowserScripts } from "./fork-browser.ts";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
@@ -46,6 +46,21 @@ it("diffs PRs from their merge base and pushes from the exact previous commit, e
   expect(changedBrowserScripts(dir, "0".repeat(40), "push")).toEqual(["scripts/existing-qa.ts", "scripts/topic-regression.ts"]);
   expect(changedBrowserScripts(dir, "", "workflow_dispatch")).toEqual([]);
   expect(() => changedBrowserScripts(dir, "--output=bad", "push")).toThrow("SHA");
+});
+
+it("skips byte-identical upstream copies, but keeps fork-owned, modified and missing scripts", () => {
+  const dir = root();
+  git(dir, "init", "-q", "-b", "base");
+  git(dir, "config", "user.name", "Fixture"); git(dir, "config", "user.email", "fixture@localhost");
+  const same = "scripts/same-qa.ts", changed = "scripts/changed-regression.ts", own = "scripts/fork-own-regression.ts", missing = "scripts/missing-qa.ts";
+  for (const file of [same, changed, own]) writeFileSync(join(dir, file), "upstream\n");
+  git(dir, "add", "."); git(dir, "commit", "-qm", "upstream");
+  const upstream = git(dir, "rev-parse", "HEAD");
+  writeFileSync(join(dir, changed), "fork\r\n");
+  writeFileSync(join(dir, missing), "fork");
+  const selected = [changed, own, missing, same];
+  expect(excludeUpstreamBrowserCopies(dir, selected, upstream)).toEqual([changed, own, missing]);
+  expect(excludeUpstreamBrowserCopies(dir, selected, "")).toEqual(selected);
 });
 
 it.each([0, 2])("registers missing scripts only for the disposable run and preserves exit %s", (code) => {
