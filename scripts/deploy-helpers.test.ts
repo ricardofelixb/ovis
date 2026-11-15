@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { notConnected, onMainSteps, pullMainSteps, settingOf, withSetting } from "./deploy-helpers.ts";
+import { notConnected, onMainSteps, pullMainSteps, rollOut, settingOf, withSetting } from "./deploy-helpers.ts";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -127,15 +127,85 @@ describe("settingOf", () => {
 });
 
 describe("notConnected", () => {
-  const machines = [{ name: "omarchy", state: "connected", error: null }, { name: "mini", state: "error", error: "still older than this app" }, { name: "other", state: "error", error: "x" }];
+  const machines = [{ id: "m1", name: "omarchy", state: "connected", error: null }, { id: "m2", name: "mini", state: "error", error: "still older than this app" }, { id: "m3", name: "other", state: "error", error: "x" }];
+  const pc = (id: string, name: string) => ({ id, name });
 
   it("names each listed PC that is not connected, with its error, and ignores PCs not listed", () => {
-    expect(notConnected(machines, ["omarchy", "mini"])).toEqual(["mini (error: still older than this app)"]);
-    expect(notConnected(machines, ["omarchy"])).toEqual([]);
+    expect(notConnected(machines, [pc("m1", "omarchy"), pc("m2", "mini")])).toEqual(["mini (error: still older than this app)"]);
+    expect(notConnected(machines, [pc("m1", "omarchy")])).toEqual([]);
   });
 
   it("counts a listed PC the server does not list at all as not connected", () => {
-    expect(notConnected(machines, ["gone"])).toEqual(["gone (not listed)"]);
-    expect(notConnected([{ name: "a", state: "connecting", error: null }], ["a"])).toEqual(["a (connecting)"]);
+    expect(notConnected(machines, [pc("gone", "gone")])).toEqual(["gone (not listed)"]);
+    expect(notConnected([{ id: "a", name: "a", state: "connecting", error: null }], [pc("a", "a")])).toEqual(["a (connecting)"]);
+  });
+
+  it("tells PCs with the same name apart by id", () => {
+    const twins = [{ id: "m1", name: "PC", state: "connected", error: null }, { id: "m2", name: "PC", state: "error", error: "older" }];
+    expect(notConnected(twins, [pc("m1", "PC"), pc("m2", "PC")])).toEqual(["PC (error: older)"]);
+  });
+});
+
+describe("rollOut", () => {
+  const pcA = { id: "a", name: "PC", kind: "ssh", state: "error", error: null, target: { destination: "a", own_ovis: "x" } };
+  const pcB = { id: "b", name: "PC", kind: "ssh", state: "error", error: null, target: { destination: "b", own_ovis: "x" } };
+  const local = { id: "l", name: "here", kind: "local", state: "connected", error: null };
+
+  /** Steps that record what ran; `after` decides what /api/machines shows once the server restarted. */
+  function steps(options: { after?: (call: number) => unknown[] | Promise<unknown[]>; updates?: Record<string, boolean> } = {}) {
+    const trace: string[] = [];
+    let restarted = false; let polls = 0;
+    return {
+      trace,
+      steps: {
+        listMachines: async (_signal: AbortSignal) => {
+          if (!restarted) { trace.push("list"); return [local, pcA, pcB]; }
+          trace.push("poll");
+          return (await (options.after ?? (() => [local, { ...pcA, state: "connected" }, { ...pcB, state: "connected" }]))(polls++)) as typeof pcA[];
+        },
+        updatePc: (machine: { id: string }) => { trace.push(`update ${machine.id}`); return options.updates?.[machine.id] ?? true; },
+        restart: () => { trace.push("restart"); restarted = true; },
+        afterRestart: async () => { trace.push("after"); },
+      },
+    };
+  }
+
+  it("updates every PC before it restarts the server, then waits for them to connect", async () => {
+    const run = steps();
+    const result = await rollOut(run.steps, { connectMs: 500, pollMs: 1 });
+    expect(run.trace).toEqual(["list", "update a", "update b", "restart", "after", "poll"]);
+    expect(result).toEqual({ stale: [], waiting: [] });
+  });
+
+  it("keeps waiting while a PC is not connected, and reports it by id when the time is up", async () => {
+    const run = steps({ after: () => [local, { ...pcA, state: "connected" }, { ...pcB, error: "older than this app" }] });
+    const result = await rollOut(run.steps, { connectMs: 30, pollMs: 1 });
+    expect(result.waiting).toEqual(["PC (error: older than this app)"]);
+    expect(run.trace.filter((step) => step === "poll").length).toBeGreaterThan(1);
+  });
+
+  it("does not wait for a PC whose update failed, even when another PC has its name", async () => {
+    const run = steps({ updates: { b: false }, after: () => [local, { ...pcA, state: "connected" }, { ...pcB, error: "old" }] });
+    const result = await rollOut(run.steps, { connectMs: 30, pollMs: 1 });
+    expect(result.stale.map((pc) => pc.id)).toEqual(["b"]);
+    expect(result.waiting).toEqual([]);
+  });
+
+  it("fails at the deadline when /api/machines accepts a request and never answers", async () => {
+    const run = steps({ after: () => new Promise(() => {}) });
+    const hanging = { ...run.steps, listMachines: async (signal: AbortSignal) => {
+      if (!run.trace.includes("restart")) return [local, pcA];
+      return await new Promise<never>((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted"))));
+    } };
+    const started = Date.now();
+    const result = await rollOut(hanging, { connectMs: 60, pollMs: 1 });
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(result.waiting).toEqual(["PC (not listed)"]);
+  });
+
+  it("stops before touching any PC when the server does not list them", async () => {
+    const run = steps();
+    await expect(rollOut({ ...run.steps, listMachines: async () => { throw new Error("refused"); } })).rejects.toThrow("refused");
+    expect(run.trace).toEqual([]);
   });
 });
