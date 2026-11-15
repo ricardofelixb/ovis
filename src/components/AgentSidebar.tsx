@@ -354,7 +354,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
     // by the title the row draws, not the one it gave way to
     name: (row) => agentRowTitle(row, settings.sidebarRows === "one", settings.agentNamedTabs).drawn,
     seqs: activity.seqs,
-  }), [settings.agentGroupSort, settings.sidebarRows, rowStatus, activity]);
+  }), [settings.agentGroupSort, settings.sidebarRows, settings.agentNamedTabs, rowStatus, activity]);
   // Settings → Named agent groups (shared): the unpinned rows in the groups the user named, the ungrouped last
   // (lib/namedAgentGroups.ts); grouped by state as well, each named group lists its rows needs-you first, without headings
   const groupNames = settings.agentNamedGroups ? settings.agentGroupNames : [];
