@@ -33,6 +33,7 @@ import { ApiError, pinPaneConversation, unpinPaneConversation } from "../lib/api
 import { copyText } from "../lib/clipboard.ts";
 import { SpeakButton } from "../fork/SpeakButton.tsx";
 import { WorkRun, workItems } from "../fork/workRuns.tsx";
+import { useSendMotion, withoutEmptyLiveTurn } from "../fork/chatPresentation.ts";
 import type { GalleryImage } from "../lib/imageViewer.ts";
 import { toolGalleryImage, userGalleryImages } from "../lib/chatImages.ts";
 import { useMachineApi } from "../lib/machineContext.tsx";
@@ -148,8 +149,6 @@ function FailureLine({ action, failure, onRetry }: { action: string; failure: Us
 
 const TRANSCRIPT_LINES = 400;
 const PROMPT_POLL_MS = 2000;
-/** how long after a send the first user turn read still comes out of the composer */
-const POP_MS = 4000;
 /**
  * herdr can say blocked before the agent has drawn its question: while the pane waits and no read
  * has found the question yet, the next reads come this soon, this many times, before the poll's 2 s.
@@ -1578,7 +1577,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   // polls pause while the page or the pane is hidden and pick up at once when it is back
   const pageVisible = usePageVisible();
   const visible = paneVisible && pageVisible;
-  const liveShown = useHeldLive(live);
+  const liveShown = useHeldLive(settings.chatMotion ? live : null);
   /** the answer last laid out: an unchanged poll (a 304) hands back this very object */
   const lastAnswer = useRef<ConversationResponse | null>(null);
   const [conversationRefresh] = useState(() => new ConversationRefresh());
@@ -1797,14 +1796,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   /** the newest page as rendered: an earlier page loaded above it does not move the transcript */
   const heldPage = useRef<ConversationTurn[]>([]);
   const seenSent = useRef(sentKey);
-  /** where the turns ended when a message was last sent from here, for POP_MS: the first user turn read after it pops */
-  const [popFrom, setPopFrom] = useState<number | null>(null);
   const shownCount = useRef(0);
-  useEffect(() => {
-    if (popFrom === null) return;
-    const timer = setTimeout(() => setPopFrom(null), POP_MS);
-    return () => clearTimeout(timer);
-  }, [popFrom]);
   const seenUnsent = useRef(unsentKey);
   const seenStatus = useRef<{ pane: string; status: AgentStatus | undefined }>({ pane: paneId, status: agentStatus });
   const seenSession = useRef({ pane: paneId, session: agentSession });
@@ -1886,15 +1878,12 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   useEffect(() => {
     if (seenSent.current === sentKey) return;
     seenSent.current = sentKey;
-    setPopFrom(shownCount.current);
-    // The animated fork keeps its send in view immediately. Upstream follows only an accepted local send.
-    if (settings.chatMotion) scrollToBottom();
     // sent into a run (a queued message sent now): that turn is the one running, not one to finish
     const page = heldPage.current;
     const last = page[page.length - 1];
     setSentOver(last?.role === "assistant" && agentStatus !== "working" && agentStatus !== "blocked" ? { turn: last, page } : null);
     setCancelledAtSend(lastStopped.current);
-  }, [sentKey, agentStatus, settings.chatMotion]);
+  }, [sentKey, agentStatus]);
   // that send was refused before anything was typed: the copy stays the box's, so its record goes
   useEffect(() => {
     if (seenUnsent.current === unsentKey) return;
@@ -2664,8 +2653,10 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     const read = older.length > 0 ? [...older, ...state.turns] : state.turns;
     return state.source === "conversation" ? withLiveTurn(read, liveShown) : read;
   }, [older, state.turns, state.source, liveShown]);
-  const { turns, revealing: typing } = useRevealedTurns(mergedTurns, settings.chatMotion && state.source === "conversation" ? live : null, visible, settings.showThinking);
+  const popFrom = useSendMotion(sentKey, shownCount, scrollToBottom, settings.chatMotion);
+  const { turns: revealedTurns, revealing: typing } = useRevealedTurns(mergedTurns, settings.chatMotion && state.source === "conversation" ? live : null, visible, settings.showThinking);
   const streamingLast = typing || (state.source === "conversation" && liveShown !== null);
+  const turns = useMemo(() => withoutEmptyLiveTurn(revealedTurns, streamingLast, settings.showThinking), [revealedTurns, streamingLast, settings.showThinking]);
   // A cancelled send back in the agent's input box is no sent turn: the transcript still holds it
   // (empty, blank, held and onRead keep the turns as read), but the rendered list drops it while
   // the last turn is that very send — matching the terminal, which shows it only as typed text.
@@ -2677,14 +2668,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   const hiddenTurn = stopped ?? (endsWithTurn(turns, cancelledAtSend) ? cancelledAtSend : null)
     ?? (goneOut && endsWithTurn(turns, goingCancel.turn) ? goingCancel.turn : null);
   const hiddenSend = restored ?? hiddenTurn?.text ?? null;
-  const shownTurns = useMemo(() => {
-    const last = turns[turns.length - 1];
-    // A reply under way shows from its first word, tool or shown thinking: until then the footer's
-    // Working stays put instead of moving into an empty turn for a moment.
-    const streamed = streamingLast && last?.role === "assistant" ? splitTurn(last.parts) : null;
-    if (streamed !== null && streamed.answer.length === 0 && visibleWorkParts(streamed.work, settings.showThinking).length === 0) return turns.slice(0, -1);
-    return hiddenTurn !== null ? turns.slice(0, -1) : turns;
-  }, [turns, hiddenTurn, streamingLast, settings.showThinking]);
+  const shownTurns = useMemo(() => hiddenTurn !== null ? turns.slice(0, -1) : turns, [turns, hiddenTurn]);
   heldPage.current = state.turns;
   shownCount.current = shownTurns.length;
   const popRow = popFrom === null ? -1 : shownTurns.findIndex((turn, index) => index >= popFrom && turn.role === "user");
