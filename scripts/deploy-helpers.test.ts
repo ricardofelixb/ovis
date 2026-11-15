@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { onMainSteps, pullMainSteps, settingOf, withSetting } from "./deploy-helpers.ts";
+import { notConnected, onMainSteps, pullMainSteps, settingOf, withSetting } from "./deploy-helpers.ts";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -123,5 +123,19 @@ describe("settingOf", () => {
     expect(settingOf("PORT=1\n# PORT=2\n PORT = \"7400\"\n", "PORT")).toBe("7400");
     expect(settingOf("PORT_X=1\n", "PORT")).toBeNull();
     expect(settingOf("PORT=\n", "PORT")).toBeNull();
+  });
+});
+
+describe("notConnected", () => {
+  const machines = [{ name: "omarchy", state: "connected", error: null }, { name: "mini", state: "error", error: "still older than this app" }, { name: "other", state: "error", error: "x" }];
+
+  it("names each listed PC that is not connected, with its error, and ignores PCs not listed", () => {
+    expect(notConnected(machines, ["omarchy", "mini"])).toEqual(["mini (error: still older than this app)"]);
+    expect(notConnected(machines, ["omarchy"])).toEqual([]);
+  });
+
+  it("counts a listed PC the server does not list at all as not connected", () => {
+    expect(notConnected(machines, ["gone"])).toEqual(["gone (not listed)"]);
+    expect(notConnected([{ name: "a", state: "connecting", error: null }], ["a"])).toEqual(["a (connecting)"]);
   });
 });
