@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { restoreForkBranches, saveForkBranches } from "../fork/branchStorage.ts";
+import { useSettings } from "./settings.ts";
 import type { SessionSnapshot, WorktreeListing, WorktreeOpened } from "../../shared/protocol.ts";
 import { ApiError, routeMissing } from "./api.ts";
 import { useMachineApi, useMachineId } from "./machineContext.tsx";
@@ -8,16 +10,6 @@ import { inventoryReads, WorkspaceBranchCache, worktreeRepositories, worktreeWor
 
 const BRANCH_POLL_MS = 30_000;
 const NONE: ReadonlySet<string> = new Set();
-
-// each PC's branches as its roster last read them: a cold start names them at once (the header's
-// branch, lib/paneBranch.ts) instead of waiting out the first git inventory
-const savedKey = (machineId: string): string => `ovis:branches:${machineId}`;
-function loadSaved(machineId: string): unknown {
-  try { return JSON.parse(localStorage.getItem(savedKey(machineId)) ?? "null"); } catch { return null; }
-}
-function save(machineId: string, cache: WorkspaceBranchCache): void {
-  try { localStorage.setItem(savedKey(machineId), JSON.stringify(cache.saved())); } catch { /* storage full or off: the next start reads git first */ }
-}
 
 /** Use the existing worktree API; pane status updates never trigger a git inventory poll. */
 /** `roster`: this reader is the PC's roster, whose branches the panes' composers name too (lib/paneBranch.ts). */
@@ -29,6 +21,7 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
   rememberOpened(opened: WorktreeOpened): void;
 } {
   const machineId = useMachineId();
+  const { headerBranch } = useSettings();
   const { listWorktrees, readWorktreeInventory } = useMachineApi();
   const visible = usePageVisible();
   // `refused`: the PC answered that this device may only watch (#2250): it is not asked again until the
@@ -38,9 +31,9 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
   // within the PC's budget (server/workspace-routes.ts) still reaches every workspace in turn
   const owner = useMemo(() => {
     const cache = new WorkspaceBranchCache();
-    cache.restore(loadSaved(machineId));
+    restoreForkBranches(cache, machineId, headerBranch);
     return { cache, pending: null as Promise<void> | null, refused: watching, oneByOne: false, turn: 0 };
-  }, [machineId, watching]);
+  }, [machineId, watching, headerBranch]);
   const [, publish] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const workspaces = snapshot?.workspaces ?? [];
@@ -122,7 +115,7 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
         }
         if (!stopped && changed) {
           publish((value) => value + 1);
-          if (roster) save(machineId, owner.cache);
+          if (roster) saveForkBranches(owner.cache, machineId, headerBranch);
         }
       })();
       owner.pending = cycle;
@@ -137,7 +130,7 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
       owner.cache.invalidate();
       clearTimeout(timer);
     };
-  }, [owner, listWorktrees, readWorktreeInventory, signature, unmarkedKey, online, visible, refresh, roster, machineId, onNotCheckout]);
+  }, [owner, listWorktrees, readWorktreeInventory, signature, unmarkedKey, online, visible, refresh, roster, machineId, onNotCheckout, headerBranch]);
 
   const rememberOpened = useCallback((opened: WorktreeOpened): void => {
     owner.cache.rememberOpened(opened);
