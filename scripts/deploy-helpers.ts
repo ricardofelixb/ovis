@@ -40,3 +40,15 @@ export function settingOf(text: string, name: string): string | null {
   const value = lines.at(-1)?.slice(lines.at(-1)!.indexOf("=") + 1).trim().replace(/^(["'])(.*)\1$/, "$2");
   return value ? value : null;
 }
+
+/**
+ * Which of the PCs named in `names` the server's `/api/machines` list `machines` does not show as
+ * `connected`, each as a phrase for the failure message (its error when it has one).
+ */
+export function notConnected(machines: { name: string; state: string; error: string | null }[], names: string[]): string[] {
+  return names.flatMap((name) => {
+    const machine = machines.find((candidate) => candidate.name === name);
+    if (!machine) return [`${name} (not listed)`];
+    return machine.state === "connected" ? [] : [`${name} (${machine.error ? `${machine.state}: ${machine.error}` : machine.state})`];
+  });
+}
