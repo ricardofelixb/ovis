@@ -20,9 +20,9 @@ describe("fork settings compatibility", () => {
 
   it("uses upstream behavior on a new device", () => {
     expect(DEFAULT_SETTINGS.phoneTabs).toBe("row");
-    expect(loadSettings()).toMatchObject({ phoneTabs: "row", contextCircle: false,
+    expect(loadSettings()).toMatchObject({ phoneTabs: "row", contextCircle: true,
       squareCorners: false, moreViewToggle: false, agentNamedTabs: false, agentFriends: false,
-      codingWorkGroups: false, compactWorkRuns: false, chatMotion: false, piLiveVoice: false,
+      composerExtras: false, compactWorkRuns: false, chatMotion: false, piLiveVoice: false,
       computerView: false, pullRequests: false, readAloud: false, headerBranch: false });
   });
 
@@ -31,7 +31,7 @@ describe("fork settings compatibility", () => {
     records.set("ovis:settings", raw);
     expect(loadSettings()).toMatchObject({ phoneTabs: "header", contextCircle: true,
       squareCorners: true, moreViewToggle: true, agentNamedTabs: true, agentFriends: true,
-      codingWorkGroups: true, compactWorkRuns: true, chatMotion: true, piLiveVoice: true,
+      composerExtras: true, compactWorkRuns: true, chatMotion: true, piLiveVoice: true,
       computerView: true, pullRequests: true, readAloud: true, headerBranch: true });
     expect(records.get("ovis:settings")).toBe(raw);
     expect(records.size).toBe(1);
