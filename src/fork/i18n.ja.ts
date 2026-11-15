@@ -3,8 +3,10 @@
  * Register and fixed terms follow ../i18n.ja.ts; a key another feature also uses goes there.
  */
 import { FORK_I18N } from "./i18n.ts";
+import { FORK_FEATURE_I18N } from "./featureI18n.ts";
 
 export const FORK_JA: Record<string, string> = {
+  ...FORK_FEATURE_I18N.ja,
   ...FORK_I18N.ja,
   "Context circle": "コンテキストリング",
   "A ring beside the model shows how full its context is. Tap it for the numbers.": "モデルの横のリングがコンテキストの使用量を示します。タップすると数値を表示します。",
