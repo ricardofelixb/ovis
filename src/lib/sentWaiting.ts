@@ -1,3 +1,4 @@
+import { adoptSend } from "../fork/sentBubble.ts";
 import type { Machine } from "../../shared/machines.ts";
 import type { ConversationTurn } from "../../shared/protocol.ts";
 import { composerMessage } from "./compose.ts";
@@ -247,6 +248,7 @@ export function settleWaitingSends(key: string, turns: readonly Turn[], now = Da
     const match = candidates.find((candidate) => !pane.claimed.has(candidate.key) && turnMatches(send, candidate.turn, candidate.key, candidate.answeredAt, candidate.last));
     if (!match) return true;
     pane.claimed.add(match.key);
+    adoptSend(key, send, match.turn);
     return false;
   });
   if (remaining.length === pane.sends.length) return;
