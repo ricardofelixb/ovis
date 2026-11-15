@@ -61,6 +61,14 @@ it("skips byte-identical upstream copies, but keeps fork-owned, modified and mis
   const selected = [changed, own, missing, same];
   expect(excludeUpstreamBrowserCopies(dir, selected, upstream)).toEqual([changed, own, missing]);
   expect(excludeUpstreamBrowserCopies(dir, selected, "")).toEqual(selected);
+  git(dir, "add", "."); git(dir, "commit", "-qm", "fork");
+  for (const baseline of [upstream, ""]) {
+    const result = Bun.spawnSync([process.execPath, join(import.meta.dir, "fork-browser.ts"), "--list"], {
+      cwd: dir, env: { ...process.env, FORK_BROWSER_EVENT: "push", FORK_BROWSER_BASE: "0".repeat(40), FORK_BROWSER_UPSTREAM: baseline }, stdout: "pipe", stderr: "pipe",
+    });
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout.toString())).toEqual((baseline ? [changed, own, missing] : selected).sort());
+  }
 });
 
 it.each([0, 2])("registers missing scripts only for the disposable run and preserves exit %s", (code) => {

@@ -10,6 +10,19 @@ export function selectForkBrowserScripts(fork: string[], changed: string[]): str
   return [...new Set([...fork, ...changed].filter((path) => browserScript.test(path)))].sort();
 }
 
+export function excludeUpstreamBrowserCopies(cwd: string, selected: string[], upstream: string): string[] {
+  const available = /^[a-f0-9]{40}$/.test(upstream) && Bun.spawnSync(["git", "cat-file", "-e", `${upstream}^{commit}`], { cwd, stdout: "ignore", stderr: "ignore" }).exitCode === 0;
+  if (!available) {
+    console.warn("fork browser: upstream baseline unavailable; running all changed browser scripts");
+    return selected;
+  }
+  return selected.filter((script) => {
+    if (/^scripts\/fork-.*-regression\.ts$/.test(script)) return true;
+    const blob = Bun.spawnSync(["git", "cat-file", "blob", `${upstream}:${script}`], { cwd, stdout: "pipe", stderr: "pipe" });
+    return blob.exitCode !== 0 || !blob.stdout.equals(readFileSync(join(cwd, script)));
+  });
+}
+
 export function changedBrowserScripts(cwd: string, base: string, event: string): string[] {
   if (event !== "pull_request" && event !== "push") return [];
   if (!/^[a-f0-9]{40}$/.test(base)) throw new Error("FORK_BROWSER_BASE must be a full commit SHA");
@@ -28,7 +41,8 @@ export function changedBrowserScripts(cwd: string, base: string, event: string):
 async function main(): Promise<number> {
   const cwd = process.cwd();
   const fork = [...new Bun.Glob("scripts/fork-*-regression.ts").scanSync({ cwd })];
-  const selected = selectForkBrowserScripts(fork, changedBrowserScripts(cwd, process.env["FORK_BROWSER_BASE"] ?? "", process.env["FORK_BROWSER_EVENT"] ?? "workflow_dispatch"));
+  const changed = changedBrowserScripts(cwd, process.env["FORK_BROWSER_BASE"] ?? "", process.env["FORK_BROWSER_EVENT"] ?? "workflow_dispatch");
+  const selected = excludeUpstreamBrowserCopies(cwd, selectForkBrowserScripts(fork, changed), process.env["FORK_BROWSER_UPSTREAM"] ?? "");
   if (!selected.length) throw new Error("No fork browser regressions found");
   if (process.argv[2] === "--list") { console.log(JSON.stringify(selected)); return 0; }
   const path = join(cwd, "scripts/ci-browser.sh");
