@@ -32,7 +32,7 @@ import { ApiError, pinPaneConversation, unpinPaneConversation } from "../lib/api
 import { copyText } from "../lib/clipboard.ts";
 import { SpeakButton } from "../fork/SpeakButton.tsx";
 import { useSendMotion, withoutEmptyLiveTurn } from "../fork/chatPresentation.ts";
-import { adoptedKey, sendRowKey, sendTurn, useSendPop } from "../fork/sentBubble.ts";
+import { adoptedKey, claimOutcomes, sendRowKey, sendTurn, useSendPop } from "../fork/sentBubble.ts";
 import { SendLate } from "../fork/SendLate.tsx";
 import type { GalleryImage } from "../lib/imageViewer.ts";
 import { toolGalleryImage, userGalleryImages } from "../lib/chatImages.ts";
@@ -2753,7 +2753,10 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   const withOutcomes = useMemo(() => outcomeRows(shownTurns, shownOutcomes, { restored: hiddenSend, beginningLoaded: olderCursor === null }), [shownTurns, shownOutcomes, hiddenSend, olderCursor]);
   const timelineRows = useMemo((): ChatRow[] => {
     const adoptedKeys = new Set<string>();
-    const rows = withOutcomes.map((row): ChatRow => {
+    // Animated replies: a send's own outcome is drawn on the send's row, not as a row of its own
+    const owned = claimOutcomes(rowSends, withOutcomes.flatMap((row) => row.kind === "sent" ? [row.outcome] : []));
+    const ownedIds = new Set([...owned.values()].map((outcome) => outcome.id));
+    const rows = withOutcomes.filter((row) => row.kind !== "sent" || !ownedIds.has(row.outcome.id)).map((row): ChatRow => {
       if (row.kind === "sent") return { key: `outcome:${row.outcome.id}`, turn: null, outcome: row.outcome, beforeUser: false };
       const slot = rowSlots[row.index] ?? (row.index === rowSlots.length ? liveSlot : undefined);
       if (!slot) throw new Error("A loaded chat turn has no row identity");
@@ -2761,7 +2764,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       return { key: adoptedKey(waitKey, shownTurns[row.index]!, adoptedKeys) ?? slot.key, turn: shownTurns[row.index]!, index: row.index, outcome: row.outcome, beforeUser: false };
     });
     // Animated replies: a send whose turn is not read yet is the last row, where the turn will be
-    for (const send of rowSends) rows.push({ key: sendRowKey(send), turn: sendTurn(send), index: -1, outcome: null, sendAt: send.at, beforeUser: false });
+    for (const send of rowSends) rows.push({ key: sendRowKey(send), turn: sendTurn(send), index: -1, outcome: owned.get(send.id) ?? null, sendAt: send.at, beforeUser: false });
     // a sent row opens an exchange as a user turn does
     return rows.map((row, index) => {
       const next = rows[index + 1];

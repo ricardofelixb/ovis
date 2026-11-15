@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { ConversationTurn } from "../../shared/protocol.ts";
+import type { CommandOutcome, ConversationTurn } from "../../shared/protocol.ts";
 import type { WaitingSend } from "../lib/sentWaiting.ts";
 
 /**
@@ -24,6 +24,27 @@ export function sendTurn(send: WaitingSend): ConversationTurn {
     turns.set(send, turn);
   }
   return turn;
+}
+
+/**
+ * The outcome each send owns, so the send's row carries its chip rather than a second row beside it.
+ * Its own is one the chat had not read as the text left (`send.known`, as lib/terminalPeek.ts
+ * sentOutcome tells a peek's) with its text; the sends go oldest first and each takes the oldest
+ * such outcome no earlier send took. A send that left before the chat read any outcomes owns none.
+ */
+export function claimOutcomes(sends: readonly WaitingSend[], outcomes: readonly CommandOutcome[]): Map<number, CommandOutcome> {
+  const owned = new Map<number, CommandOutcome>();
+  const taken = new Set<string>();
+  for (const send of sends) {
+    if (send.known === undefined) continue;
+    const known = new Set(send.known);
+    const text = send.text.trim();
+    const own = outcomes.find((outcome) => !known.has(outcome.id) && !taken.has(outcome.id) && outcome.text.trim() === text);
+    if (own === undefined) continue;
+    taken.add(own.id);
+    owned.set(send.id, own);
+  }
+  return owned;
 }
 
 const ADOPTED_PER_PANE = 50;

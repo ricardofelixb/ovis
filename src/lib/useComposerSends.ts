@@ -160,7 +160,7 @@ export function useComposerSends(deps: ComposerSendsDeps) {
             setChatLocalSend((current) => ({ key: current.key + 1, navigationGeneration: navigation }));
           }
           // the PC's stamp before it typed bounds the send's turn on its clock alone (lib/sentWaiting.ts)
-          if (pane !== null) rememberWaitingSend(waitingKey(machineId, pane), text, sentAt, stampedBaseline(sentAfter, answer.sendingAt, sentAt));
+          if (pane !== null) rememberWaitingSend(waitingKey(machineId, pane), text, sentAt, stampedBaseline(sentAfter, answer.sendingAt, sentAt), false, known);
         }
         if (pane !== null && typedNow) showSentCommand(pane, text, known, seen);
         // Ctrl+Enter: the row it was queued as goes now, by the same steer as its Send now. A refused steer

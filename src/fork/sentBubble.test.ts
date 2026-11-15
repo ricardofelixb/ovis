@@ -2,13 +2,13 @@ import { afterEach, beforeEach, expect, it } from "bun:test";
 import { createElement } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 
-import type { ConversationTurn } from "../../shared/protocol.ts";
+import type { CommandOutcome, ConversationTurn } from "../../shared/protocol.ts";
 import { Turn } from "../components/ChatView.tsx";
 import { SettingsProvider } from "../lib/settings.ts";
 import { currentWaitingSends, forgetWaitingSends, rememberWaitingSend, settleWaitingSends, waitingKey, type WaitingSend } from "../lib/sentWaiting.ts";
 import { useSendMotion } from "./chatPresentation.ts";
 import { FORK_DEFAULTS, type ForkSettings } from "./settings.ts";
-import { adoptedKey, adoptSend, resetSendBubbles, sendRowKey, sendTurn } from "./sentBubble.ts";
+import { adoptedKey, adoptSend, claimOutcomes, resetSendBubbles, sendRowKey, sendTurn } from "./sentBubble.ts";
 
 const globals = ["IS_REACT_ACT_ENVIRONMENT", "window", "document", "getComputedStyle", "navigator"];
 const saved = new Map<string, PropertyDescriptor | undefined>();
@@ -145,4 +145,25 @@ it("the follow on send belongs to Animated replies", () => {
   expect(calls).toBe(1);
   act(() => { renderer.update(createElement(Probe, { sentKey: 2, enabled: false })); });
   expect(calls).toBe(1);
+});
+
+const outcomeOf = (id: string, text: string): CommandOutcome => ({ id, pane_id: "p1", text, state: "accepted", evidence: [], created_at: "2026-11-01T10:00:00Z", updated_at: "2026-11-01T10:00:00Z" });
+
+it("a send owns the outcome the chat had not read as its text left", () => {
+  const first = { ...send(1, "m:p1", "@effect apply it"), known: ["old"] };
+  const second = { ...send(2, "m:p1", "@effect apply it"), known: ["old"] };
+  const outcomes = [outcomeOf("old", "@effect apply it"), outcomeOf("a", "@effect apply it"), outcomeOf("b", "@effect apply it"), outcomeOf("c", "other")];
+  // each takes the oldest such outcome no earlier send took; one that was read before is nobody's
+  expect([...claimOutcomes([first, second], outcomes)].map(([id, outcome]) => [id, outcome.id])).toEqual([[1, "a"], [2, "b"]]);
+  expect(claimOutcomes([first], [outcomeOf("old", "@effect apply it")]).size).toBe(0);
+  // a send that left before the chat read any outcome owns none
+  expect(claimOutcomes([send(3, "m:p1", "@effect apply it")], outcomes).size).toBe(0);
+});
+
+it("a send keeps the outcome ids the chat had read", () => {
+  const key = waitingKey("m", "known");
+  rememberWaitingSend(key, "@effect apply it", Date.now(), null, false, ["o1"]);
+  rememberWaitingSend(key, "no ids", Date.now(), null);
+  expect(currentWaitingSends(key).map((item) => item.known)).toEqual([["o1"], undefined]);
+  forgetWaitingSends(key);
 });
