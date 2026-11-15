@@ -82,8 +82,7 @@ try {
           await page.locator(".workspace-agent .sidebar-mark").first().waitFor();
           await checkFaces("the sidebar's workspace agent rows", ".workspace-agent .sidebar-mark");
           await page.evaluate(() => localStorage.removeItem("ovis:sidebar-agent-tree"));
-          await page.keyboard.press("Escape");
-          await page.reload();
+          await page.goto(`http://127.0.0.1:${server.port}/herdr-web-ui/demo/app/?pane=${encodeURIComponent(panes.omp)}&view=chat`);
           await page.locator(".conn-live").waitFor({ state: "attached" });
           await page.evaluate(() => localStorage.setItem("ovis:phone-tabs", JSON.stringify("row")));
           await page.setViewportSize({ width: 700, height: 900 });
