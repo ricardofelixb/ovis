@@ -41,11 +41,13 @@ it("runs each file in isolation and propagates a failed file", () => {
   const root = fixture({
     "src/pass.test.ts": 'import {expect,it} from "bun:test"; it("unit mode",()=>expect(process.env.HERDR_TEST_MODE).toBe("unit"));',
     "src/fail.test.ts": 'import {expect,it} from "bun:test"; it("failure is not hidden",()=>expect(1).toBe(2));',
+    "src/empty.test.ts": "process.exit(0);",
   });
   const result = Bun.spawnSync([process.execPath, resolve(import.meta.dir, "fork-unit-shard.ts"), "--shard", "1/1"], {
     cwd: root, env: { ...process.env, UNIT_TEST_WORKERS: "2" }, stdout: "pipe", stderr: "pipe",
   });
   expect(result.exitCode).toBe(1);
   expect(result.stdout.toString()).toContain("FAILED src/fail.test.ts");
+  expect(result.stdout.toString()).toContain("FAILED src/empty.test.ts");
   expect(result.stdout.toString()).not.toContain("FAILED src/pass.test.ts");
 });
