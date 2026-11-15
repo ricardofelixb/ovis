@@ -35,7 +35,7 @@ try {
           await page.locator(".conn-live").waitFor({ state: "attached" });
           await page.locator(".chat-turn-agent").first().waitFor();
           assert.equal(await page.locator(".chat-speak").count() > 0, legacy, "read aloud is opt-in");
-          await page.locator(".workspace-toggle").first().click();
+          await page.getByRole("button", { name: "Open workspace list", exact: true }).click();
           await page.locator("#workspace-drawer.is-open").waitFor();
           assert.equal(await page.locator(".machine-screen").count() > 0, legacy, "Computer view is opt-in");
           await page.keyboard.press("Escape");

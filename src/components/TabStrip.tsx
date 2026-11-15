@@ -44,9 +44,7 @@ import { SHEET_QUERY } from "../lib/sheets.ts";
 import { useTabReorder } from "../lib/useTabReorder.ts";
 import { indicatorGlyph, paneStatus, rollupStatus, STATUS_WORD, type KnownStatus } from "../lib/status.ts";
 import { useSettings } from "../lib/settings.ts";
-import { friendKey } from "../../shared/friends.ts";
-import { useFriends } from "../lib/friends.ts";
-import { AgentFriend } from "./AgentFriend.tsx";
+import { TabFriends } from "../fork/TabFriends.tsx";
 import { AgentMark } from "./AgentMark.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { displayPaneTitle } from "./Sidebar.tsx";
@@ -232,7 +230,6 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       move: paneDrag.move, back: paneDrag.back, drop: paneDrag.drop, cancel: paneDrag.cancel,
     } : undefined,
   });
-  const friends = useFriends();
   const firstLines = useSyncExternalStore(subscribeTabLabels, shownTabLabels, shownTabLabels);
   const placeOf = (tab: HerdrTab): number => tabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1;
   // a tab herdr still names by its number shows a few words of its first message (#2019); never herdr's own label
@@ -245,7 +242,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
   const nameOf = (tab: HerdrTab): string => {
     if (sent?.tabId === tab.tab_id) return sent.label;
     const agents = panesOf(tab).filter((pane) => pane.agent);
-    return customTabLabel(tab, placeOf(tab)) ?? (agents.length === 1 ? displayPaneTitle(agents[0]!) : autoOf(tab) ?? givenName(tab));
+    return settings.agentNamedTabs ? customTabLabel(tab, placeOf(tab)) ?? (agents.length === 1 ? displayPaneTitle(agents[0]!) : autoOf(tab) ?? givenName(tab)) : autoOf(tab) ?? givenName(tab);
   };
 
   useEffect(() => {
@@ -781,20 +778,12 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
                   // the middle button closes a tab, as it does a browser's
                   onAuxClick={(event) => { if (event.button === 1 && closable) { event.preventDefault(); requestClose(tab); } }}
                 >
-                  {/* a tab's agents show as their friends, which move with their state; a split shows two.
-                      Named by the tab's own words alone: a screen reader hears the tab, not the agent's logo */}
-                  {own.some((pane) => pane.agent) ? <span className={`tab-strip-faces${own.filter((pane) => pane.agent).length > 1 ? " is-split" : ""}`} aria-hidden="true">
-                    {own.filter((pane) => pane.agent).slice(0, 2).map((pane) => {
-                      const friend = friends[friendKey(machineId, pane.pane_id)];
-                      const paneState = paneStatus(pane as HerdrPane);
-                      return friend
-                        ? <AgentFriend key={pane.pane_id} friend={friend} agent={pane.agent!} status={paneState === "waiting" ? "working" : paneState === "unknown" ? undefined : paneState} />
-                        : <AgentMark key={pane.pane_id} agent={pane.agent!} size={16} />;
-                    })}
-                  </span> : <>
+                  <TabFriends panes={own}>
                     {busyStatus(status) && statusMark(status)}
-                    {browserTabs && <span className="tab-strip-agent is-shell" aria-hidden="true"><Terminal /></span>}
-                  </>}
+                    {/* named by the tab's own words alone: a screen reader hears the tab, not the agent's logo */}
+                    {agentOf(tab) ? <span className="tab-strip-agent" aria-hidden="true"><AgentMark agent={agentOf(tab)!} size={14} /></span>
+                      : (browserTabs || phoneRow) && <span className="tab-strip-agent is-shell" aria-hidden="true"><Terminal /></span>}
+                  </TabFriends>
                   <span className="tab-strip-label">{name}</span>
                   {/* a split tab's open pane, as the title's 1/2 says it: the header's row stands in the title's place */}
                   {phoneRow && active && own.length > 1 && (() => {

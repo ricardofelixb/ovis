@@ -1,7 +1,7 @@
 import { createContext, memo, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { createPortal, flushSync } from "react-dom";
 import {
-  ArrowDown, BookOpen, Check, ChevronDown, ChevronRight, Circle, CircleAlert, CircleCheck, CircleDot, CircleQuestionMark, CircleSlash, CircleX, Copy, Hourglass, Layers, LoaderCircle, Pause, Play, Square, SquareTerminal, Target, Volume2, VolumeX,
+  ArrowDown, BookOpen, Check, ChevronDown, ChevronRight, Circle, CircleAlert, CircleCheck, CircleDot, CircleQuestionMark, CircleSlash, CircleX, Copy, Hourglass, Layers, SquareTerminal, Target,
   type LucideProps,
 } from "lucide-react";
 
@@ -31,7 +31,7 @@ import { useWholeOutput as useScopedOutput } from "../lib/useWholeOutput.ts";
 import { turnSkills } from "../lib/skillActivity.ts";
 import { ApiError, pinPaneConversation, unpinPaneConversation } from "../lib/api.ts";
 import { copyText } from "../lib/clipboard.ts";
-import { speak, stopSpeech, toggleSpeechPause, useSpeechStatus } from "../lib/speech.ts";
+import { SpeakButton } from "../fork/SpeakButton.tsx";
 import type { GalleryImage } from "../lib/imageViewer.ts";
 import { toolGalleryImage, userGalleryImages } from "../lib/chatImages.ts";
 import { useMachineApi } from "../lib/machineContext.tsx";
@@ -356,32 +356,6 @@ function plainText(markdown: string): string {
     .replace(/(?:\*\*|__|~~|`)(.*?)(?:\*\*|__|~~|`)/g, "$1")
     .replace(/^#{1,3}\s+/gm, "")
     .replace(/^>\s?/gm, "");
-}
-
-/**
- * Reads an agent's reply aloud on this device: a tap pauses and resumes it, the square beside it stops it, and a
- * tap on another reply reads that one instead.
- */
-function SpeakButton({ id, text }: { id: string; text: string }) {
-  const t = useT();
-  const { settings } = useSettings();
-  const status = useSpeechStatus(id);
-  const started = status === "playing" || status === "paused";
-  const busy = started || status === "loading";
-  const label = status === "loading" ? t("Preparing the voice…") : status === "playing" ? t("Pause reading") : status === "paused" ? t("Resume reading") : status === "failed" ? t("Couldn't read this aloud. Tap to try again.") : t("Read aloud");
-  const tap = () => (started ? toggleSpeechPause() : status === "loading" ? stopSpeech() : speak(id, text, settings.speechVoice));
-  return (
-    <>
-      <button type="button" className={busy ? "chat-meta-btn chat-speak is-active" : "chat-meta-btn chat-speak"} aria-label={label} title={label} aria-pressed={busy} onClick={tap}>
-        {status === "loading" ? <LoaderCircle className="chat-speak-progress" aria-hidden="true" /> : status === "playing" ? <Pause aria-hidden="true" /> : status === "paused" ? <Play aria-hidden="true" /> : status === "failed" ? <VolumeX aria-hidden="true" /> : <Volume2 aria-hidden="true" />}
-      </button>
-      {started && (
-        <button type="button" className="chat-meta-btn chat-speak" aria-label={t("Stop reading")} title={t("Stop reading")} onClick={stopSpeech}>
-          <Square aria-hidden="true" />
-        </button>
-      )}
-    </>
-  );
 }
 
 /** A quiet text button that copies and says "Copied" for a moment. */
@@ -1323,7 +1297,8 @@ function GoalWaitRow({ wait }: { wait: GoalWait }) {
 export const Turn = memo(function Turn({ paneId, turn, rowKey, fresh = false, live, streaming = false, waiting, showThinking, openLiveWork = true, expandThinking = false, foldWork = false, requestDetails = false, skills = null, userSkills = null, outcome = null, outcomeActions = null }: TurnProps) {
   const t = useT();
   const article = useRef<HTMLElement>(null);
-  useFadeIn(article, streaming, turn);
+  const { settings: fork } = useSettings();
+  useFadeIn(article, fork.chatMotion && streaming, turn);
   const memory = useContext(ChatRowMemoryContext);
   // what the drawn runs, and the runs that drew no block, were named, by part index; the row's
   // memory takes it once the turn is drawn
@@ -1391,7 +1366,7 @@ export const Turn = memo(function Turn({ paneId, turn, rowKey, fresh = false, li
       <div className="chat-turn-meta">{time}<CopyButton text={text} label={t("Copy message")} onResult={copied} /></div>
       {copyError}
     </section>;
-    return <article className={`chat-turn chat-turn-user${fresh ? " chat-turn-new" : ""}`}>
+    return <article className={`chat-turn chat-turn-user${fork.chatMotion && fresh ? " chat-turn-new" : ""}`}>
       <UserImages paneId={paneId} parts={turn.parts} text={text} />
       {/* one row: with a mouse the time and copy sit beside the bubble, on touch under it */}
       <div className="chat-user-row">
@@ -1432,7 +1407,7 @@ export const Turn = memo(function Turn({ paneId, turn, rowKey, fresh = false, li
       duration={isHead ? formatWorkDuration(turn.ts, turn.end_ts ?? null) : null} startedAt={isHead ? turn.ts : null} live={live && isHead} waiting={waiting && isHead}
       // a settled turn folds its work, unless words the agent said last are in its final run
       defaultOpen={!foldWork && (live || streaming) && isHead ? openLiveWork
-        : workBlockStartsOpen({ live: false, waiting: waiting && isHead, last: run !== null && run === segments.at(-1) }, turn.parts, foldWork)}
+        : workBlockStartsOpen({ live: live && isHead, waiting: waiting && isHead, last: run !== null && run === segments.at(-1) }, turn.parts, foldWork)}
       showThinking={showThinking} expandThinking={expandThinking} pendingHead={isHead && answer.length === 0} />;
   };
   return <article ref={article} className="chat-turn chat-turn-agent">
@@ -2696,7 +2671,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     const read = older.length > 0 ? [...older, ...state.turns] : state.turns;
     return state.source === "conversation" ? withLiveTurn(read, liveShown) : read;
   }, [older, state.turns, state.source, liveShown]);
-  const { turns, revealing: typing } = useRevealedTurns(mergedTurns, state.source === "conversation" ? live : null, visible, settings.showThinking);
+  const { turns, revealing: typing } = useRevealedTurns(mergedTurns, settings.chatMotion && state.source === "conversation" ? live : null, visible, settings.showThinking);
   const streamingLast = typing || (state.source === "conversation" && liveShown !== null);
   // A cancelled send back in the agent's input box is no sent turn: the transcript still holds it
   // (empty, blank, held and onRead keep the turns as read), but the rendered list drops it while

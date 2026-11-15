@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from "react";
+import { useSettings } from "../lib/settings.ts";
 
 /**
  * The Computer view's settings for one PC, kept in this browser only: a phone and a desktop want their own
@@ -122,6 +123,7 @@ export function viewerOptions(settings: ComputerSettings): Record<string, unknow
  * default), so coming back within them needs no new connection.
  */
 export function useComputerView(): [shown: string | null, show: Dispatch<SetStateAction<string | null>>, kept: string | null] {
+  const { settings } = useSettings();
   const [shown, setShown] = useState<string | null>(null);
   const [kept, setKept] = useState<string | null>(null);
   useEffect(() => {
@@ -133,5 +135,6 @@ export function useComputerView(): [shown: string | null, show: Dispatch<SetStat
     const timer = setTimeout(() => setKept(null), Number(readComputerSettings(kept).keep) * 60_000);
     return () => clearTimeout(timer);
   }, [shown, kept]);
-  return [shown, setShown, kept];
+  useEffect(() => { if (!settings.computerView) { setShown(null); setKept(null); } }, [settings.computerView]);
+  return [settings.computerView ? shown : null, setShown, settings.computerView ? kept : null];
 }

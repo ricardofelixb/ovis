@@ -573,7 +573,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
       { id: "open-worktree", label: t("Open worktree…"), icon: FolderOpen, run: () => setWorktreeDialog({ mode: "open", workspace }) },
     ] : [];
     // a pull request's checkout is made from any checkout of the repository: a linked worktree lists them too
-    const pullRequestItems: RowMenuItem[] = (workspace.worktree || repositoryWorkspaces.has(workspace.workspace_id)) && !watching && worktreesOffered ? [
+    const pullRequestItems: RowMenuItem[] = settings.pullRequests && (workspace.worktree || repositoryWorkspaces.has(workspace.workspace_id)) && !watching && worktreesOffered ? [
       { id: "pull-requests", label: t("Pull requests…"), icon: GitPullRequest, run: () => setPullRequestsFor(workspace) },
     ] : [];
     const closes = [workspace.workspace_id, ...sameRepo.map((candidate) => candidate.workspace_id)];

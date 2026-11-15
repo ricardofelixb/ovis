@@ -5,6 +5,7 @@ import { encodePiVoiceFrame, parsePiFrame, PI_VOICE_PATH, type PhoneToPiFrame, t
 import { fetchPiVoiceStatus } from "../lib/api.ts";
 import { t } from "../lib/i18n.ts";
 import { useMachineId } from "../lib/machineContext.tsx";
+import { useSettings } from "../lib/settings.ts";
 import { nativeLiveCall, nativeLiveCallMuted, onNativeLiveCallAction } from "../lib/nativeApp.ts";
 import { BrowserLiveMedia } from "../lib/piVoiceMedia.ts";
 import { micErrorReason } from "../lib/voice.ts";
@@ -334,11 +335,12 @@ export function usePiVoice(): PiVoiceState {
 /** Pi can take a call in this pane: it is Pi's and its bridge answers, on whichever PC it runs (not before a reload of a Pi that started without it). */
 export function usePiVoiceAvailable(paneId: string | null, agent: string | null | undefined): boolean {
   const machineId = useMachineId();
+  const enabled = useSettings().settings.piLiveVoice;
   const status = usePiVoice().status;
   const idle = status === "idle" || status === "ended";
   const [available, setAvailable] = useState(false);
   useEffect(() => {
-    if (paneId === null || agent !== "pi" || !idle) {
+    if (!enabled || paneId === null || agent !== "pi" || !idle) {
       setAvailable(false);
       return;
     }
@@ -358,6 +360,6 @@ export function usePiVoiceAvailable(paneId: string | null, agent: string | null 
       clearInterval(timer);
       document.removeEventListener("visibilitychange", ask);
     };
-  }, [paneId, agent, machineId, idle]);
-  return available;
+  }, [enabled, paneId, agent, machineId, idle]);
+  return enabled && available;
 }
