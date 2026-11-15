@@ -194,15 +194,6 @@
   margin-left: -4px;
 }
 
-[data-fork-compact-tab-menus="true"] .tab-menu-place {
-  display: block;
-  overflow: hidden;
-  color: var(--text-dim);
-  font-size: var(--fs-xs);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* src/components/UsageSettings.css */
 [data-fork-square-corners="true"] .usage-account-status::before {
   border-radius: var(--radius-circle);
