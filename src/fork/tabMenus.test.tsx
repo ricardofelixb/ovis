@@ -1,10 +1,11 @@
 import { expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import { Check } from "lucide-react";
 import { paneMenuItems, tabMenuHeader } from "./tabMenus.tsx";
 import type { RowMenuItem } from "../components/RowMenu.tsx";
 
-const items = ["rename", "close", "shared", "split-right", "zoom", "recover"].map((id): RowMenuItem => ({ id, label: id, run() {} }));
-const tabs: RowMenuItem[] = [{ id: "shared", label: "shared", run() {} }];
+const items = ["rename", "close", "shared", "split-right", "zoom", "recover"].map((id): RowMenuItem => ({ id, label: id, icon: Check, run() {} }));
+const tabs: RowMenuItem[] = [{ id: "shared", label: "shared", icon: Check, run() {} }];
 
 it("defaults to upstream pane actions, including Close pane in a one-pane tab", () => {
   expect(paneMenuItems(items, tabs, false, true, false, false).map((item) => item.id)).toEqual(["rename", "close", "split-right", "zoom", "recover"]);

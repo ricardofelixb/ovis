@@ -196,7 +196,20 @@ bun run check run bun test --timeout 15000 server/pi-voice.test.ts server/pi-voi
 
 The initial host attempt at the server command was refused by preflight (exit 1: `this needs herdr on PATH (or OVIS_HERDR_BIN)`); it ran no server tests. The same check wrapper was then used successfully in the image. No real herdr or hc session was substituted on the host.
 
-The task's broad `bun run check fast` was skipped because the implementer instructions explicitly prohibit project-wide checks, even when the task's verification lists one. Accordingly, no result is claimed for Copilot, SSH or EnrollmentStatus. Native, full-suite and whole-project type checks were also skipped. The required browser preparation (`bun install --frozen-lockfile`, `bun run build`) ran successfully inside the image, not on the host.
+At the initial separation checkpoint, `bun run check fast` and whole-project type checks were skipped under the implementer instructions. The explicitly authorized follow-up below records their later results. Native and full-suite checks were not run. The required browser preparation (`bun install --frozen-lockfile`, `bun run build`) ran successfully inside the image, not on the host.
+
+### Fixture typecheck follow-up
+
+The follow-up reproduced nine type errors with `TMPDIR=$HOME/.cache/ovis-tmp/fork-sep-type-fix bun run typecheck` (exit 1). Chat-presentation fixtures now include `ts: null`, menu fixtures include a Lucide `icon`, and the pinned legacy-settings type excludes newer fork fields without adding them to its runtime record. `speechVoice` remains because that field existed in the pinned version. No app behavior or setting default changed.
+
+After these fixes:
+
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-sep-type-fix bun run typecheck` exited 0.
+- `TMPDIR=$HOME/.cache/ovis-tmp/fork-sep-type-fix bun test src/fork/chatPresentation.test.ts src/fork/tabMenus.test.tsx src/lib/settings.test.ts src/lib/settings.hook.test.ts` exited 0, with 147 passing tests. `src/lib/settings.test.ts` is the only importer of the legacy fixture.
+- One `bun run check fast` ran in `herdr-ci-runner:local`, using a `git ls-files` tar, `bun install --frozen-lockfile` and a committed disposable git snapshot, without using the live checkout. It exited 1 after passing workflow syntax, generated-file freshness, typecheck and build. Unit results were 17,434 pass, 11 fail, 57 skip across 985 files.
+- The failures were three menu expectations in `src/components/Sidebar.appLayout.test.tsx`, which still expect the now-opt-in `pull-requests` item, and eight tests in `src/lib/useWorktreeBranches.hook.test.ts`, which throw `useSettings needs a SettingsProvider above it`. Each file was rerun alone in the image on both the corrected snapshot and the pre-fix commit `dbb90bb7`; all four commands exited 1 with the same 3/8 failure split. These pre-existing branch failures were reported, not changed in this fixture-only fix. No second full fast run was made.
+
+Logs, the JSON report and the runnable `fast.sh` / `compare.sh` recipes are retained at `$HOME/.cache/ovis-verification/fork-sep-type-fix-e3cd58/`. The fast container used CPUs 0-3 because this Docker daemon exposes only CPUs 0-7; the initial request for CPUs 64-95 was rejected before a container or check started. Browser regressions were not rerun for these fixture-only edits.
 
 ### Browser commands and results
 
