@@ -2734,8 +2734,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   const sentWaiting = useWaitingSends(machineId, paneId, connected);
   // Animated replies: the composer's sends are timeline rows (not those a restored send hides, nor a
   // queued one, which stays in the footer); the footer keeps the rest
-  const retiredSends = useRef(new Set<number>());
-  const rowSends = useMemo(() => settings.chatMotion ? rowSendsOf(sentWaiting, restored, retiredSends.current, sameMessage) : NO_SENDS, [sentWaiting, settings.chatMotion, restored]);
+  const rowSends = useMemo(() => settings.chatMotion ? rowSendsOf(sentWaiting, restored, sameMessage) : NO_SENDS, [sentWaiting, settings.chatMotion, restored]);
   const footerSends = useMemo(() => settings.chatMotion ? sentWaiting.filter((send) => send.queued === true) : sentWaiting, [sentWaiting, settings.chatMotion]);
   const rowSlots = slots.current.rows;
   // a live message's turn of its own takes the row the transcript's turn will have once it holds it

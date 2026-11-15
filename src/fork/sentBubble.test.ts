@@ -221,14 +221,13 @@ it("a send made with Animated replies off takes no row key from its turn once it
 });
 
 it("a restored send is retired for good: its bubble stays away once the restored text clears", () => {
-  const retired = new Set<number>();
   const same = (a: string, b: string): boolean => a.trim() === b.trim();
   const cancelled = send(20, "m:p1", "fix the test");
   const other = send(21, "m:p1", "something else");
-  expect(rowSendsOf([cancelled, other], "fix the test", retired, same).map((item) => item.id)).toEqual([21]);
-  expect(rowSendsOf([cancelled, other], null, retired, same).map((item) => item.id)).toEqual([21]);
+  expect(rowSendsOf([cancelled, other], "fix the test", same).map((item) => item.id)).toEqual([21]);
+  expect(rowSendsOf([cancelled, other], null, same).map((item) => item.id)).toEqual([21]);
   // a queued delivery is never a row
-  expect(rowSendsOf([{ ...other, queued: true }], null, new Set(), same)).toEqual([]);
+  expect(rowSendsOf([{ ...other, queued: true }], null, same)).toEqual([]);
 });
 
 it("a send's row is found among the list's rows, any other among the slots", () => {

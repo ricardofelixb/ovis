@@ -94,14 +94,21 @@ export function useSendPop(rowKey: string, enabled: boolean): boolean {
   return pops;
 }
 
+const RETIRED_MAX = 200;
+/** the sends a restored copy took back, by row key: kept for the send's life, across views of the pane */
+const retired = new Set<string>();
+
 /**
  * The sends the chat draws as rows: not a queued delivery (it stays in the footer), and not one a
- * restored copy took back. That one is retired for good (`retired`, the view's own): the restored
- * text clearing later must not bring its bubble back.
+ * restored copy took back. That one is retired for good (`retired` outlives the view): the restored
+ * text clearing later, or the chat mounting again, must not bring its bubble back.
  */
-export function rowSendsOf(sends: readonly WaitingSend[], restored: string | null, retired: Set<number>, same: (a: string, b: string) => boolean): WaitingSend[] {
-  if (restored !== null) for (const send of sends) if (same(send.text, restored)) retired.add(send.id);
-  return sends.filter((send) => send.queued !== true && !retired.has(send.id));
+export function rowSendsOf(sends: readonly WaitingSend[], restored: string | null, same: (a: string, b: string) => boolean): WaitingSend[] {
+  if (restored !== null) {
+    for (const send of sends) if (same(send.text, restored)) retired.add(sendRowKey(send));
+    while (retired.size > RETIRED_MAX) retired.delete(retired.values().next().value!);
+  }
+  return sends.filter((send) => send.queued !== true && !retired.has(sendRowKey(send)));
 }
 
 /** The index of a row in the timeline's rows: a send's row is only there, any other is a slot's too. */
@@ -113,4 +120,5 @@ export function rowIndexOf(key: string, timelineKeys: readonly string[], slotKey
 export function resetSendBubbles(): void {
   popped.clear();
   adopted.clear();
+  retired.clear();
 }

@@ -134,6 +134,11 @@ test("a cancelled send stays away once the restored input is cleared", async () 
   });
   for (let pass = 0; pass < 3; pass += 1) await act(async () => { await Promise.resolve(); });
   expect(sendKeys()).toEqual([]);
+  // the chat is left for the terminal and comes back: the cancelled send stays retired
+  await act(async () => renderer?.unmount());
+  renderer = undefined;
+  await mount("retired");
+  expect(sendKeys()).toEqual([]);
   forgetWaitingSends(key("retired"));
 }, 15_000);
 
