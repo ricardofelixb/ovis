@@ -1,0 +1,59 @@
+/** Fresh installs keep upstream controls; a saved fork device retains its choices. */
+import assert from "node:assert/strict";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { chromium } from "playwright-core";
+import panes from "../site/demo/fixtures/panes.json";
+import { buildDemoApp } from "./demo-build.ts";
+import { chromePath } from "./chrome-path.ts";
+
+const app = mkdtempSync(join(tmpdir(), "ovis-fork-preferences-"));
+try {
+  await buildDemoApp(app);
+  const index = join(app, "index.html");
+  writeFileSync(index, readFileSync(index, "utf8").replace(/<script type="module"/, '<script src="./demo-transport.js"></script><script type="module"'));
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
+    const path = new URL(request.url).pathname.replace(/^\/herdr-web-ui\/demo\/app\//, "");
+    if (path.split("/").includes("..") || path.includes("\\")) return new Response(null, { status: 400 });
+    const file = Bun.file(join(app, !path || path.endsWith("/") ? `${path}index.html` : path));
+    return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
+  } });
+  try {
+    const browser = await chromium.launch({ executablePath: chromePath(), headless: true, args: ["--no-sandbox"] });
+    try {
+      for (const legacy of [false, true]) {
+        const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: "en-US" });
+        try {
+          await context.addInitScript((legacy) => {
+            if (localStorage.getItem("ovis:settings") === null) localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", alertsOn: false, ...(legacy ? { contextCircle: true, phoneTabs: "header" } : {}) }));
+          }, legacy);
+          const page = await context.newPage();
+          const errors: string[] = [];
+          page.on("pageerror", (error) => errors.push(error.message));
+          await page.goto(`http://127.0.0.1:${server.port}/herdr-web-ui/demo/app/?pane=${encodeURIComponent(panes.omp)}&view=chat`);
+          await page.locator(".conn-live").waitFor({ state: "attached" });
+          const toggle = page.locator(".app-header .lens-toggle");
+          if (legacy) await toggle.waitFor({ state: "detached" });
+          else await toggle.waitFor();
+          assert.equal(await page.locator(".header-tabs-sheet").count() > 0, legacy, "only the saved fork device has phone tabs in the header");
+          const radius = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--radius-lg").trim());
+          assert.equal(radius, legacy ? "0" : "12px", "corners follow the migrated preference");
+          await page.keyboard.press("ControlOrMeta+Shift+Comma");
+          await page.locator(".settings-dialog").waitFor();
+          const search = page.locator(".settings-search-input");
+          await search.fill("Square corners");
+          const corners = page.getByRole("switch", { name: "Square corners", exact: true });
+          await corners.waitFor();
+          assert.equal(await corners.getAttribute("aria-checked"), String(legacy));
+          await corners.click();
+          await page.reload();
+          await page.locator(".conn-live").waitFor({ state: "attached" });
+          assert.equal(await page.evaluate(() => document.documentElement.dataset["forkSquareCorners"]), String(!legacy), "the explicit choice survives reload without being migrated again");
+          assert.deepEqual(errors, []);
+          console.log(`PASS ${legacy ? "legacy fork" : "upstream defaults"}: tabs, lens, corners, Settings and reload`);
+        } finally { await context.close(); }
+      }
+    } finally { await browser.close(); }
+  } finally { await server.stop(true); }
+} finally { rmSync(app, { recursive: true, force: true }); }
