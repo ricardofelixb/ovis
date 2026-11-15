@@ -181,6 +181,7 @@ run_script scripts/keyboard-viewport-regression.ts
 run_script scripts/file-viewer-mobile-regression.ts
 run_script scripts/droplet-demo-regression.ts
 run_script scripts/phone-glass-header-demo-regression.ts
+run_script scripts/fork-preferences-regression.ts
 run_script scripts/phone-safe-area-demo-regression.ts
 run_script scripts/phone-back-demo-regression.ts
 run_script scripts/header-context-demo-regression.ts
