@@ -45,6 +45,7 @@ import { useTabReorder } from "../lib/useTabReorder.ts";
 import { indicatorGlyph, paneStatus, rollupStatus, STATUS_WORD, type KnownStatus } from "../lib/status.ts";
 import { useSettings } from "../lib/settings.ts";
 import { TabFriends } from "../fork/TabFriends.tsx";
+import { paneMenuItems, tabMenuHeader } from "../fork/tabMenus.tsx";
 import { AgentMark } from "./AgentMark.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { displayPaneTitle } from "./Sidebar.tsx";
@@ -623,19 +624,17 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     const own = soloPanes ? panesOf(tab) : [];
     const layout = snapshot.layouts?.find((entry) => entry.tab_id === tab.tab_id);
     // the pane's menu can carry the tab's own actions too (where More holds them): the tab's group says them once
+    const tabItems = tabActions(tab);
     const paneItems = touch && tab.tab_id === selectedPane.tab_id
-      ? (paneActions?.(selectedPane.pane_id) ?? []).filter((item) => !soloPanes
-        || (item.id === "zoom" ? layout?.zoomed : item.id !== "split-right" && item.id !== "split-down")) : [];
-    // a one-pane tab is renamed and closed as a tab: its pane's Rename and Close would only repeat them
-    const lone = panesOf(tab).length === 1;
+      ? paneMenuItems(paneActions?.(selectedPane.pane_id) ?? [], tabItems, settings.compactTabMenus, panesOf(tab).length === 1, soloPanes, Boolean(layout?.zoomed)) : [];
     const groups: RowMenuItem[][] = [
       own.length < 2 ? [] : own.map((pane): RowMenuItem => ({
         id: `pane:${pane.pane_id}`, label: displayPaneTitle(pane), icon: Terminal,
         glyph: pane.agent ? <AgentMark agent={pane.agent} size={16} /> : undefined,
         current: pane.pane_id === selectedPane.pane_id, run: () => onSelectPane(pane.pane_id),
       })),
-      paneItems.filter((item) => !lone || (item.id !== "rename" && item.id !== "close")),
-      tabActions(tab),
+      paneItems,
+      tabItems,
     ].filter((group) => group.length > 0);
     return groups.flatMap((group, at) => at === 0 ? group : group.map((item, index) => index === 0 ? { ...item, divider: true } : item));
   };
@@ -850,8 +849,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       {rowShown && error && popup === "dialog" && <p className="pane-notice tab-strip-notice" role="alert">{error}</p>}
       {picker && <RowMenu key={picker.workspaces ? "workspaces" : "tab"} anchor={picker.anchor} point={picker.point} restoreFocusTo={picker.previousFocus}
         title={picker.workspaces ? t("Move {tab} to", { tab: nameOf(picker.tab) }) : nameOf(picker.tab)}
-        subtitle={picker.workspaces ? undefined : place}
-        header={picker.workspaces || sheetWidth ? undefined : <span className="tab-menu-place" title={place}>{place}</span>}
+        {...tabMenuHeader(settings.compactTabMenus, picker.workspaces ? t("Move {tab} to", { tab: nameOf(picker.tab) }) : nameOf(picker.tab), place, picker.workspaces === true, sheetWidth)}
         items={picker.workspaces ? workspaceItems(picker.tab) : pickerItems(picker.tab, picker.touch)} align="start" onClose={() => setPicker(null)} />}
       {moreAnchor && leftOut.length > 0 && <RowMenu anchor={moreAnchor} restoreFocusTo={moreAnchor} title={t("More tabs")} items={leftOut.map(tabItem)} align="start" onClose={() => setMoreAnchor(null)} />}
       {sheet && onSheetClose && <RowMenu anchor={sheet} title={t("Tabs of {workspace}", { workspace: workspace.label })} items={sheetItems()} onClose={onSheetClose} />}

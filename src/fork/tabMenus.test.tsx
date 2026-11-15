@@ -13,7 +13,6 @@ it("defaults to upstream pane actions, including Close pane in a one-pane tab", 
 
 it("preserves the compact fork menu without losing recovery or split-pane close", () => {
   expect(paneMenuItems(items, tabs, true, true, false, false).map((item) => item.id)).toEqual(["shared", "split-right", "zoom", "recover"]);
-  expect(paneMenuItems(items, tabs, true, false, false, false)).toBeDefined();
   expect(paneMenuItems(items, tabs, true, false, true, true).map((item) => item.id)).toEqual(["rename", "close", "shared", "zoom", "recover"]);
 });
 

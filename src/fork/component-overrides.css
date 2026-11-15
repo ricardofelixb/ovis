@@ -216,7 +216,7 @@
   margin-left: -4px;
 }
 
-[data-fork-agent-named-tabs="true"] .tab-menu-place {
+[data-fork-compact-tab-menus="true"] .tab-menu-place {
   display: block;
   overflow: hidden;
   color: var(--text-dim);

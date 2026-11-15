@@ -23,6 +23,7 @@ export function ForkFeatures() {
     ["headerBranch", t("Branch in the header")],
     ["collapseOfflinePcs", t("Collapse offline PCs")],
     ["expandedPrompts", t("Taller prompt cards")],
+    ["compactTabMenus", t("Compact tab menus")],
     ["sidebarActions", t("Sidebar pane actions")],
   ] as const;
   return <SettingsGroup title={t("Fork features")} section="fork-features">

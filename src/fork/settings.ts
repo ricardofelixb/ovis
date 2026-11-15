@@ -27,6 +27,7 @@ export interface ForkSettings {
   headerBranch: boolean;
   collapseOfflinePcs: boolean;
   expandedPrompts: boolean;
+  compactTabMenus: boolean;
   sidebarActions: boolean;
 }
 
@@ -35,7 +36,7 @@ export const FORK_DEFAULTS: ForkSettings = {
   speechVoice: SPEECH_DEFAULT_VOICE, liveVoice: "pi",
   squareCorners: false, moreViewToggle: false, agentNamedTabs: false, agentFriends: false,
   composerExtras: false, compactWorkRuns: false, chatMotion: false, piLiveVoice: false,
-  computerView: false, pullRequests: false, readAloud: false, headerBranch: false, collapseOfflinePcs: false, expandedPrompts: false, sidebarActions: false,
+  computerView: false, pullRequests: false, readAloud: false, headerBranch: false, collapseOfflinePcs: false, expandedPrompts: false, compactTabMenus: false, sidebarActions: false,
 };
 
 export const FORK_SCOPE = {
@@ -62,7 +63,7 @@ export function migrateForkSettings(raw: unknown): unknown {
   // Once a new setting is explicit it always wins, including false and a reset to upstream defaults.
   return { phoneTabs: "header", keyBarItems: legacyKeyBarItems, contextCircle: true, squareCorners: true, moreViewToggle: true, agentNamedTabs: true,
     agentFriends: true, composerExtras: true, compactWorkRuns: true, chatMotion: true,
-    piLiveVoice: true, computerView: true, pullRequests: true, readAloud: true, headerBranch: true, collapseOfflinePcs: true, expandedPrompts: true, sidebarActions: true, ...record };
+    piLiveVoice: true, computerView: true, pullRequests: true, readAloud: true, headerBranch: true, collapseOfflinePcs: true, expandedPrompts: true, compactTabMenus: true, sidebarActions: true, ...record };
 }
 
 /** Kept apart from the main record: an older upstream tab must not erase fork choices on save. */
