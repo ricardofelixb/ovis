@@ -21,7 +21,7 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
   rememberOpened(opened: WorktreeOpened): void;
 } {
   const machineId = useMachineId();
-  const { headerBranch } = useSettings();
+  const { settings: { headerBranch } } = useSettings();
   const { listWorktrees, readWorktreeInventory } = useMachineApi();
   const visible = usePageVisible();
   // `refused`: the PC answered that this device may only watch (#2250): it is not asked again until the
