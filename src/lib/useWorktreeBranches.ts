@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { restoreForkBranches, saveForkBranches } from "../fork/branchStorage.ts";
-import { useSettings } from "./settings.ts";
 import type { SessionSnapshot, WorktreeListing, WorktreeOpened } from "../../shared/protocol.ts";
 import { ApiError, routeMissing } from "./api.ts";
 import { useMachineApi, useMachineId } from "./machineContext.tsx";
@@ -16,12 +15,11 @@ const NONE: ReadonlySet<string> = new Set();
 /** `unmarked`: git workspaces herdr has not marked as a repository's (no `worktree`), read one by one. */
 /** `watching`: this device may only watch, and the PC refuses it the listing (#2250): nothing is asked. */
 /** `onNotCheckout`: herdr answered that an unmarked workspace is no git checkout, so whoever chose it can stop asking (#2726). */
-export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: boolean, roster = false, unmarked: ReadonlySet<string> = NONE, watching = false, onNotCheckout?: (workspaceId: string) => void): {
+export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: boolean, roster = false, unmarked: ReadonlySet<string> = NONE, watching = false, onNotCheckout?: (workspaceId: string) => void, persistBranches = false): {
   branches: ReadonlyMap<string, WorkspaceBranch>;
   rememberOpened(opened: WorktreeOpened): void;
 } {
   const machineId = useMachineId();
-  const { settings: { headerBranch } } = useSettings();
   const { listWorktrees, readWorktreeInventory } = useMachineApi();
   const visible = usePageVisible();
   // `refused`: the PC answered that this device may only watch (#2250): it is not asked again until the
@@ -31,9 +29,9 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
   // within the PC's budget (server/workspace-routes.ts) still reaches every workspace in turn
   const owner = useMemo(() => {
     const cache = new WorkspaceBranchCache();
-    restoreForkBranches(cache, machineId, headerBranch);
+    restoreForkBranches(cache, machineId, persistBranches);
     return { cache, pending: null as Promise<void> | null, refused: watching, oneByOne: false, turn: 0 };
-  }, [machineId, watching, headerBranch]);
+  }, [machineId, watching, persistBranches]);
   const [, publish] = useState(0);
   const [refresh, setRefresh] = useState(0);
   const workspaces = snapshot?.workspaces ?? [];
@@ -115,7 +113,7 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
         }
         if (!stopped && changed) {
           publish((value) => value + 1);
-          if (roster) saveForkBranches(owner.cache, machineId, headerBranch);
+          if (roster) saveForkBranches(owner.cache, machineId, persistBranches);
         }
       })();
       owner.pending = cycle;
@@ -130,7 +128,7 @@ export function useWorktreeBranches(snapshot: SessionSnapshot | null, online: bo
       owner.cache.invalidate();
       clearTimeout(timer);
     };
-  }, [owner, listWorktrees, readWorktreeInventory, signature, unmarkedKey, online, visible, refresh, roster, machineId, onNotCheckout, headerBranch]);
+  }, [owner, listWorktrees, readWorktreeInventory, signature, unmarkedKey, online, visible, refresh, roster, machineId, onNotCheckout, persistBranches]);
 
   const rememberOpened = useCallback((opened: WorktreeOpened): void => {
     owner.cache.rememberOpened(opened);
