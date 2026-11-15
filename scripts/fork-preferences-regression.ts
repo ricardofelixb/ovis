@@ -43,6 +43,8 @@ try {
           if (legacy) await toggle.waitFor({ state: "detached" });
           else await toggle.waitFor();
           assert.equal(await page.locator(".header-tabs-sheet").count() > 0, legacy, "only the saved fork device has phone tabs in the header");
+          const preferences = await page.evaluate(() => ({ compact: document.documentElement.dataset["forkCompactTabMenus"], steady: document.documentElement.dataset["forkSteadyKeyboardTabs"] }));
+          assert.deepEqual(preferences, { compact: String(legacy), steady: String(legacy) }, "menu and keyboard behavior preserve migrated device choices");
           const radius = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--radius-lg").trim());
           assert.equal(radius, legacy ? "0" : "12px", "corners follow the migrated preference");
           await page.keyboard.press("ControlOrMeta+Shift+Comma");
@@ -56,8 +58,28 @@ try {
           await page.reload();
           await page.locator(".conn-live").waitFor({ state: "attached" });
           assert.equal(await page.evaluate(() => document.documentElement.dataset["forkSquareCorners"]), String(!legacy), "the explicit choice survives reload without being migrated again");
+          await page.evaluate(() => localStorage.setItem("ovis:phone-tabs", JSON.stringify("row")));
+          await page.setViewportSize({ width: 700, height: 900 });
+          await page.reload();
+          await page.locator(".conn-live").waitFor({ state: "attached" });
+          // A lone tab makes the cramped-height rule observable. This is a demo session, never a real pane.
+          await page.evaluate(async (paneId) => {
+            const { snapshot } = await (await fetch("/api/session")).json() as { snapshot: { panes: { pane_id: string; workspace_id: string; tab_id: string }[]; tabs: { workspace_id: string; tab_id: string }[] } };
+            const own = snapshot.panes.find((pane) => pane.pane_id === paneId)!;
+            for (const tab of snapshot.tabs.filter((tab) => tab.workspace_id === own.workspace_id && tab.tab_id !== own.tab_id)) {
+              const response = await fetch("/api/tab/close", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ tab_id: tab.tab_id }) });
+              if (!response.ok) throw new Error(`tab close ${response.status}`);
+            }
+          }, panes.omp);
+          const tabRow = page.locator(".pane-slot .tab-strip");
+          await tabRow.waitFor();
+          await page.waitForFunction(() => document.querySelectorAll(".pane-slot .tab-strip-item").length === 1);
+          await page.getByRole("textbox", { name: "Message", exact: true }).click();
+          await page.setViewportSize({ width: 700, height: 650 });
+          await page.waitForFunction(() => window.matchMedia("(max-width: 768px) and (max-height: 700px)").matches);
+          await tabRow.waitFor({ state: legacy ? "visible" : "detached" });
           assert.deepEqual(errors, []);
-          console.log(`PASS ${legacy ? "legacy fork" : "upstream defaults"}: tabs, lens, corners, Settings and reload`);
+          console.log(`PASS ${legacy ? "legacy fork" : "upstream defaults"}: tabs, lens, corners, Settings, reload and keyboard sizing`);
         } finally { await context.close(); }
       }
     } finally { await browser.close(); }

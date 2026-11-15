@@ -24,6 +24,7 @@ export function ForkFeatures() {
     ["collapseOfflinePcs", t("Collapse offline PCs")],
     ["expandedPrompts", t("Taller prompt cards")],
     ["compactTabMenus", t("Compact tab menus")],
+    ["steadyKeyboardTabs", t("Keep tabs while keyboard opens")],
     ["sidebarActions", t("Sidebar pane actions")],
   ] as const;
   return <SettingsGroup title={t("Fork features")} section="fork-features">
