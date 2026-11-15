@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { notConnected, onMainSteps, pullMainSteps, rollOut, settingOf, withSetting } from "./deploy-helpers.ts";
+import { machinesOf, notConnected, onMainSteps, pullMainSteps, rollOut, settingOf, withSetting } from "./deploy-helpers.ts";
 
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
@@ -209,5 +209,24 @@ describe("rollOut", () => {
     const run = steps();
     await expect(rollOut({ ...run.steps, listMachines: async () => { throw new Error("refused"); } })).rejects.toThrow("refused");
     expect(run.trace).toEqual([]);
+  });
+});
+
+describe("machinesOf", () => {
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+
+  it("gives the roster of an answered /api/machines", async () => {
+    expect(await machinesOf(json({ machines: [{ id: "a" }] }))).toEqual([{ id: "a" }]);
+    expect(await machinesOf(json({ machines: [] }))).toEqual([]);
+  });
+
+  it("refuses an error answer, such as the 401 an unauthenticated request gets, instead of reading it as no PCs", async () => {
+    await expect(machinesOf(json({ error: "unauthorized" }, 401))).rejects.toThrow("401");
+  });
+
+  it("refuses an answer without a roster, or not JSON", async () => {
+    await expect(machinesOf(json({}))).rejects.toThrow("roster");
+    await expect(machinesOf(json({ machines: "x" }))).rejects.toThrow("roster");
+    await expect(machinesOf(new Response("<html>", { status: 200 }))).rejects.toThrow("roster");
   });
 });
