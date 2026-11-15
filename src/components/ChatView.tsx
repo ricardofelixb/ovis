@@ -50,7 +50,7 @@ import { dropPendingListScroll, listEndPadded } from "../lib/followScroll.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { knownStatus, statusEdgeRead } from "../lib/status.ts";
 import { askedQuestions } from "../../shared/askQuestions.ts";
-import { forgetWaitingBaseline, settleWaitingSends, waitingKey } from "../lib/sentWaiting.ts";
+import { forgetWaitingBaseline, settleWaitingSends, waitingKey, type WaitingSend } from "../lib/sentWaiting.ts";
 import { SentWaitingList, useWaitingSends } from "./SentWaiting.tsx";
 import { ConversationRefresh } from "../lib/conversationRefresh.ts";
 import { teammateMessageParts, type TeammateMessage } from "../lib/teammateMessage.ts";
@@ -70,7 +70,7 @@ import { useMachineId } from "../lib/machineContext.tsx";
 import { skillSyntax } from "../../shared/skill-syntax.ts";
 import { createSkillMatcher, type SkillMatcher } from "../lib/skillMentions.ts";
 import { lineDiff } from "../lib/diff.ts";
-import { agentDisplayLabel, endsWithTurn, formatTokens, stoppedTurn, type TurnIdentity } from "../lib/compose.ts";
+import { agentDisplayLabel, endsWithTurn, formatTokens, sameMessage, stoppedTurn, type TurnIdentity } from "../lib/compose.ts";
 import { formatElapsed, taskCallItems, taskResultMarkdown } from "../lib/omoTasks.ts";
 import { sendUserFileCall } from "../lib/sendUserFile.ts";
 import { editCall } from "../lib/editCall.ts";
@@ -337,6 +337,7 @@ interface ChatState {
 
 const EMPTY_STATE: ChatState = { source: "conversation", turns: [], messages: [], truncated: false };
 const NO_ROWS: readonly Pick<PendingMessage, "id" | "state">[] = [];
+const NO_SENDS: readonly WaitingSend[] = [];
 
 /** One row of the timeline: a loaded turn in its browser slot, or a provisional sent row keyed by its outcome. */
 type ChatRow = { key: string; beforeUser: boolean } & (
@@ -2728,6 +2729,10 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   // queue lives in the store, so a reader who goes to another tab and comes back still sees it.
   const waitKey = waitingKey(machineId, paneId);
   const sentWaiting = useWaitingSends(machineId, paneId, connected);
+  // Animated replies: the composer's sends are timeline rows (not those a restored send hides, nor a
+  // queued one, which stays in the footer); the footer keeps the rest
+  const rowSends = useMemo(() => settings.chatMotion ? sentWaiting.filter((send) => send.queued !== true && !(restored !== null && sameMessage(send.text, restored))) : NO_SENDS, [sentWaiting, settings.chatMotion, restored]);
+  const footerSends = useMemo(() => settings.chatMotion ? sentWaiting.filter((send) => send.queued === true) : sentWaiting, [sentWaiting, settings.chatMotion]);
   const rowSlots = slots.current.rows;
   // a live message's turn of its own takes the row the transcript's turn will have once it holds it
   const liveSlot = useMemo(() => appendChatRowSlots(slots.current, 1).rows.at(-1), [rowSlots]);
@@ -2756,13 +2761,13 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       return { key: adoptedKey(waitKey, shownTurns[row.index]!, adoptedKeys) ?? slot.key, turn: shownTurns[row.index]!, index: row.index, outcome: row.outcome, beforeUser: false };
     });
     // Animated replies: a send whose turn is not read yet is the last row, where the turn will be
-    if (settings.chatMotion) for (const send of sentWaiting) rows.push({ key: sendRowKey(send), turn: sendTurn(send), index: -1, outcome: null, sendAt: send.at, beforeUser: false });
+    for (const send of rowSends) rows.push({ key: sendRowKey(send), turn: sendTurn(send), index: -1, outcome: null, sendAt: send.at, beforeUser: false });
     // a sent row opens an exchange as a user turn does
     return rows.map((row, index) => {
       const next = rows[index + 1];
       return { ...row, beforeUser: row.turn?.role === "assistant" && next !== undefined && (next.turn === null || next.turn.role === "user") };
     });
-  }, [withOutcomes, shownTurns, rowSlots, liveSlot, waitKey, sentWaiting, settings.chatMotion]);
+  }, [withOutcomes, shownTurns, rowSlots, liveSlot, waitKey, rowSends]);
   /**
    * Puts the row at `index` `offset` px below the view's top, the reader reading there. The list's
    * index scroll starts from estimated heights, so the row is brought to its offset once measured,
@@ -2989,7 +2994,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   }, [footerHead]);
   const footer = <>
       <p className={waitWords === null ? "visually-hidden" : "chat-inline-state"} role="status">{waitWords}</p>
-      {sentWaiting.length > 0 && state.source === "conversation" && !settings.chatMotion && <SentWaitingList sends={sentWaiting} />}
+      {footerSends.length > 0 && state.source === "conversation" && <SentWaitingList sends={footerSends} />}
       {error !== null && !waiting && (errorStatus === 401
         ? <p className="chat-inline-state chat-inline-error" role="alert">{t("locked — the token gate is asking again")}</p>
         : <FailureLine action={t("Couldn't load the conversation")} failure={error} onRetry={retryRead} />)}

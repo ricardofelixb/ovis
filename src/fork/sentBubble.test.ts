@@ -5,7 +5,7 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import type { ConversationTurn } from "../../shared/protocol.ts";
 import { Turn } from "../components/ChatView.tsx";
 import { SettingsProvider } from "../lib/settings.ts";
-import { forgetWaitingSends, rememberWaitingSend, settleWaitingSends, waitingKey, type WaitingSend } from "../lib/sentWaiting.ts";
+import { currentWaitingSends, forgetWaitingSends, rememberWaitingSend, settleWaitingSends, waitingKey, type WaitingSend } from "../lib/sentWaiting.ts";
 import { useSendMotion } from "./chatPresentation.ts";
 import { FORK_DEFAULTS, type ForkSettings } from "./settings.ts";
 import { adoptedKey, adoptSend, resetSendBubbles, sendRowKey, sendTurn } from "./sentBubble.ts";
@@ -117,6 +117,21 @@ it("a send settling on its transcript turn hands the turn its row", () => {
   settleWaitingSends(key, [turn], at + 1000, true);
   const adopted = adoptedKey(key, turn, new Set());
   expect(adopted).toStartWith(`send:${key}:`);
+  forgetWaitingSends(key);
+});
+
+it("a queued delivery is marked and takes no row from its turn", () => {
+  const key = waitingKey("m", "queued");
+  const at = Date.parse("2026-11-01T10:00:00Z");
+  rememberWaitingSend(key, "from the queue", at, null, true);
+  expect(currentWaitingSends(key).map((item) => item.queued)).toEqual([true]);
+  settleWaitingSends(key, [], at + 100, true);
+  const turn = userTurn("from the queue", new Date(at + 500).toISOString());
+  settleWaitingSends(key, [turn], at + 1000, true);
+  expect(currentWaitingSends(key)).toEqual([]);
+  expect(adoptedKey(key, turn, new Set())).toBeUndefined();
+  rememberWaitingSend(key, "typed here", at, null);
+  expect(currentWaitingSends(key).map((item) => item.queued)).toEqual([undefined]);
   forgetWaitingSends(key);
 });
 
