@@ -33,6 +33,12 @@ try {
           page.on("pageerror", (error) => errors.push(error.message));
           await page.goto(`http://127.0.0.1:${server.port}/herdr-web-ui/demo/app/?pane=${encodeURIComponent(panes.omp)}&view=chat`);
           await page.locator(".conn-live").waitFor({ state: "attached" });
+          await page.locator(".chat-turn-agent").first().waitFor();
+          assert.equal(await page.locator(".chat-speak").count() > 0, legacy, "read aloud is opt-in");
+          await page.locator(".workspace-toggle").first().click();
+          await page.locator("#workspace-drawer.is-open").waitFor();
+          assert.equal(await page.locator(".machine-screen").count() > 0, legacy, "Computer view is opt-in");
+          await page.keyboard.press("Escape");
           const toggle = page.locator(".app-header .lens-toggle");
           if (legacy) await toggle.waitFor({ state: "detached" });
           else await toggle.waitFor();
