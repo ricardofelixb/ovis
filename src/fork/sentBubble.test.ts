@@ -8,7 +8,7 @@ import { SettingsProvider } from "../lib/settings.ts";
 import { currentWaitingSends, forgetWaitingSends, rememberWaitingSend, settleWaitingSends, waitingKey, type WaitingSend } from "../lib/sentWaiting.ts";
 import { useSendMotion } from "./chatPresentation.ts";
 import { FORK_DEFAULTS, type ForkSettings } from "./settings.ts";
-import { adoptedKey, adoptSend, claimOutcomes, resetSendBubbles, sendRowKey, sendTurn } from "./sentBubble.ts";
+import { adoptedKey, adoptSend, claimOutcomes, resetSendBubbles, sendRowKey, sendTurn, useSendPop } from "./sentBubble.ts";
 
 const globals = ["IS_REACT_ACT_ENVIRONMENT", "window", "document", "getComputedStyle", "navigator"];
 const saved = new Map<string, PropertyDescriptor | undefined>();
@@ -166,4 +166,23 @@ it("a send keeps the outcome ids the chat had read", () => {
   rememberWaitingSend(key, "no ids", Date.now(), null);
   expect(currentWaitingSends(key).map((item) => item.known)).toEqual([["o1"], undefined]);
   forgetWaitingSends(key);
+});
+
+it("a row mounted with Animated replies off does not pop once the setting is turned on", () => {
+  const key = sendRowKey(send(7));
+  let pops = false;
+  const Probe = ({ on }: { on: boolean }) => { pops = useSendPop(key, on); return null; };
+  let renderer!: ReactTestRenderer;
+  act(() => { renderer = create(createElement(Probe, { on: false })); });
+  mounted.push(renderer);
+  expect(pops).toBe(false);
+  act(() => { renderer.update(createElement(Probe, { on: true })); });
+  expect(pops).toBe(false);
+  // a row that mounts with it on still pops, once, and keeps its class while mounted
+  const fresh = sendRowKey(send(8));
+  const Fresh = ({ on }: { on: boolean }) => { pops = useSendPop(fresh, on); return null; };
+  act(() => { renderer.update(createElement(Fresh, { on: true })); });
+  expect(pops).toBe(true);
+  act(() => { renderer.update(createElement(Fresh, { on: true })); });
+  expect(pops).toBe(true);
 });

@@ -75,14 +75,15 @@ const popped = new Set<string>();
 /**
  * Whether the row pops: only a send's own row, and only on its first mount. A row that popped keeps
  * its class while it stays mounted (the animation runs on, and a class that stays replays nothing).
+ * A row mounted with the setting off has had its chance too: switching it on later pops nothing.
  */
 export function useSendPop(rowKey: string, enabled: boolean): boolean {
   const mine = useRef(false);
   const pops = enabled && rowKey.startsWith("send:") && (mine.current || !popped.has(rowKey));
   useEffect(() => {
-    if (!pops) return;
-    mine.current = true;
-    popped.add(rowKey);
+    if (!rowKey.startsWith("send:")) return;
+    if (pops) mine.current = true;
+    if (pops || !enabled) popped.add(rowKey);
   });
   return pops;
 }
