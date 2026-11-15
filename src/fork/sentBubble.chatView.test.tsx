@@ -116,6 +116,27 @@ test("a send cancelled and restored before its transcript arrives leaves no bubb
   forgetWaitingSends(key("cancelled"));
 });
 
+test("a cancelled send stays away once the restored input is cleared", async () => {
+  restored = "fix the test";
+  rememberWaitingSend(key("retired"), "fix the test", Date.now(), null);
+  await mount("retired");
+  expect(sendKeys()).toEqual([]);
+  // the user clears the restored text in the agent's box: the next prompt read answers none
+  restored = null;
+  const reads = (): number => fetchSpy.mock.calls.filter(([input]) => String(input).includes("pane/prompt")).length;
+  const before = reads();
+  const deadline = Date.now() + 8_000;
+  await act(async () => {
+    while (reads() === before) {
+      if (Date.now() > deadline) throw new Error("the chat never read the prompt again");
+      await Bun.sleep(25);
+    }
+  });
+  for (let pass = 0; pass < 3; pass += 1) await act(async () => { await Promise.resolve(); });
+  expect(sendKeys()).toEqual([]);
+  forgetWaitingSends(key("retired"));
+}, 15_000);
+
 test("a queued delivery stays out of the rows", async () => {
   restored = null;
   rememberWaitingSend(key("queued"), "from the queue", Date.now(), null, true);

@@ -8,7 +8,7 @@ import { SettingsProvider } from "../lib/settings.ts";
 import { currentWaitingSends, forgetWaitingSends, rememberWaitingSend, settleWaitingSends, waitingKey, type WaitingSend } from "../lib/sentWaiting.ts";
 import { useSendMotion } from "./chatPresentation.ts";
 import { FORK_DEFAULTS, type ForkSettings } from "./settings.ts";
-import { adoptedKey, adoptSend, claimOutcomes, resetSendBubbles, sendRowKey, sendTurn, useSendPop } from "./sentBubble.ts";
+import { adoptedKey, adoptSend, claimOutcomes, resetSendBubbles, rowIndexOf, rowSendsOf, sendRowKey, sendTurn, useSendPop } from "./sentBubble.ts";
 
 const globals = ["IS_REACT_ACT_ENVIRONMENT", "window", "document", "getComputedStyle", "navigator"];
 const saved = new Map<string, PropertyDescriptor | undefined>();
@@ -55,6 +55,11 @@ const update = (renderer: ReactTestRenderer, key: string, turn: ConversationTurn
 };
 const bubbleClass = (renderer: ReactTestRenderer): string => String(renderer.root.findByType("article").props.className);
 const remove = (renderer: ReactTestRenderer): void => { act(() => { renderer.unmount(); }); mounted.splice(mounted.indexOf(renderer), 1); };
+/** the send's row drawn once with the setting on, as the chat does before its turn is read */
+function drawn(sent: WaitingSend): void {
+  fork = { chatMotion: true };
+  remove(row(sendRowKey(sent), sendTurn(sent), sent.at));
+}
 
 it("a send's row pops once, and stays the same row when its transcript turn replaces it", () => {
   fork = { chatMotion: true };
@@ -98,6 +103,7 @@ it("with Animated replies off nothing pops", () => {
 it("each send keeps its own row: the same words sent from two panes", () => {
   const first = send(5, "m:p1");
   const second = send(6, "m:p2");
+  drawn(first); drawn(second);
   adoptSend("m:p1", first, userTurn(first.text, "2026-11-01T10:00:01Z"));
   adoptSend("m:p2", second, userTurn(second.text, "2026-11-01T10:00:01Z"));
   expect(adoptedKey("m:p1", userTurn(first.text, "2026-11-01T10:00:01Z"), new Set())).toBe(sendRowKey(first));
@@ -112,6 +118,7 @@ it("a send settling on its transcript turn hands the turn its row", () => {
   const key = waitingKey("m", "adopt");
   const at = Date.parse("2026-11-01T10:00:00Z");
   rememberWaitingSend(key, "run the build", at, null);
+  drawn(currentWaitingSends(key)[0]!);
   settleWaitingSends(key, [], at + 100, true);
   const turn = userTurn("run the build", new Date(at + 500).toISOString());
   settleWaitingSends(key, [turn], at + 1000, true);
@@ -185,4 +192,49 @@ it("a row mounted with Animated replies off does not pop once the setting is tur
   expect(pops).toBe(true);
   act(() => { renderer.update(createElement(Fresh, { on: true })); });
   expect(pops).toBe(true);
+});
+
+it("a row that ran its pop does not run it again when the setting goes off and on", () => {
+  const key = sendRowKey(send(9));
+  const seen: boolean[] = [];
+  const Probe = ({ on }: { on: boolean }) => { seen.push(useSendPop(key, on)); return null; };
+  let renderer!: ReactTestRenderer;
+  act(() => { renderer = create(createElement(Probe, { on: true })); });
+  mounted.push(renderer);
+  act(() => { renderer.update(createElement(Probe, { on: false })); });
+  act(() => { renderer.update(createElement(Probe, { on: true })); });
+  expect(seen.at(-1)).toBe(false);
+  expect(seen.slice(0, 2)).toEqual([true, false]);
+});
+
+it("a send made with Animated replies off takes no row key from its turn once it is turned on", () => {
+  const key = waitingKey("m", "offsend");
+  const at = Date.parse("2026-11-01T10:00:00Z");
+  fork = { chatMotion: false };
+  rememberWaitingSend(key, "made with it off", at, null);
+  settleWaitingSends(key, [], at + 100, true);
+  const turn = userTurn("made with it off", new Date(at + 500).toISOString());
+  settleWaitingSends(key, [turn], at + 1000, true);
+  // the send's row was never drawn: its turn keeps the slot's key, so it never pops
+  expect(adoptedKey(key, turn, new Set())).toBeUndefined();
+  forgetWaitingSends(key);
+});
+
+it("a restored send is retired for good: its bubble stays away once the restored text clears", () => {
+  const retired = new Set<number>();
+  const same = (a: string, b: string): boolean => a.trim() === b.trim();
+  const cancelled = send(20, "m:p1", "fix the test");
+  const other = send(21, "m:p1", "something else");
+  expect(rowSendsOf([cancelled, other], "fix the test", retired, same).map((item) => item.id)).toEqual([21]);
+  expect(rowSendsOf([cancelled, other], null, retired, same).map((item) => item.id)).toEqual([21]);
+  // a queued delivery is never a row
+  expect(rowSendsOf([{ ...other, queued: true }], null, new Set(), same)).toEqual([]);
+});
+
+it("a send's row is found among the list's rows, any other among the slots", () => {
+  const timeline = ["a", "outcome:1", "send:m:p1:3"];
+  const slots = ["a", "b"];
+  expect(rowIndexOf("send:m:p1:3", timeline, slots)).toBe(2);
+  expect(rowIndexOf("b", timeline, slots)).toBe(1);
+  expect(rowIndexOf("send:m:p1:9", timeline, slots)).toBe(-1);
 });

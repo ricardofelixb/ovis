@@ -60,10 +60,14 @@ export function adoptSend(pane: string, send: WaitingSend, turn: ConversationTur
   adopted.set(pane, list);
 }
 
-/** The row key of a turn that took a send's over, each key given to one turn only (`used`). */
+/**
+ * The row key of a turn that took a send's over, each key given to one turn only (`used`). Only a
+ * send this page drew as a row has one (`popped` holds it): a send made with the setting off never
+ * gets a row key later, and with it the pop.
+ */
 export function adoptedKey(pane: string, turn: ConversationTurn, used: Set<string>): string | undefined {
   if (turn.role !== "user" || turn.ts === null) return undefined;
-  const entry = adopted.get(pane)?.find((item) => item.ts === turn.ts && !used.has(item.key) && item.words === turnWords(turn));
+  const entry = adopted.get(pane)?.find((item) => item.ts === turn.ts && !used.has(item.key) && popped.has(item.key) && item.words === turnWords(turn));
   if (entry === undefined) return undefined;
   used.add(entry.key);
   return entry.key;
@@ -75,7 +79,8 @@ const popped = new Set<string>();
 /**
  * Whether the row pops: only a send's own row, and only on its first mount. A row that popped keeps
  * its class while it stays mounted (the animation runs on, and a class that stays replays nothing).
- * A row mounted with the setting off has had its chance too: switching it on later pops nothing.
+ * A row mounted with the setting off has had its chance too: switching it on later pops nothing, nor
+ * does switching it off and on again, which would replay the animation on a row that already ran it.
  */
 export function useSendPop(rowKey: string, enabled: boolean): boolean {
   const mine = useRef(false);
@@ -83,9 +88,25 @@ export function useSendPop(rowKey: string, enabled: boolean): boolean {
   useEffect(() => {
     if (!rowKey.startsWith("send:")) return;
     if (pops) mine.current = true;
+    if (!enabled) mine.current = false;
     if (pops || !enabled) popped.add(rowKey);
   });
   return pops;
+}
+
+/**
+ * The sends the chat draws as rows: not a queued delivery (it stays in the footer), and not one a
+ * restored copy took back. That one is retired for good (`retired`, the view's own): the restored
+ * text clearing later must not bring its bubble back.
+ */
+export function rowSendsOf(sends: readonly WaitingSend[], restored: string | null, retired: Set<number>, same: (a: string, b: string) => boolean): WaitingSend[] {
+  if (restored !== null) for (const send of sends) if (same(send.text, restored)) retired.add(send.id);
+  return sends.filter((send) => send.queued !== true && !retired.has(send.id));
+}
+
+/** The index of a row in the timeline's rows: a send's row is only there, any other is a slot's too. */
+export function rowIndexOf(key: string, timelineKeys: readonly string[], slotKeys: readonly string[]): number {
+  return (key.startsWith("send:") ? timelineKeys : slotKeys).indexOf(key);
 }
 
 /** Forget the memory of popped rows and adoptions (tests). */

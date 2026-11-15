@@ -32,7 +32,7 @@ import { ApiError, pinPaneConversation, unpinPaneConversation } from "../lib/api
 import { copyText } from "../lib/clipboard.ts";
 import { SpeakButton } from "../fork/SpeakButton.tsx";
 import { useSendMotion, withoutEmptyLiveTurn } from "../fork/chatPresentation.ts";
-import { adoptedKey, claimOutcomes, sendRowKey, sendTurn, useSendPop } from "../fork/sentBubble.ts";
+import { adoptedKey, claimOutcomes, rowIndexOf, rowSendsOf, sendRowKey, sendTurn, useSendPop } from "../fork/sentBubble.ts";
 import { SendLate } from "../fork/SendLate.tsx";
 import type { GalleryImage } from "../lib/imageViewer.ts";
 import { toolGalleryImage, userGalleryImages } from "../lib/chatImages.ts";
@@ -1747,6 +1747,8 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   const [historyId, setHistoryId] = useState<string | undefined>(undefined);
   const shownPane = useRef(paneId);
   const prependAnchor = useRef<{ key: string; offset: number } | null>(null);
+  /** the rows the list draws (a send's row is among them, not among the slots) */
+  const timelineRowsRef = useRef<readonly ChatRow[]>([]);
   /** where the reader left this pane before (lib/chatScrollMemory.ts), until the first answer puts it back */
   const restoring = useRef<ChatPosition | null>(null);
   /** the turn a search's pick opens the chat at (revealTurn), until its row is in; bumped for each pick */
@@ -2175,7 +2177,8 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     const anchor = prependAnchor.current;
     if (anchor === null) return;
     prependAnchor.current = null;
-    const index = slots.current.rows.findIndex((row) => row.key === anchor.key);
+    // a send's row (Animated replies) is no slot's: it is found among the rows the list draws
+    const index = rowIndexOf(anchor.key, timelineRowsRef.current.map((row) => row.key), slots.current.rows.map((row) => row.key));
     if (index >= 0) void timeline.current?.scrollToIndex({ index, viewPosition: 0, viewOffset: anchor.offset, animated: false });
   }, [older]);
 
@@ -2731,7 +2734,8 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
   const sentWaiting = useWaitingSends(machineId, paneId, connected);
   // Animated replies: the composer's sends are timeline rows (not those a restored send hides, nor a
   // queued one, which stays in the footer); the footer keeps the rest
-  const rowSends = useMemo(() => settings.chatMotion ? sentWaiting.filter((send) => send.queued !== true && !(restored !== null && sameMessage(send.text, restored))) : NO_SENDS, [sentWaiting, settings.chatMotion, restored]);
+  const retiredSends = useRef(new Set<number>());
+  const rowSends = useMemo(() => settings.chatMotion ? rowSendsOf(sentWaiting, restored, retiredSends.current, sameMessage) : NO_SENDS, [sentWaiting, settings.chatMotion, restored]);
   const footerSends = useMemo(() => settings.chatMotion ? sentWaiting.filter((send) => send.queued === true) : sentWaiting, [sentWaiting, settings.chatMotion]);
   const rowSlots = slots.current.rows;
   // a live message's turn of its own takes the row the transcript's turn will have once it holds it
@@ -2761,7 +2765,7 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       const slot = rowSlots[row.index] ?? (row.index === rowSlots.length ? liveSlot : undefined);
       if (!slot) throw new Error("A loaded chat turn has no row identity");
       // Animated replies: the turn of a message sent from here keeps the row its send had
-      return { key: adoptedKey(waitKey, shownTurns[row.index]!, adoptedKeys) ?? slot.key, turn: shownTurns[row.index]!, index: row.index, outcome: row.outcome, beforeUser: false };
+      return { key: (settings.chatMotion ? adoptedKey(waitKey, shownTurns[row.index]!, adoptedKeys) : undefined) ?? slot.key, turn: shownTurns[row.index]!, index: row.index, outcome: row.outcome, beforeUser: false };
     });
     // Animated replies: a send whose turn is not read yet is the last row, where the turn will be
     for (const send of rowSends) rows.push({ key: sendRowKey(send), turn: sendTurn(send), index: -1, outcome: owned.get(send.id) ?? null, sendAt: send.at, beforeUser: false });
@@ -2770,7 +2774,8 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
       const next = rows[index + 1];
       return { ...row, beforeUser: row.turn?.role === "assistant" && next !== undefined && (next.turn === null || next.turn.role === "user") };
     });
-  }, [withOutcomes, shownTurns, rowSlots, liveSlot, waitKey, rowSends]);
+  }, [withOutcomes, shownTurns, rowSlots, liveSlot, waitKey, rowSends, settings.chatMotion]);
+  timelineRowsRef.current = timelineRows;
   /**
    * Puts the row at `index` `offset` px below the view's top, the reader reading there. The list's
    * index scroll starts from estimated heights, so the row is brought to its offset once measured,
