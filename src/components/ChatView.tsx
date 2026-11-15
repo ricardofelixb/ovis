@@ -1887,14 +1887,14 @@ export const ChatView = memo(function ChatView({ paneId, presentationKey, finish
     if (seenSent.current === sentKey) return;
     seenSent.current = sentKey;
     setPopFrom(shownCount.current);
-    // sending reads on from the end, as in any chat: the message pops in where the reader is
-    scrollToBottom();
+    // The animated fork keeps its send in view immediately. Upstream follows only an accepted local send.
+    if (settings.chatMotion) scrollToBottom();
     // sent into a run (a queued message sent now): that turn is the one running, not one to finish
     const page = heldPage.current;
     const last = page[page.length - 1];
     setSentOver(last?.role === "assistant" && agentStatus !== "working" && agentStatus !== "blocked" ? { turn: last, page } : null);
     setCancelledAtSend(lastStopped.current);
-  }, [sentKey, agentStatus]);
+  }, [sentKey, agentStatus, settings.chatMotion]);
   // that send was refused before anything was typed: the copy stays the box's, so its record goes
   useEffect(() => {
     if (seenUnsent.current === unsentKey) return;
