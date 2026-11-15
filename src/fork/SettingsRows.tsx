@@ -13,7 +13,7 @@ export function ForkFeatures() {
     ["moreViewToggle", t("View toggle in More")],
     ["agentNamedTabs", t("Agent names on tabs")],
     ["agentFriends", t("Agent friends")],
-    ["codingWorkGroups", t("Coding and Work groups")],
+    ["composerExtras", t("Composer extras")],
     ["compactWorkRuns", t("Compact work runs")],
     ["chatMotion", t("Animated replies")],
     ["piLiveVoice", t("Pi live voice")],

@@ -1,4 +1,5 @@
 @import "./chat.css";
+@import "./composer.css";
 
 /* Semantic discs used by fork-owned components, independent of box corners. */
 :root {

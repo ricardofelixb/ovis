@@ -7,6 +7,8 @@
  * Register and fixed terms follow ../i18n.zh.ts; a key another feature also uses goes there.
  */
 export const COMPOSER_ZH: Record<string, string> = {
+  "Working folder": "工作文件夹",
+  "Worktree": "工作树",
   "Next": "下一个",
   "Next question": "下一个问题",
   "Edit queued message": "编辑排队消息",

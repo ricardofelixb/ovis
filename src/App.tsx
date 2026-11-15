@@ -11,6 +11,7 @@ import { PaneCanvas } from "./components/PaneCanvas.tsx";
 import { MachineSessionsProvider } from "./lib/machineSessionContext.tsx";
 import { PaneTerminal } from "./components/PaneTerminal.tsx";
 import { paneCovered, paneContentKey, paneContentPresented } from "./lib/panePresentation.ts";
+import { worktreeRepoName } from "./lib/composerStrip.ts";
 import { programReadsDrags } from "./lib/programDrags.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
@@ -1463,6 +1464,7 @@ export function App() {
                         readsDrags={item ? programReadsDrags(item) : false}
                         workspaceId={item?.workspace_id ?? null}
                         workspaceLabel={slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item?.workspace_id)?.label ?? null}
+                        worktreeRepo={worktreeRepoName(item === null ? undefined : slotSnapshot?.workspaces.find((workspace) => workspace.workspace_id === item.workspace_id))}
                         machineName={machine?.name ?? machineId}
                         view={item ? lensOf(item) : slotView}
                         // the composer's way to the terminal: the selected pane's lens, or the pane's own remembered one

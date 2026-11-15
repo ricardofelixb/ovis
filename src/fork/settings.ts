@@ -12,7 +12,7 @@ export interface ForkSettings {
   moreViewToggle: boolean;
   agentNamedTabs: boolean;
   agentFriends: boolean;
-  codingWorkGroups: boolean;
+  composerExtras: boolean;
   compactWorkRuns: boolean;
   chatMotion: boolean;
   piLiveVoice: boolean;
@@ -23,10 +23,10 @@ export interface ForkSettings {
 }
 
 export const FORK_DEFAULTS: ForkSettings = {
-  followOmarchy: false, contextCircle: false, openLiveWork: true,
+  followOmarchy: false, contextCircle: true, openLiveWork: true,
   speechVoice: SPEECH_DEFAULT_VOICE, liveVoice: "pi",
   squareCorners: false, moreViewToggle: false, agentNamedTabs: false, agentFriends: false,
-  codingWorkGroups: false, compactWorkRuns: false, chatMotion: false, piLiveVoice: false,
+  composerExtras: false, compactWorkRuns: false, chatMotion: false, piLiveVoice: false,
   computerView: false, pullRequests: false, readAloud: false, headerBranch: false,
 };
 
@@ -53,7 +53,7 @@ export function migrateForkSettings(raw: unknown): unknown {
   if (!["contextCircle", "speechVoice", "liveVoice", "followOmarchy", "enterKey"].some((key) => Object.hasOwn(record, key))) return raw;
   // Once a new setting is explicit it always wins, including false and a reset to upstream defaults.
   return { phoneTabs: "header", contextCircle: true, squareCorners: true, moreViewToggle: true, agentNamedTabs: true,
-    agentFriends: true, codingWorkGroups: true, compactWorkRuns: true, chatMotion: true,
+    agentFriends: true, composerExtras: true, compactWorkRuns: true, chatMotion: true,
     piLiveVoice: true, computerView: true, pullRequests: true, readAloud: true, headerBranch: true, ...record };
 }
 
@@ -72,7 +72,7 @@ export function saveForkSettings(settings: ForkSettings): void {
 
 /** Attributes own all fork CSS; switching a feature off removes its styling immediately. */
 export function applyForkSettings(settings: ForkSettings, root: HTMLElement): void {
-  for (const key of ["squareCorners", "moreViewToggle", "agentFriends", "codingWorkGroups", "compactWorkRuns", "chatMotion"] as const) {
+  for (const key of ["squareCorners", "moreViewToggle", "agentFriends", "composerExtras", "compactWorkRuns", "chatMotion", "readAloud", "piLiveVoice", "headerBranch"] as const) {
     root.dataset[`fork${key.charAt(0).toUpperCase()}${key.slice(1)}`] = String(settings[key]);
   }
 }
