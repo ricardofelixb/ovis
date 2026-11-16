@@ -90,6 +90,22 @@ export function ForkGithubPane({ wide, watching, onOpened }: ViewProps) {
   </div>;
 }
 
+/**
+ * The way in from the workspaces sidebar's foot: Pull requests beside the agent inbox's own row, opening the
+ * agent inbox on it. The inbox row itself always opens the agents.
+ */
+export function ForkGithubFoot({ children }: { children: ReactElement<{ onOpen(): void }> }) {
+  const { settings } = useSettings();
+  const t = useT();
+  if (!settings.pullRequests) return children;
+  const enter = children.props.onOpen;
+  return <div className="fork-github-foot">
+    {cloneElement(children, { onOpen: () => { setGithubSection("inbox"); enter(); } })}
+    <button type="button" className="btn btn-ghost sidebar-footer-action fork-github-foot-open" aria-label={t("Pull requests")} title={t("Pull requests")}
+      onClick={() => { setGithubSection("github"); enter(); }}><GitPullRequest aria-hidden="true" /></button>
+  </div>;
+}
+
 /** The phone's way in: a round button in the agent inbox's top row, beside New workspace. */
 export function ForkGithubOpen() {
   const { settings } = useSettings();

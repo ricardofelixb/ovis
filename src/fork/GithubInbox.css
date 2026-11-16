@@ -45,6 +45,30 @@
   margin-inline: auto var(--space-2);
 }
 
+/* the sidebar foot's inbox row with Pull requests at its end, one row */
+.fork-github-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-bottom: var(--space-1);
+}
+
+.fork-github-foot > .inbox-foot-entry {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.fork-github-foot > .fork-github-foot-open {
+  flex: 0 0 auto;
+  width: var(--side-box);
+  min-height: var(--side-row);
+  padding: 0;
+  justify-content: center;
+}
+
+.fork-github-foot > .fork-github-foot-open svg { margin-inline: 0; }
+
 /* a section's head: its name and count, small and dim, a press folds it */
 .fork-github h3 {
   margin: 0;
