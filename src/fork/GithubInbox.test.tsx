@@ -75,7 +75,7 @@ test("restores and records list scroll after returning from a phone PR", async (
   const hosts: (EventTarget & { scrollTop: number })[] = [];
   await act(async () => { renderer = create(<SettingsProvider><GithubInbox wide={false} watching={false} onOpened={() => {}} /></SettingsProvider>, {
     createNodeMock: (element) => {
-      if (!String(element.props.className ?? "").includes("inbox-scroll")) return null;
+      if (!element.props || typeof element.props !== "object" || !("className" in element.props) || !String(element.props.className).includes("inbox-scroll")) return null;
       const host = Object.assign(new EventTarget(), { scrollTop: 0 }); hosts.push(host); return host;
     },
   }); });
