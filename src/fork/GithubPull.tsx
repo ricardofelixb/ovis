@@ -9,7 +9,7 @@ import type { WorktreeOpened } from "../../shared/protocol.ts";
 import { ApiError, createWorktree, fetchPullRequestBranch, getJson, listWorktrees, openWorktree } from "../lib/api.ts";
 import { useT, type Translate } from "../lib/i18n.ts";
 import { closeGithubPull, refreshGithubListing } from "./GithubInbox.tsx";
-import { GithubMerge, GithubReply } from "./GithubActions.tsx";
+import { GithubClose, GithubMerge, GithubReply } from "./GithubActions.tsx";
 import { ago, GithubConversation, type JumpToLine } from "./GithubConversation.tsx";
 import { GithubCloneDialog } from "./GithubClone.tsx";
 import { GithubFiles, type FilesJump } from "./GithubFiles.tsx";
@@ -163,9 +163,12 @@ export function GithubPullPage({ pull, wide, watching, onOpened }: { pull: Githu
           <span>{t("{author} wants to merge into {base} from {head}", { author: detail.author ?? t("Someone"), base: detail.base, head: detail.head })}</span>
           <span className="fork-github-pull-dim">{t("Updated {when}", { when: ago(detail.updated_at) })}</span>
         </div>
-        {detail.state === "open" && <div className="fork-github-merge-row">
-          <p className={`fork-github-merge is-${detail.merge}`}><MergeIcon merge={detail.merge} />{mergeWords[detail.merge]}</p>
-          <GithubMerge pull={pull} detail={detail} watching={watching} onDone={acted} />
+        {detail.state !== "merged" && <div className="fork-github-merge-row">
+          {detail.state === "open" && <p className={`fork-github-merge is-${detail.merge}`}><MergeIcon merge={detail.merge} />{mergeWords[detail.merge]}</p>}
+          <div className="fork-github-merge-actions">
+            {detail.state === "open" && <GithubMerge pull={pull} detail={detail} watching={watching} onDone={acted} />}
+            <GithubClose pull={pull} detail={detail} watching={watching} onDone={acted} />
+          </div>
         </div>}
         <div className="fork-github-tabs">
           <Segmented<Tab> label={t("Pull request")} value={tab} onChange={setTab} options={[

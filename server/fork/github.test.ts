@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import type { SessionSnapshot } from "../../shared/protocol.ts";
-import { createGithubReader, githubWorkspaces, handleGithubPulls, mergeGithubPulls, parseGithubPulls } from "./github.ts";
+import { createGithubReader, githubActionArgs, githubQuery, githubWorkspaces, handleGithubPulls, mergeGithubPulls, parseGithubPulls } from "./github.ts";
 
 const pr = (number: number, repository = "owner/repo") => ({ number, title: `PR ${number}`, url: `https://github.com/${repository}/pull/${number}`, repository: { nameWithOwner: repository }, headRefName: "feature", updatedAt: `2026-01-${number.toString().padStart(2, "0")}T00:00:00Z`, author: { login: "me" }, reviewDecision: "APPROVED", commits: { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE", contexts: { nodes: [{ status: "COMPLETED", conclusion: "FAILURE" }] } } } }] } });
-const fixture = () => JSON.stringify({ data: { viewer: { login: "me" }, review: { nodes: [pr(1), pr(3)] }, yours: { nodes: [pr(2), pr(3)] } } });
+const fixture = () => JSON.stringify({ data: { viewer: { login: "me" }, review: { nodes: [pr(1), pr(3)] }, yours: { nodes: [pr(2), pr(3)] }, reviewed: { nodes: [] } } });
 
 test("parses both groups, reuses check verdicts, sorts newest first and deduplicates within a group", () => {
   const listing = parseGithubPulls(fixture());
@@ -33,6 +33,43 @@ test("rejects malformed and partial GraphQL responses instead of claiming an emp
   expect(() => parseGithubPulls(JSON.stringify(data))).toThrow();
 });
 
+test("brings back a reviewed PR that got commits after the review, and lists others' PRs of open repositories as Team", () => {
+  const other = (number: number, repository = "owner/repo", login = "ana") => ({ ...pr(number, repository), author: { login } });
+  const reviewed = (number: number, at: string, head: string) => ({ ...other(number), headRefOid: head, viewerLatestReview: { commit: { oid: at } } });
+  const data = JSON.parse(fixture());
+  data.data.reviewed.nodes = [reviewed(5, "aaa", "bbb"), reviewed(6, "ccc", "ccc")];
+  data.data.t0 = { pullRequests: { nodes: [other(7), other(2), pr(8), other(5)] } };
+  data.data.t1 = null;
+  data.errors = [{ path: ["t1"], message: "Could not resolve to a Repository" }];
+  const listing = parseGithubPulls(JSON.stringify(data));
+  expect(listing.review.map((row) => [row.number, row.updated_since_review ?? false])).toEqual([[5, true], [3, false], [1, false]]);
+  // its own PRs and ones listed above stay out of Team
+  expect(listing.team.map((row) => row.number)).toEqual([7]);
+  data.errors = [{ path: ["review"], message: "boom" }];
+  expect(() => parseGithubPulls(JSON.stringify(data))).toThrow();
+});
+
+test("asks for each open repository's PRs by alias, skipping names that are not owner/name", () => {
+  const query = githubQuery(["owner/repo", "bad name", "corp/app"]);
+  expect(query).toContain('t0: repository(owner:"owner",name:"repo")');
+  expect(query).toContain('t1: repository(owner:"corp",name:"app")');
+  expect(query).not.toContain("bad name");
+  expect(query).toContain("reviewed-by:@me");
+});
+
+test("another account's own PR is not Team", () => {
+  const listing = mergeGithubPulls([
+    { accounts: ["me"], review: [], yours: [], team: [{ ...parseGithubPulls(fixture()).yours[0]!, url: "https://github.com/owner/repo/pull/9" }] },
+    { accounts: ["work"], review: [], yours: [{ ...parseGithubPulls(fixture()).yours[0]!, url: "https://github.com/owner/repo/pull/9" }], team: [] },
+  ]);
+  expect(listing.team).toEqual([]);
+});
+
+test("closes and reopens with a PATCH of the state", () => {
+  expect(githubActionArgs("owner/repo", 4, { action: "close" })).toEqual(["api", "--hostname", "github.com", "--silent", "-X", "PATCH", "repos/owner/repo/pulls/4", "-f", "state=closed"]);
+  expect(githubActionArgs("owner/repo", 4, { action: "reopen" })?.at(-1)).toBe("state=open");
+});
+
 const signedIn = (...accounts: string[]) => accounts.map((name) => `  ✓ Logged in to github.com account ${name} (keyring)`).join("\n");
 const ok = (stdout: string) => ({ code: 0, stdout, stderr: "" });
 
@@ -49,7 +86,7 @@ test("coalesces reads, caps searches, and expires the cache within 30 seconds", 
 
 test("reads every signed-in account with its own token and lists what the readable ones see", async () => {
   const tokens: string[] = [];
-  const own = (login: string, number: number, repository: string) => JSON.stringify({ data: { viewer: { login }, review: { nodes: [pr(number, repository)] }, yours: { nodes: [pr(3)] } } });
+  const own = (login: string, number: number, repository: string) => JSON.stringify({ data: { viewer: { login }, review: { nodes: [pr(number, repository)] }, yours: { nodes: [pr(3)] }, reviewed: { nodes: [] } } });
   const read = createGithubReader(async (args, env = {}) => {
     if (args[1] === "status") return { code: 1, stdout: "", stderr: signedIn("me", "work", "gone") };
     if (args[1] === "token") return args[3] === "gone" ? { code: 1, stdout: "", stderr: "no token" } : ok(`t-${args[3]}\n`);
@@ -62,6 +99,12 @@ test("reads every signed-in account with its own token and lists what the readab
   expect(listing.failed).toEqual(["gone"]);
   expect(listing.review.map((row) => row.repository)).toEqual(["corp/app", "owner/repo"]);
   expect(listing.yours.map((row) => row.number)).toEqual([3]);
+});
+
+test("keeps an answer gh exits 1 on because one Team repository could not be read", async () => {
+  const data = JSON.parse(fixture()); data.data.t0 = null; data.errors = [{ path: ["t0"], message: "Could not resolve to a Repository" }];
+  const read = createGithubReader(async (args) => args[1] === "status" ? ok(signedIn("me")) : args[1] === "token" ? ok("t\n") : { code: 1, stdout: JSON.stringify(data), stderr: "gh: Could not resolve to a Repository" });
+  expect((await read(["owner/gone"])).yours.map((row) => row.number)).toEqual([3, 2]);
 });
 
 test("fails as the first account failed when no account can be read", async () => {

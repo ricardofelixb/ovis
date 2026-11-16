@@ -2,14 +2,15 @@ import { useLayoutEffect, useRef } from "react";
 
 import type { GithubPull, GithubPulls } from "../../shared/github.ts";
 
-/** Chips count unique URLs, not memberships: a PR may be in both groups. */
+/** Chips count unique URLs, not memberships: a PR may be in more than one group. */
 export function githubGroups(listing: GithubPulls, selected: string) {
-  const unique = new Map([...listing.review, ...listing.yours].map((pr) => [pr.url, pr]));
+  const team = listing.team ?? [];
+  const unique = new Map([...listing.review, ...listing.yours, ...team].map((pr) => [pr.url, pr]));
   const counts = new Map<string, number>();
   for (const pr of unique.values()) counts.set(pr.repository, (counts.get(pr.repository) ?? 0) + 1);
   if (!counts.has(selected)) selected = "";
   const filter = (rows: GithubPull[]) => rows.filter((pr) => !selected || pr.repository === selected).sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-  return { selected, repos: [...counts].sort(([a], [b]) => a.localeCompare(b)), review: filter(listing.review), yours: filter(listing.yours) };
+  return { selected, repos: [...counts].sort(([a], [b]) => a.localeCompare(b)), review: filter(listing.review), yours: filter(listing.yours), team: filter(team) };
 }
 
 /** Problems first; a passing check alone is not an approval. */

@@ -161,9 +161,10 @@ export function GithubInbox({ wide, watching, onOpened }: ViewProps) {
     });
     return () => { cancelled = true; };
   }, [refresh, version]);
-  const groups = githubGroups(listing ?? { accounts: [], review: [], yours: [] }, repo);
+  const groups = githubGroups(listing ?? { accounts: [], review: [], yours: [], team: [] }, repo);
   const review = githubSearched(groups.review, query);
   const yours = githubSearched(groups.yours, query);
+  const team = githubSearched(groups.team, query);
   const statuses = { "Checks failing": t("Checks failing"), "Changes requested": t("Changes requested"), "Review requested": t("Review requested"), Draft: t("Draft"), "Checks running": t("Checks running"), Approved: t("Approved"), Ready: t("Ready") };
 
   const group = (id: string, label: string, rows: GithubPull[], requested: boolean) => rows.length > 0 && <section className="fork-github-group" aria-label={label}>
@@ -173,12 +174,12 @@ export function GithubInbox({ wide, watching, onOpened }: ViewProps) {
     {!folded.has(id) && <ul className="fork-github-list">{rows.map((pr) => {
       const status = githubStatus(pr, false);
       // in its own section a review asked of you needs no mark saying so
-      const [Mark, tone] = requested && status === "Review requested" ? [null, ""] : statusMarks[status];
+      const [Mark, tone] = requested && status === "Review requested" && !pr.updated_since_review ? [null, ""] : statusMarks[status];
       return <li key={pr.url} className={`fork-github-row${open?.url === pr.url ? " is-current" : ""}`}>
         <button type="button" className="fork-github-summary" aria-current={open?.url === pr.url ? "true" : undefined} title={pr.title} onClick={() => openPull(pr, !wide)}>
           <span className="fork-github-row-title" dir="auto">{pr.title}</span>
           {Mark !== null && <span className={`fork-github-row-mark is-${tone}`} role="img" aria-label={statuses[status]} title={statuses[status]}><Mark aria-hidden="true" /></span>}
-          <span className="fork-github-row-sub"><span title={pr.repository}>{pr.repository.split("/").pop()} #{pr.number}</span>{pr.author && <> · {pr.author}</>} · {ago(pr.updated_at)}</span>
+          <span className="fork-github-row-sub"><span title={pr.repository}>{pr.repository.split("/").pop()} #{pr.number}</span>{pr.author && <> · {pr.author}</>} · {ago(pr.updated_at)}{pr.updated_since_review && <> · <span className="fork-github-row-updated" title={t("New commits since your review")}>{t("New commits")}</span></>}</span>
         </button>
       </li>;
     })}</ul>}
@@ -204,7 +205,7 @@ export function GithubInbox({ wide, watching, onOpened }: ViewProps) {
   const filterButton = groups.repos.length > 1 && <button type="button" className={`icon-button inbox-round inbox-filter-toggle${groups.selected === "" ? "" : " is-on"}`} aria-label={t("Repositories")} title={groups.selected || t("Repositories")}
     aria-haspopup="menu" aria-expanded={repoMenu !== null} onClick={(event) => setRepoMenu(repoMenu === null ? event.currentTarget : null)}><ListFilter aria-hidden="true" /></button>;
   const refreshButton = <button type="button" className="icon-button inbox-round fork-github-refresh" aria-label={t("Refresh")} title={t("Refresh")} disabled={loading} onClick={() => setRefresh((value) => value + 1)}><RefreshCw className={loading && listing !== null ? "fork-github-spin" : undefined} aria-hidden="true" /></button>;
-  const shown = review.length + yours.length;
+  const shown = review.length + yours.length + team.length;
   return <section className={`mode-inbox fork-github${wide ? " is-wide" : ""}`} aria-label={t("Pull requests")}>
     <header className={`inbox-top${wide && searchOpen ? " is-search-open" : ""}`}>
       {wide ? <>
@@ -224,7 +225,7 @@ export function GithubInbox({ wide, watching, onOpened }: ViewProps) {
       {error === null && (listing?.failed?.length ?? 0) > 0 && <p className="fork-github-note" role="status">{t("Could not read {accounts}", { accounts: listing!.failed!.join(", ") })}</p>}
       {error !== null && listing !== null && <p className="fork-github-note" role="alert">{errors[error] ?? errors.gh_failed}</p>}
       {listing === null ? loading || error === null ? <p className="inbox-empty" role="status">{t("Reading pull requests…")}</p> : <p className="inbox-empty" role="alert">{errors[error] ?? errors.gh_failed}</p>
-        : shown > 0 ? <>{group("review", t("Review requested"), review, true)}{group("yours", t("Yours"), yours, false)}</>
+        : shown > 0 ? <>{group("review", t("Review requested"), review, true)}{group("yours", t("Yours"), yours, false)}{group("team", t("Team"), team, false)}</>
         : <p className="inbox-empty" role="status">{query.trim() !== "" ? t("No pull requests match") : t("Nothing needs you")}</p>}
     </div>
     {!wide && <div className="inbox-foot">

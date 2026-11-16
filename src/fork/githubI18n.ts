@@ -65,6 +65,13 @@ const STRINGS: Record<string, [ko: string, ja: string, zh: string]> = {
   "{count} skipped": ["{count}개 건너뜀", "{count} 件スキップ", "{count} 个已跳过"],
   "{count} threads": ["스레드 {count}개", "{count} 件のスレッド", "{count} 个讨论"],
   "{repo} is already here; it opens as it is.": ["{repo}이(가) 이미 여기 있습니다. 그대로 엽니다.", "{repo} はすでにここにあります。そのまま開きます。", "{repo} 已在此处，将按原样打开。"],
+  "Team": ["팀", "チーム", "团队"],
+  "New commits": ["새 커밋", "新しいコミット", "新提交"],
+  "New commits since your review": ["리뷰 후 새 커밋이 있습니다", "レビュー後に新しいコミットがあります", "你审查后有新提交"],
+  "Confirm: close": ["확인: 닫기", "確認: クローズ", "确认：关闭"],
+  "Closing…": ["닫는 중…", "クローズしています…", "正在关闭…"],
+  "Reopen": ["다시 열기", "再オープン", "重新打开"],
+  "Reopening…": ["다시 여는 중…", "再オープンしています…", "正在重新打开…"],
 };
 
 const pick = (index: 0 | 1 | 2): Record<string, string> => Object.fromEntries(Object.entries(STRINGS).map(([key, values]) => [key, values[index]]));
