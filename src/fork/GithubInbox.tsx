@@ -157,7 +157,7 @@ export function GithubInbox({ wide, watching, onOpened }: ViewProps) {
     try { window.localStorage.setItem(FOLDED_KEY, JSON.stringify([...next])); } catch { /* storage may be disabled */ }
     return next;
   });
-  const scroll = useKeptScroll<HTMLDivElement>("pull-requests", listing !== null);
+  const scroll = useKeptScroll<HTMLDivElement>("pull-requests", listing !== null && (wide || open === null));
   const errors: Record<string, string> = {
     gh_missing: t("Install gh on this PC"), gh_signed_out: t("Sign in on this PC with gh auth login"),
     rate_limited: t("GitHub is limiting requests; try again later"), gh_failed: t("Could not read GitHub pull requests"),

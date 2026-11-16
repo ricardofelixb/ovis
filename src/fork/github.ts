@@ -65,7 +65,8 @@ export function useKeptScroll<T extends HTMLElement>(key: string, ready: boolean
       if (Math.abs(host.scrollTop - target) < 1 || performance.now() - started > 2000) holding = false;
       else frame = requestAnimationFrame(hold);
     };
-    hold();
+    if (target === 0) host.scrollTop = 0;
+    else hold();
     const release = (): void => { holding = false; };
     const keep = (): void => { if (!holding) scrolls.set(key, host.scrollTop); };
     const kinds = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
