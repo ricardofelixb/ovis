@@ -97,11 +97,12 @@ test("file patches cache separately for each head and reject a missing head", as
   const read = createGithubFilesReader(async (args) => {
     if (args[1] === "token") return ok("token");
     calls++;
-    return ok(JSON.stringify([[{ filename: "a.txt", patch: `@@ -1 +1 @@\n-old\n+version${calls}` }]]));
+    expect(args.join(" ")).toContain(`repos/owner/repo/compare/feature%2Fbase...${(calls === 1 ? "a" : "b").repeat(40)}`);
+    return ok(JSON.stringify([{ files: [{ filename: "a.txt", patch: `@@ -1 +1 @@\n-old\n+version${calls}` }] }, { commits: [] }]));
   }, () => 0);
-  expect((await read("owner/repo", 1, "me", "a".repeat(40)))[0]?.patch).toContain("version1");
-  expect((await read("owner/repo", 1, "me", "a".repeat(40)))[0]?.patch).toContain("version1");
-  expect((await read("owner/repo", 1, "me", "b".repeat(40)))[0]?.patch).toContain("version2");
+  expect((await read("owner/repo", 1, "me", "a".repeat(40), "feature/base"))[0]?.patch).toContain("version1");
+  expect((await read("owner/repo", 1, "me", "a".repeat(40), "feature/base"))[0]?.patch).toContain("version1");
+  expect((await read("owner/repo", 1, "me", "b".repeat(40), "feature/base"))[0]?.patch).toContain("version2");
   expect(calls).toBe(2);
   const request = new Request("http://localhost/api/fork/github/pull/files?repo=owner/repo&number=1&account=me");
   expect((await handleGithubFiles(request, false)).status).toBe(400);
@@ -150,11 +151,18 @@ test("retries a failed Team search per repository without losing readable peers"
     if (args[1] === "token") return ok("token");
     const query = args.join(" "); calls.push(query);
     if (calls.length === 1) return { code: 1, stdout: JSON.stringify(initial), stderr: "" };
-    if (query.includes("repo:owner/private")) return { code: 1, stdout: JSON.stringify({ data: { t0: null }, errors: [{ path: ["t0"], message: "not accessible" }] }), stderr: "" };
+    if (query.includes("repo:owner/private")) return { code: 1, stdout: JSON.stringify({ data: { t0: null }, errors: [{ path: ["t0"], type: "FORBIDDEN", message: "not accessible" }] }), stderr: "" };
     return ok(JSON.stringify({ data: { t0: { nodes: [{ ...pr(21, "owner/public"), author: { login: "teammate" } }] } } }));
   });
   expect((await read(["owner/private", "owner/public"])).team.map((row) => row.number)).toEqual([21]);
   expect(calls).toHaveLength(3);
+});
+
+test("does not hide untyped Team search failures", async () => {
+  const initial = JSON.parse(fixture());
+  initial.data.t0 = null; initial.errors = [{ path: ["t0"], message: "Something went wrong while executing your query" }];
+  const read = createGithubReader(async (args) => args[1] === "status" ? ok(signedIn("me")) : args[1] === "token" ? ok("token") : { code: 1, stdout: JSON.stringify(initial), stderr: "" });
+  await expect(read(["owner/repo"])).rejects.toMatchObject({ code: "gh_unreadable" });
 });
 
 test("reads every signed-in account with its own token and lists what the readable ones see", async () => {
@@ -175,7 +183,7 @@ test("reads every signed-in account with its own token and lists what the readab
 });
 
 test("keeps an answer gh exits 1 on because one Team repository could not be read", async () => {
-  const data = JSON.parse(fixture()); data.data.t0 = null; data.errors = [{ path: ["t0"], message: "Could not resolve to a Repository" }];
+  const data = JSON.parse(fixture()); data.data.t0 = null; data.errors = [{ path: ["t0"], type: "NOT_FOUND", message: "Could not resolve to a Repository" }];
   const read = createGithubReader(async (args) => args[1] === "status" ? ok(signedIn("me")) : args[1] === "token" ? ok("t\n") : { code: 1, stdout: JSON.stringify(data), stderr: "gh: Could not resolve to a Repository" });
   expect((await read(["owner/gone"])).yours.map((row) => row.number)).toEqual([3, 2]);
 });
