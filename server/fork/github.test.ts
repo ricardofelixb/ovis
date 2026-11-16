@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SessionSnapshot } from "../../shared/protocol.ts";
-import { createGithubReader, githubActionArgs, githubQuery, githubWorkspaces, handleGithubPulls, mergeGithubPulls, parseGithubPulls } from "./github.ts";
+import { createGithubFilesReader, createGithubReader, githubActionArgs, githubQuery, githubWorkspaces, handleGithubFiles, handleGithubPulls, mergeGithubPulls, parseGithubPulls } from "./github.ts";
 
 const pr = (number: number, repository = "owner/repo") => ({ number, title: `PR ${number}`, url: `https://github.com/${repository}/pull/${number}`, repository: { nameWithOwner: repository }, headRefName: "feature", updatedAt: `2026-01-${number.toString().padStart(2, "0")}T00:00:00Z`, author: { login: "me" }, reviewDecision: "APPROVED", commits: { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE", contexts: { nodes: [{ status: "COMPLETED", conclusion: "FAILURE" }] } } } }] } });
 const fixture = () => JSON.stringify({ data: { viewer: { login: "me" }, review: { nodes: [pr(1), pr(3)] }, yours: { nodes: [pr(2), pr(3)] }, reviewed: { nodes: [] } } });
@@ -90,6 +90,21 @@ test("another account's own PR is not Team", () => {
     { accounts: ["work"], review: [], yours: [{ ...parseGithubPulls(fixture()).yours[0]!, url: "https://github.com/owner/repo/pull/9" }], team: [] },
   ]);
   expect(listing.team).toEqual([]);
+});
+
+test("file patches cache separately for each head and reject a missing head", async () => {
+  let calls = 0;
+  const read = createGithubFilesReader(async (args) => {
+    if (args[1] === "token") return ok("token");
+    calls++;
+    return ok(JSON.stringify([[{ filename: "a.txt", patch: `@@ -1 +1 @@\n-old\n+version${calls}` }]]));
+  }, () => 0);
+  expect((await read("owner/repo", 1, "me", "a".repeat(40)))[0]?.patch).toContain("version1");
+  expect((await read("owner/repo", 1, "me", "a".repeat(40)))[0]?.patch).toContain("version1");
+  expect((await read("owner/repo", 1, "me", "b".repeat(40)))[0]?.patch).toContain("version2");
+  expect(calls).toBe(2);
+  const request = new Request("http://localhost/api/fork/github/pull/files?repo=owner/repo&number=1&account=me");
+  expect((await handleGithubFiles(request, false)).status).toBe(400);
 });
 
 test("closes and reopens with a PATCH of the state", () => {

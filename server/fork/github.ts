@@ -416,7 +416,7 @@ export function parseGithubFiles(output: string): GithubFilePatch[] {
 /** A pull request's changed files with their patches, the first 300 GitHub lists. */
 export function createGithubFilesReader(run: Run = runGithub, now = Date.now) {
   const cache = cached<GithubFilePatch[]>(now);
-  return (repository: string, number: number, account: string): Promise<GithubFilePatch[]> => cache(`${account}\n${repository}#${number}`, async () => {
+  return (repository: string, number: number, account: string, head: string): Promise<GithubFilePatch[]> => cache(`${account}\n${repository}#${number}@${head}`, async () => {
     const output = await ghAs(run, account, ["api", "--hostname", "github.com", "--paginate", "--slurp", `repos/${repository}/pulls/${number}/files?per_page=100`], "Could not read this pull request's files");
     try { return parseGithubFiles(output); } catch { throw unreadable(); }
   });
@@ -453,7 +453,9 @@ export async function handleGithubFiles(request: Request, readOnly: boolean): Pr
   const asked = pullAsked(request, readOnly);
   if (asked instanceof Response) return asked;
   try {
-    return jsonResponse({ files: await readFiles(asked.repository, asked.number, asked.account) });
+    const head = new URL(request.url).searchParams.get("head") ?? "";
+    if (!/^[a-f0-9]{40,64}$/i.test(head)) return jsonResponse({ error: { code: "bad_request", message: "Name the head commit" } }, 400);
+    return jsonResponse({ files: await readFiles(asked.repository, asked.number, asked.account, head) });
   } catch (error) {
     return conflictResponse(error instanceof PullRequestError ? error.code : "gh_failed", error instanceof PullRequestError ? error.message : "Could not read this pull request's files");
   }
