@@ -12,14 +12,15 @@ let calls = 0;
 let payload: unknown;
 let responseCode = 200;
 beforeEach(() => {
-  for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT", "fetch"]) saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+  for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT", "fetch", "cancelAnimationFrame"]) saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
   Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
+  Object.defineProperty(globalThis, "cancelAnimationFrame", { configurable: true, value: () => {} });
   Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["en"] } });
   Object.defineProperty(globalThis, "document", { configurable: true, value: { documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } }, querySelector: () => null } });
   Object.defineProperty(globalThis, "getComputedStyle", { configurable: true, value: () => ({ getPropertyValue: () => "" }) });
   const events = new EventTarget(); records.clear(); calls = 0; responseCode = 200;
   payload = { accounts: ["me"], review: [{ repository: "owner/repo", number: 1, title: "Fix this", url: "https://github.com/owner/repo/pull/1", branch: "topic", checks: "failing", review: "review_required", workspace_id: "w1" }], yours: [] };
-  Object.defineProperty(globalThis, "window", { configurable: true, value: { addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), localStorage: { getItem: (key: string) => records.get(key) ?? null, setItem: (key: string, value: string) => records.set(key, value) } } });
+  Object.defineProperty(globalThis, "window", { configurable: true, value: { history: { state: null, pushState() {} }, addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), localStorage: { getItem: (key: string) => records.get(key) ?? null, setItem: (key: string, value: string) => records.set(key, value) } } });
   Object.defineProperty(globalThis, "fetch", { configurable: true, value: async (url: string) => {
     if (url.startsWith(DETAIL)) return detailUnread();
     calls++; expect(url).toBe("/api/fork/github/pulls"); return Response.json(payload, { status: responseCode });
@@ -69,6 +70,24 @@ async function openPull(onOpened = (_opened: unknown) => {}, watching = false) {
   await act(async () => button("Fix this").props.onClick());
 }
 async function closeAll() { await act(async () => { renderer?.unmount(); closeGithubPull(); }); renderer = undefined; }
+
+test("restores and records list scroll after returning from a phone PR", async () => {
+  const hosts: (EventTarget & { scrollTop: number })[] = [];
+  await act(async () => { renderer = create(<SettingsProvider><GithubInbox wide={false} watching={false} onOpened={() => {}} /></SettingsProvider>, {
+    createNodeMock: (element) => {
+      if (!String(element.props.className ?? "").includes("inbox-scroll")) return null;
+      const host = Object.assign(new EventTarget(), { scrollTop: 0 }); hosts.push(host); return host;
+    },
+  }); });
+  hosts[0]!.scrollTop = 250; hosts[0]!.dispatchEvent(new Event("scroll"));
+  await act(async () => button("Fix this").props.onClick());
+  await act(async () => button("Back").props.onClick());
+  expect(hosts[1]!.scrollTop).toBe(250);
+  hosts[1]!.scrollTop = 320; hosts[1]!.dispatchEvent(new Event("scroll"));
+  await act(async () => button("Fix this").props.onClick());
+  await act(async () => button("Back").props.onClick());
+  expect(hosts[2]!.scrollTop).toBe(320);
+});
 
 test("opens an existing same-repository worktree without fetching or creating a branch", async () => {
   const opened = { workspace_id: "fork", pane_id: "p1", path: "/pr", branch: "topic", already_open: true };
