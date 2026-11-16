@@ -38,7 +38,7 @@ test("brings back a reviewed PR that got commits after the review, and lists oth
   const reviewed = (number: number, at: string, head: string) => ({ ...other(number), headRefOid: head, viewerLatestReview: { commit: { oid: at } } });
   const data = JSON.parse(fixture());
   data.data.reviewed.nodes = [reviewed(5, "aaa", "bbb"), reviewed(6, "ccc", "ccc")];
-  data.data.t0 = { pullRequests: { nodes: [other(7), other(2), pr(8), other(5)] } };
+  data.data.t0 = { nodes: [other(7), other(2), pr(8), other(5)] };
   data.data.t1 = null;
   data.errors = [{ path: ["t1"], message: "Could not resolve to a Repository" }];
   const listing = parseGithubPulls(JSON.stringify(data));
@@ -52,11 +52,11 @@ test("brings back a reviewed PR that got commits after the review, and lists oth
 test("includes every repository's team PRs before excluding listed and authored rows", () => {
   const data = JSON.parse(fixture());
   for (let repo = 0; repo < 3; repo++) {
-    data.data[`t${repo}`] = { pullRequests: { nodes: Array.from({ length: 20 }, (_, i) => ({
+    data.data[`t${repo}`] = { nodes: Array.from({ length: 20 }, (_, i) => ({
       ...pr(i + 1, `owner/repo${repo}`), author: { login: "other" }, updatedAt: `2026-02-${String(i + 1).padStart(2, "0")}T00:00:00Z`,
-    })) } };
+    })) };
   }
-  data.data.t0.pullRequests.nodes[0].author.login = "me";
+  data.data.t0.nodes[0].author.login = "me";
   const result = parseGithubPulls(JSON.stringify(data));
   expect(result.team).toHaveLength(59);
   expect(result.team.filter((row) => row.repository === "owner/repo2")).toHaveLength(20);
@@ -65,10 +65,23 @@ test("includes every repository's team PRs before excluding listed and authored 
 
 test("asks for each open repository's PRs by alias, skipping names that are not owner/name", () => {
   const query = githubQuery(["owner/repo", "bad name", "corp/app"]);
-  expect(query).toContain('t0: repository(owner:"owner",name:"repo")');
-  expect(query).toContain('t1: repository(owner:"corp",name:"app")');
+  expect(query).toContain("repo:owner/repo");
+  expect(query).toContain("repo:corp/app");
+  expect(query).toContain("-author:@me");
   expect(query).not.toContain("bad name");
   expect(query).toContain("reviewed-by:@me");
+});
+
+test("searches every workspace repository in bounded queries without filtering out older teammate PRs", () => {
+  const repos = Array.from({ length: 41 }, (_, i) => `owner/repository${i}`);
+  const query = githubQuery(repos);
+  for (const repo of repos) expect(query).toContain(`repo:${repo}`);
+  const searches = [...query.matchAll(/t\d+: search\(query:("(?:[^"\\]|\\.)*"),type:ISSUE,first:100/g)].map((match) => JSON.parse(match[1]!));
+  expect(searches.length).toBeGreaterThan(1);
+  expect(searches.every((search: string) => search.length <= 256 && search.includes("-author:@me"))).toBe(true);
+  const data = JSON.parse(fixture());
+  data.data.t0 = { nodes: [{ ...pr(21, repos[40]), author: { login: "teammate" } }] };
+  expect(parseGithubPulls(JSON.stringify(data)).team[0]?.repository).toBe(repos[40]);
 });
 
 test("another account's own PR is not Team", () => {
@@ -96,6 +109,21 @@ test("coalesces reads, caps searches, and expires the cache within 30 seconds", 
   }, () => now);
   await Promise.all([read(), read()]); await read(); expect(calls).toBe(1);
   now = 30_001; await read(); expect(calls).toBe(2);
+});
+
+test("reads later reviewed-search pages before comparing review commits and caches the result", async () => {
+  let queries = 0;
+  const initial = JSON.parse(fixture());
+  initial.data.reviewed = { nodes: Array.from({ length: 100 }, (_, i) => ({ ...pr(i + 10), headRefOid: "same", viewerLatestReview: { commit: { oid: "same" } } })), pageInfo: { hasNextPage: true, endCursor: "next-page" } };
+  const later = { data: { reviewed: { nodes: [{ ...pr(200), headRefOid: "new", viewerLatestReview: { commit: { oid: "old" } } }], pageInfo: { hasNextPage: false, endCursor: null } } } };
+  const read = createGithubReader(async (args) => {
+    if (args[1] === "status") return ok(signedIn("me"));
+    if (args[1] === "token") return ok("token");
+    queries++;
+    return ok(JSON.stringify(queries === 1 ? initial : later));
+  });
+  expect((await read()).review.some((row) => row.number === 200 && row.updated_since_review)).toBe(true);
+  await read(); expect(queries).toBe(2);
 });
 
 test("reads every signed-in account with its own token and lists what the readable ones see", async () => {
