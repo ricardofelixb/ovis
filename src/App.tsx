@@ -16,6 +16,7 @@ import { programReadsDrags } from "./lib/programDrags.ts";
 import { PANE_TABPANEL_ID, paneTabPanelLabel } from "./lib/paneRegion.ts";
 import { AccessGate } from "./components/AccessGate.tsx";
 import { useForkApp } from "./fork/useForkApp.tsx";
+import { useInboxEdgeBack } from "./fork/inboxEdgeBack.ts";
 import { NewSessionDialog } from "./components/NewSessionDialog.tsx";
 import { SetupGuide, SetupGuideResume } from "./components/SetupGuide.tsx";
 import { useOtherDevice, useSetupGuide } from "./lib/useSetupGuide.ts";
@@ -931,6 +932,8 @@ export function App() {
   // in a thread opened from the list, the header's first button goes back to it; beside the list (from 769px) a
   // thread has nothing to go back to
   const inboxBack = inbox.enabled && !inbox.shown && !drawerOpen && !guideShown && !inboxWide;
+  // a swipe in from the left edge does what that Back does (fork/inboxEdgeBack.ts)
+  useInboxEdgeBack(inboxBack, inbox.back);
   const moreItems: RowMenuItem[] = [
     ...(waitingInMore && nextWaiting !== null ? [{ id: "next-waiting", label: t("Open the next session waiting for you"), hint: String(moreWaiting), icon: CircleHelp, run: openNextWaiting }] : []),
     // first at every width: a phone's header has no palette button, and a touch screen no shortcut
