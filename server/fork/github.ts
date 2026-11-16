@@ -10,24 +10,33 @@ const FIELDS = `number title url headRefName isDraft isCrossRepository updatedAt
   repository { nameWithOwner } reviewDecision
   commits(last:1) { nodes { commit { statusCheckRollup { state } } } }`;
 const REVIEWED = `headRefOid viewerLatestReview { commit { oid } }`;
-/** Repositories open as workspaces whose open pull requests the Team section lists, at most this many. */
-const TEAM_REPOS = 40;
 const REPOSITORY = /^[\w.-]+\/[\w.-]+$/;
+const TEAM_PREFIX = "is:pr is:open -author:@me sort:updated-desc";
+const REVIEW_SEARCH = "is:pr is:open reviewed-by:@me -author:@me -review-requested:@me sort:updated-desc";
+
+/** GitHub bounds search query length; keep each alias below that bound. */
+function teamBatches(repositories: readonly string[]): string[][] {
+  const batches: string[][] = [];
+  for (const repository of new Set(repositories.filter((value) => REPOSITORY.test(value)))) {
+    let batch = batches.at(-1);
+    if (!batch || `${TEAM_PREFIX} ${[...batch, repository].map((value) => `repo:${value}`).join(" ")}`.length > 256) { batch = []; batches.push(batch); }
+    batch.push(repository);
+  }
+  return batches;
+}
+const teamSearch = (repositories: readonly string[]) => `${TEAM_PREFIX} ${repositories.map((repository) => `repo:${repository}`).join(" ")}`;
 /**
  * One account's read: what asks for its review, what it wrote, what it reviewed (kept when commits came
  * after its review), and the open pull requests of the repositories open as workspaces (`t0`, `t1`…),
- * which an account that cannot see one answers with an error for that alias alone.
+ * split into bounded search aliases so an inaccessible repository does not hide readable ones.
  */
 export function githubQuery(repositories: readonly string[]): string {
-  const team = repositories.filter((repository) => REPOSITORY.test(repository)).slice(0, TEAM_REPOS).map((repository, index) => {
-    const [owner, name] = repository.split("/");
-    return `  t${index}: repository(owner:${JSON.stringify(owner)},name:${JSON.stringify(name)}) { pullRequests(states:OPEN,first:20,orderBy:{field:UPDATED_AT,direction:DESC}) { nodes { ${FIELDS} } } }`;
-  });
+  const team = teamBatches(repositories).map((batch, index) => `  t${index}: search(query:${JSON.stringify(teamSearch(batch))},type:ISSUE,first:100) { nodes { ... on PullRequest { ${FIELDS} } } }`);
   return `query {
   viewer { login }
   review: search(query:"is:pr is:open review-requested:@me sort:updated-desc",type:ISSUE,first:50) { nodes { ... on PullRequest { ${FIELDS} } } }
   yours: search(query:"is:pr is:open author:@me sort:updated-desc",type:ISSUE,first:50) { nodes { ... on PullRequest { ${FIELDS} } } }
-  reviewed: search(query:"is:pr is:open reviewed-by:@me -author:@me -review-requested:@me sort:updated-desc",type:ISSUE,first:30) { nodes { ... on PullRequest { ${FIELDS} ${REVIEWED} } } }
+  reviewed: search(query:${JSON.stringify(REVIEW_SEARCH)},type:ISSUE,first:100) { pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { ${FIELDS} ${REVIEWED} } } }
 ${team.join("\n")}
 }`;
 }
@@ -65,7 +74,7 @@ export function parseGithubPulls(output: string): GithubPulls {
       return typeof reviewed === "string" && typeof value.headRefOid === "string" && reviewed !== value.headRefOid;
     }, { updated_since_review: true });
     const listed = new Set([...review, ...yours, ...changed].map((pull) => pull.url));
-    const team = group(Object.keys(data).filter((key) => /^t\d+$/.test(key)).flatMap((key) => data[key]?.pullRequests?.nodes ?? []),
+    const team = group(Object.keys(data).filter((key) => /^t\d+$/.test(key)).flatMap((key) => data[key]?.nodes ?? []),
       (value) => (value.author as { login?: unknown } | null)?.login !== viewer).filter((pull) => !listed.has(pull.url));
     return { accounts: [viewer], review: [...review, ...changed].sort((a, b) => b.updated_at.localeCompare(a.updated_at)), yours, team };
   } catch { throw unreadable(); }
@@ -95,13 +104,50 @@ async function readAccount(run: Run, account: string, repositories: readonly str
   if (!result) throw new PullRequestError("gh_missing", "The GitHub CLI (gh) is not installed on this PC");
   if (result.code !== 0) {
     // gh exits 1 when any part of the answer failed: a Team repository this account cannot see fails alone
-    try { return parseGithubPulls(result.stdout); } catch { /* a real failure, told apart below */ }
-    const detail = `${result.stderr}\n${result.stdout}`;
-    if (/rate limit|HTTP 429/i.test(detail)) throw new PullRequestError("rate_limited", "GitHub is limiting requests; try again in a few minutes");
-    if (/gh auth login|not logged|authentication|HTTP 401|bad credentials/i.test(detail)) throw new PullRequestError("gh_signed_out", "Sign in on this PC with gh auth login");
-    throw new PullRequestError("gh_failed", "Could not read GitHub pull requests");
+    try { parseGithubPulls(result.stdout); } catch {
+      const detail = `${result.stderr}\n${result.stdout}`;
+      if (/rate limit|HTTP 429/i.test(detail)) throw new PullRequestError("rate_limited", "GitHub is limiting requests; try again in a few minutes");
+      if (/gh auth login|not logged|authentication|HTTP 401|bad credentials/i.test(detail)) throw new PullRequestError("gh_signed_out", "Sign in on this PC with gh auth login");
+      throw new PullRequestError("gh_failed", "Could not read GitHub pull requests");
+    }
   }
-  return parseGithubPulls(result.stdout);
+  let envelope;
+  try { envelope = JSON.parse(result.stdout); } catch { throw unreadable(); }
+  // Validate the primary fields and reject unrelated GraphQL errors before making any retries.
+  parseGithubPulls(result.stdout);
+  // If a whole alias fails, retry its repositories separately so one inaccessible
+  // repository cannot hide its peers.
+  const batches = teamBatches(repositories);
+  for (const error of envelope.errors ?? []) {
+    const alias = error?.path?.[0];
+    const index = typeof alias === "string" && /^t\d+$/.test(alias) ? Number(alias.slice(1)) : -1;
+    if (index < 0 || !batches[index]) continue;
+    const nodes: unknown[] = [];
+    for (const repo of batches[index]!) {
+      const query = `query { t0: search(query:${JSON.stringify(teamSearch([repo]))},type:ISSUE,first:100) { nodes { ... on PullRequest { ${FIELDS} } } } }`;
+      const single = await run(["api", "graphql", "--hostname", "github.com", "-f", `query=${query}`], { GH_TOKEN: token.stdout.trim() });
+      if (!single) throw new PullRequestError("gh_missing", "The GitHub CLI (gh) is not installed on this PC");
+      let answer;
+      try { answer = JSON.parse(single.stdout); } catch { throw unreadable(); }
+      if (Array.isArray(answer.data?.t0?.nodes)) nodes.push(...answer.data.t0.nodes);
+      else if (!answer.errors?.length || !answer.errors.every((item: { path?: unknown[]; type?: string }) => item.path?.[0] === "t0" && (item.type === "NOT_FOUND" || item.type === "FORBIDDEN" || item.type === undefined))) throw unreadable();
+    }
+    envelope.data[alias] = { nodes };
+  }
+  const reviewed = envelope.data?.reviewed;
+  for (let page = 1; page < 3 && reviewed?.pageInfo?.hasNextPage; page++) {
+    const cursor = reviewed.pageInfo.endCursor;
+    if (typeof cursor !== "string" || !cursor) throw unreadable();
+    const query = `query { reviewed: search(query:${JSON.stringify(REVIEW_SEARCH)},type:ISSUE,first:100,after:${JSON.stringify(cursor)}) { pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { ${FIELDS} ${REVIEWED} } } } }`;
+    const next = await run(["api", "graphql", "--hostname", "github.com", "-f", `query=${query}`], { GH_TOKEN: token.stdout.trim() });
+    if (!next || next.code !== 0) throw new PullRequestError("gh_failed", "Could not read GitHub pull requests");
+    let answer;
+    try { answer = JSON.parse(next.stdout); } catch { throw unreadable(); }
+    if (answer.errors?.length || !Array.isArray(answer.data?.reviewed?.nodes) || typeof answer.data.reviewed.pageInfo?.hasNextPage !== "boolean") throw unreadable();
+    reviewed.nodes.push(...answer.data.reviewed.nodes);
+    reviewed.pageInfo = answer.data.reviewed.pageInfo;
+  }
+  return parseGithubPulls(JSON.stringify(envelope));
 }
 
 /** One in-flight read and a 20-second cache; no timers or background refreshes. I/O is injectable. Every account gh

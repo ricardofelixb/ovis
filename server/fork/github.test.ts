@@ -126,6 +126,22 @@ test("reads later reviewed-search pages before comparing review commits and cach
   await read(); expect(queries).toBe(2);
 });
 
+test("retries a failed Team search per repository without losing readable peers", async () => {
+  const initial = JSON.parse(fixture());
+  initial.data.t0 = null; initial.errors = [{ path: ["t0"], message: "Could not resolve repository" }];
+  const calls: string[] = [];
+  const read = createGithubReader(async (args) => {
+    if (args[1] === "status") return ok(signedIn("me"));
+    if (args[1] === "token") return ok("token");
+    const query = args.join(" "); calls.push(query);
+    if (calls.length === 1) return { code: 1, stdout: JSON.stringify(initial), stderr: "" };
+    if (query.includes("repo:owner/private")) return { code: 1, stdout: JSON.stringify({ data: { t0: null }, errors: [{ path: ["t0"], message: "not accessible" }] }), stderr: "" };
+    return ok(JSON.stringify({ data: { t0: { nodes: [{ ...pr(21, "owner/public"), author: { login: "teammate" } }] } } }));
+  });
+  expect((await read(["owner/private", "owner/public"])).team.map((row) => row.number)).toEqual([21]);
+  expect(calls).toHaveLength(3);
+});
+
 test("reads every signed-in account with its own token and lists what the readable ones see", async () => {
   const tokens: string[] = [];
   const own = (login: string, number: number, repository: string) => JSON.stringify({ data: { viewer: { login }, review: { nodes: [pr(number, repository)] }, yours: { nodes: [pr(3)] }, reviewed: { nodes: [] } } });
