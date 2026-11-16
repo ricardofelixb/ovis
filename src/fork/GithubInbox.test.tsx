@@ -89,6 +89,28 @@ test("restores and records list scroll after returning from a phone PR", async (
   expect(hosts[2]!.scrollTop).toBe(320);
 });
 
+test("reloads open file patches when a cached PR receives a new head", async () => {
+  (payload as { review: { url: string }[] }).review[0]!.url = "https://github.com/owner/repo/pull/9876";
+  let detailReads = 0, patchReads = 0;
+  let resolveDetail: (response: Response) => void = () => {};
+  const detail = { repository: "owner/repo", number: 1, url: "https://github.com/owner/repo/pull/9876", title: "Fix this", body: "", state: "open", draft: false, author: "me", created_at: "2026-01-01", updated_at: "2026-01-01", head: "topic", base: "main", fork: false, additions: 1, deletions: 0, changed_files: 1, commits: 1, checks: { passing: 0, failing: 0, pending: 0, skipped: 0 }, check_list: [], merge: "clean", review: "none", reviewers: [], labels: [], head_sha: "old", viewer: "me", can_write: false, merge_methods: [], conversation: [], files: [{ path: "a.txt", additions: 1, deletions: 0, change: "modified" }] };
+  Object.defineProperty(globalThis, "fetch", { configurable: true, value: async (url: string) => {
+    if (url.startsWith("/api/fork/github/pull/files?")) { patchReads++; return Response.json({ files: [{ path: "a.txt", patch: null }] }); }
+    if (url.startsWith(DETAIL)) { detailReads++; return detailReads === 1 ? Response.json(detail) : new Promise<Response>((resolve) => { resolveDetail = resolve; }); }
+    return Response.json(payload);
+  } });
+  await openPull();
+  await act(async () => button("Files 1").props.onClick());
+  await act(async () => button("Expand all").props.onClick());
+  expect(patchReads).toBe(1);
+  await act(async () => { renderer?.unmount(); closeGithubPull(); });
+  await openPull();
+  expect(button("Collapse all")).toBeDefined();
+  await act(async () => { resolveDetail(Response.json({ ...detail, head_sha: "new" })); });
+  expect(patchReads).toBe(2);
+  expect(button("Collapse all")).toBeDefined();
+});
+
 test("opens an existing same-repository worktree without fetching or creating a branch", async () => {
   const opened = { workspace_id: "fork", pane_id: "p1", path: "/pr", branch: "topic", already_open: true };
   const requests = checkoutApi([checkoutListing()], { "/api/worktree/open": opened });
