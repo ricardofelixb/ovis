@@ -217,7 +217,7 @@ export function GithubInbox({ wide, watching, onOpened }: ViewProps) {
         else if (wide && searchToggle.current?.getClientRects().length) { setSearchAsked(false); searchToggle.current.focus(); }
         else event.currentTarget.blur();
       }} />
-    {query !== "" && <button type="button" className="inbox-search-clear" aria-label={t("Clear search")} onClick={() => { setQuery(""); search.current?.focus(); }}><X aria-hidden="true" /></button>}
+    {query !== "" && <button type="button" className="inbox-search-clear" aria-label={t("Clear search|fork")} onClick={() => { setQuery(""); search.current?.focus(); }}><X aria-hidden="true" /></button>}
   </div>;
   const filterButton = groups.repos.length > 1 && <button type="button" className={`icon-button inbox-round inbox-filter-toggle${groups.selected === "" ? "" : " is-on"}`} aria-label={t("Repositories")} title={groups.selected || t("Repositories")}
     aria-haspopup="menu" aria-expanded={repoMenu !== null} onClick={(event) => setRepoMenu(repoMenu === null ? event.currentTarget : null)}><ListFilter aria-hidden="true" /></button>;

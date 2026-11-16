@@ -8,6 +8,7 @@ const STRINGS: Record<string, [ko: string, ja: string, zh: string]> = {
   "Clone {repo}": ["{repo} 클론", "{repo} をクローン", "克隆 {repo}"],
   "Cloned as {account}": ["{account} 계정으로 클론합니다", "{account} としてクローンします", "以 {account} 身份克隆"],
   "Cloning…": ["클론하는 중…", "クローンしています…", "正在克隆…"],
+  "Clear search|fork": ["검색어 지우기", "検索を消去", "清除搜索"],
   "Collapse all": ["모두 접기", "すべて折りたたむ", "全部折叠"],
   "Commented": ["댓글 남김", "コメントしました", "已评论"],
   "Confirm: {how}": ["확인: {how}", "確認: {how}", "确认：{how}"],
