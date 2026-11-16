@@ -98,14 +98,14 @@ test("reloads open file patches when a cached PR receives a new head", async () 
   const readFiles = createGithubFilesReader(async (args) => {
     if (args[1] === "token") return { code: 0, stdout: "test-token", stderr: "" };
     patchReads++;
-    return { code: 0, stdout: JSON.stringify([[{ filename: "a.txt", patch: `@@ -1 +1 @@\n-original\n+${patch}` }]]), stderr: "" };
+    return { code: 0, stdout: JSON.stringify([{ files: [{ filename: "a.txt", patch: `@@ -1 +1 @@\n-original\n+${patch}` }] }]), stderr: "" };
   }, () => 0);
   let resolveDetail: (response: Response) => void = () => {};
   const detail = { repository: "owner/repo", number: 1, url: "https://github.com/owner/repo/pull/9876", title: "Fix this", body: "", state: "open", draft: false, author: "me", created_at: "2026-01-01", updated_at: "2026-01-01", head: "topic", base: "main", fork: false, additions: 1, deletions: 0, changed_files: 1, commits: 1, checks: { passing: 0, failing: 0, pending: 0, skipped: 0 }, check_list: [], merge: "clean", review: "none", reviewers: [], labels: [], head_sha: "a".repeat(40), viewer: "me", can_write: false, merge_methods: [], conversation: [], files: [{ path: "a.txt", additions: 1, deletions: 0, change: "modified" }] };
   Object.defineProperty(globalThis, "fetch", { configurable: true, value: async (url: string) => {
     if (url.startsWith("/api/fork/github/pull/files?")) {
-      const head = new URL(url, "http://localhost").searchParams.get("head") ?? "";
-      const files = await readFiles("owner/repo", 1, "me", head);
+      const params = new URL(url, "http://localhost").searchParams;
+      const files = await readFiles("owner/repo", 1, "me", params.get("head") ?? "", params.get("base") ?? "");
       received.push(files[0]?.patch ?? "");
       // Rendering the diff needs browser workers; the assertion above captures the real server patch.
       return Response.json({ files: files.map((file) => ({ ...file, patch: null })) });

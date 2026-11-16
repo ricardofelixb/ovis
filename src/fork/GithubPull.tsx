@@ -198,7 +198,7 @@ export function GithubPullPage({ pull, wide, watching, onOpened }: { pull: Githu
         </>}
         {tab === "conversation" && <section className="fork-github-tab-page" aria-label={t("Conversation")}><GithubConversation entries={detail.conversation ?? []} onJump={jumpTo} /><GithubReply key={pull.url} pull={pull} detail={detail} watching={watching} onDone={acted} /></section>}
         {tab === "checks" && <section className="fork-github-tab-page" aria-label={t("Checks")}><ChecksBox checks={detail.check_list} /></section>}
-        {tab === "files" && <section className="fork-github-tab-page" aria-label={t("Files")}><GithubFiles key={`${pull.url}@${detail.head_sha}`} pull={pull} detail={detail} jump={jump} /></section>}
+        {tab === "files" && <section className="fork-github-tab-page" aria-label={t("Files")}><GithubFiles key={`${pull.url}@${detail.base}@${detail.head_sha}`} pull={pull} detail={detail} jump={jump} /></section>}
       </>}
     </div>
   </article>;

@@ -108,6 +108,19 @@ test("file patches cache separately for each head and reject a missing head", as
   expect((await handleGithubFiles(request, false)).status).toBe(400);
 });
 
+test("an unavailable compare revision returns an error instead of current PR files", async () => {
+  const calls: string[] = [];
+  const read = createGithubFilesReader(async (args) => {
+    if (args[1] === "token") return ok("token");
+    calls.push(args.join(" "));
+    return { code: 1, stdout: "", stderr: "gh: Not Found (HTTP 404)" };
+  });
+  await expect(read("owner/repo", 1, "me", "a".repeat(40), "main")).rejects.toMatchObject({ code: "gh_refused" });
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toContain(`/compare/main...${"a".repeat(40)}`);
+  expect(calls[0]).not.toContain("/pulls/1/files");
+});
+
 test("closes and reopens with a PATCH of the state", () => {
   expect(githubActionArgs("owner/repo", 4, { action: "close" })).toEqual(["api", "--hostname", "github.com", "--silent", "-X", "PATCH", "repos/owner/repo/pulls/4", "-f", "state=closed"]);
   expect(githubActionArgs("owner/repo", 4, { action: "reopen" })?.at(-1)).toBe("state=open");

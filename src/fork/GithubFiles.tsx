@@ -20,10 +20,10 @@ const RepoDiff = lazy(() => import("../components/RepoDiff.tsx"));
 const patchCache = new Map<string, Promise<Map<string, GithubFilePatch>>>();
 /** The same patches once read, so a page opened again draws its open files at once. */
 const patchesRead = new Map<string, Map<string, GithubFilePatch>>();
-function readPatches(pull: GithubPull, key: string, head: string): Promise<Map<string, GithubFilePatch>> {
+function readPatches(pull: GithubPull, key: string, head: string, base: string): Promise<Map<string, GithubFilePatch>> {
   const hit = patchCache.get(key);
   if (hit) return hit;
-  const query = new URLSearchParams({ repo: pull.repository, number: String(pull.number), account: pull.account ?? "", head });
+  const query = new URLSearchParams({ repo: pull.repository, number: String(pull.number), account: pull.account ?? "", head, base });
   const value = getJson<{ files: GithubFilePatch[] }>(`/api/fork/github/pull/files?${query}`, { cache: "no-store" })
     .then(({ files }) => { const read = new Map(files.map((file) => [file.path, file])); patchesRead.set(key, read); return read; });
   patchCache.set(key, value);
@@ -97,7 +97,7 @@ export function GithubFiles({ pull, detail, jump = null }: { pull: GithubPull; d
   const { settings, resolvedEntry } = useSettings();
   const narrow = useMediaQuery(SHEET_QUERY);
   // a new head commit has new patches: they are read again for it
-  const key = `${pull.url}@${detail.head_sha}`;
+  const key = `${pull.url}@${detail.base}@${detail.head_sha}`;
   const kept = views.get(pull.url);
   const [open, setOpen] = useState<ReadonlySet<string>>(() => kept?.open ?? new Set());
   const [patches, setPatches] = useState<Patches>(() => { const read = patchesRead.get(key); return read ? { status: "ready", files: read } : { status: "idle" }; });
@@ -110,7 +110,7 @@ export function GithubFiles({ pull, detail, jump = null }: { pull: GithubPull; d
   const load = (): void => {
     if (patches.status === "loading" || patches.status === "ready") return;
     setPatches({ status: "loading" });
-    readPatches(pull, key, detail.head_sha).then((next) => setPatches({ status: "ready", files: next }), () => setPatches({ status: "failed" }));
+    readPatches(pull, key, detail.head_sha, detail.base).then((next) => setPatches({ status: "ready", files: next }), () => setPatches({ status: "failed" }));
   };
   useEffect(() => { views.set(pull.url, { open, marks }); }, [pull.url, open, marks]);
   // files left open whose patches are not read yet (another head commit, or the first read failed)

@@ -130,7 +130,7 @@ async function readAccount(run: Run, account: string, repositories: readonly str
       let answer;
       try { answer = JSON.parse(single.stdout); } catch { throw unreadable(); }
       if (Array.isArray(answer.data?.t0?.nodes)) nodes.push(...answer.data.t0.nodes);
-      else if (!answer.errors?.length || !answer.errors.every((item: { path?: unknown[]; type?: string }) => item.path?.[0] === "t0" && (item.type === "NOT_FOUND" || item.type === "FORBIDDEN" || item.type === undefined))) throw unreadable();
+      else if (!answer.errors?.length || !answer.errors.every((item: { path?: unknown[]; type?: string }) => item.path?.[0] === "t0" && (item.type === "NOT_FOUND" || item.type === "FORBIDDEN"))) throw unreadable();
     }
     envelope.data[alias] = { nodes };
   }
@@ -400,9 +400,10 @@ export function createGithubPullReader(run: Run = runGithub, now = Date.now) {
 const PATCH_CHANGES = { added: "added", removed: "deleted", renamed: "renamed", copied: "copied", modified: "modified", changed: "modified", unchanged: "modified" } as const;
 /** Each file's patch as GitHub sends it (hunks only; none for a binary or too large file), with the git header the diff view reads put back. */
 export function parseGithubFiles(output: string): GithubFilePatch[] {
-  // `gh api --paginate --slurp` answers one array per page
+  // Compare includes all changed files (up to 300) on its first page, not on later commit pages.
   const pages: unknown = JSON.parse(output);
-  const files = (Array.isArray(pages) ? pages.flat() : []) as { filename?: unknown; previous_filename?: unknown; status?: string; patch?: unknown }[];
+  if (!Array.isArray(pages) || !Array.isArray(pages[0]?.files)) throw unreadable();
+  const files = pages[0].files as { filename?: unknown; previous_filename?: unknown; status?: string; patch?: unknown }[];
   return files.filter((file) => typeof file?.filename === "string").map((file) => {
     const path = file.filename as string;
     const before = typeof file.previous_filename === "string" ? file.previous_filename : path;
@@ -416,8 +417,8 @@ export function parseGithubFiles(output: string): GithubFilePatch[] {
 /** A pull request's changed files with their patches, the first 300 GitHub lists. */
 export function createGithubFilesReader(run: Run = runGithub, now = Date.now) {
   const cache = cached<GithubFilePatch[]>(now);
-  return (repository: string, number: number, account: string, head: string): Promise<GithubFilePatch[]> => cache(`${account}\n${repository}#${number}@${head}`, async () => {
-    const output = await ghAs(run, account, ["api", "--hostname", "github.com", "--paginate", "--slurp", `repos/${repository}/pulls/${number}/files?per_page=100`], "Could not read this pull request's files");
+  return (repository: string, number: number, account: string, head: string, base: string): Promise<GithubFilePatch[]> => cache(`${account}\n${repository}#${number}@${base}\n${head}`, async () => {
+    const output = await ghAs(run, account, ["api", "--hostname", "github.com", "--paginate", "--slurp", `repos/${repository}/compare/${encodeURIComponent(base)}...${head}?per_page=100`], "Could not read this pull request's files");
     try { return parseGithubFiles(output); } catch { throw unreadable(); }
   });
 }
@@ -455,7 +456,9 @@ export async function handleGithubFiles(request: Request, readOnly: boolean): Pr
   try {
     const head = new URL(request.url).searchParams.get("head") ?? "";
     if (!/^[a-f0-9]{40,64}$/i.test(head)) return jsonResponse({ error: { code: "bad_request", message: "Name the head commit" } }, 400);
-    return jsonResponse({ files: await readFiles(asked.repository, asked.number, asked.account, head) });
+    const base = new URL(request.url).searchParams.get("base") ?? "";
+    if (!base || base.length > 1024 || /[\x00-\x20\x7f]/.test(base)) return jsonResponse({ error: { code: "bad_request", message: "Name the base branch" } }, 400);
+    return jsonResponse({ files: await readFiles(asked.repository, asked.number, asked.account, head, base) });
   } catch (error) {
     return conflictResponse(error instanceof PullRequestError ? error.code : "gh_failed", error instanceof PullRequestError ? error.message : "Could not read this pull request's files");
   }
