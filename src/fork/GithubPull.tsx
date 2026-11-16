@@ -13,6 +13,7 @@ import { GithubMerge, GithubReply } from "./GithubActions.tsx";
 import { ago, GithubConversation, type JumpToLine } from "./GithubConversation.tsx";
 import { GithubCloneDialog } from "./GithubClone.tsx";
 import { GithubFiles, type FilesJump } from "./GithubFiles.tsx";
+import { useKeptScroll } from "./github.ts";
 import "./GithubPull.css";
 
 function stateOf(detail: GithubPullDetail, t: Translate) {
@@ -86,6 +87,8 @@ export function GithubPullPage({ pull, wide, watching, onOpened }: { pull: Githu
   const [tab, setTabState] = useState<Tab>(() => tabs.get(pull.url) ?? "overview");
   const setTab = (next: Tab): void => { tabs.set(pull.url, next); setTabState(next); };
   const [jump, setJump] = useState<FilesJump | null>(null);
+  // each tab of each pull request opens where it was scrolled to
+  const scroll = useKeptScroll<HTMLDivElement>(`${pull.url}#${tab}`, detail !== null);
   const jumpTo: JumpToLine = (thread) => {
     if (thread.line === null) return;
     setJump({ path: thread.path, side: thread.side, line: thread.line, seq: (jump?.seq ?? 0) + 1 });
@@ -151,7 +154,7 @@ export function GithubPullPage({ pull, wide, watching, onOpened }: { pull: Githu
         onOpened={(workspaceId) => { setCloning(false); refreshGithubListing(); void checkout(workspaceId); }} />}
       <a className="icon-button inbox-round" href={pull.url} target="_blank" rel="noreferrer noopener" aria-label={t("Open on GitHub")} title={t("Open on GitHub")}><ExternalLink aria-hidden="true" /></a>
     </header>
-    <div className="fork-github-pull-scroll">
+    <div ref={scroll} className="fork-github-pull-scroll">
       <h1 dir="auto">{detail?.title ?? pull.title}</h1>
       {error !== null && <p className="fork-github-pull-error" role="alert">{errors[error] ?? t("Could not read this pull request")}</p>}
       {detail === null ? error === null && <p className="fork-github-pull-dim" role="status"><LoaderCircle className="fork-github-spin" aria-hidden="true" /> {t("Reading the pull request…")}</p> : <>

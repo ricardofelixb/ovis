@@ -45,47 +45,127 @@
   margin-inline: auto var(--space-2);
 }
 
-.fork-github h2,
+/* a section's head: its name and count, small and dim, a press folds it */
 .fork-github h3 {
-  font-size: var(--fs-md);
   margin: 0;
+  font-size: var(--fs-xs);
 }
 
-.fork-github h3 {
-  padding: var(--space-3);
-  color: var(--text-dim);
+.fork-github-group + .fork-github-group {
+  margin-top: var(--space-3);
 }
 
-.fork-github-row {
-  border-bottom: var(--hairline) solid var(--border);
-  list-style: none;
-}
-
-.fork-github-summary {
+.fork-github-group-head {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
+  align-items: center;
+  gap: var(--space-1);
   width: 100%;
-  padding: var(--space-3);
+  padding: var(--space-1) var(--space-2);
   background: transparent;
   border: 0;
-  text-align: start;
-  color: var(--text);
+  color: var(--text-dim);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
 }
 
-.fork-github-summary:hover {
-  background: var(--bg-hover);
+.fork-github-group-head svg {
+  width: var(--icon-size-xs);
+  height: var(--icon-size-xs);
+  transition: transform var(--dur-fast) ease;
 }
 
-.fork-github-summary .pr-title,
-.fork-github-details .worktree-path {
-  white-space: normal;
-  overflow-wrap: anywhere;
+.fork-github-group-head[aria-expanded="true"] svg {
+  transform: rotate(90deg);
 }
 
-.fork-github-details {
-  padding: 0 var(--space-3) var(--space-3);
+.fork-github-group-count {
+  font-weight: var(--fw-regular);
+}
+
+.fork-github-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* a row: the title on one line with its state's mark at the end, where and when under it */
+.fork-github-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-2);
+  row-gap: var(--space-half);
+  width: 100%;
+  min-height: var(--row-h);
+  padding: var(--space-2);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-lg);
+  text-align: start;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .fork-github-summary:hover {
+    background: var(--side-hover);
+  }
+}
+
+.fork-github-row.is-current .fork-github-summary {
+  background: var(--side-selected);
+}
+
+.fork-github-row.is-current .fork-github-row-title {
+  font-weight: var(--fw-selected);
+}
+
+.fork-github-row-title,
+.fork-github-row-sub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.fork-github-row-title {
+  font-size: var(--fs-md);
+}
+
+.fork-github-row-sub {
+  grid-column: 1 / -1;
+  color: var(--text-dim);
   font-size: var(--fs-sm);
+}
+
+.fork-github-row-mark {
+  display: inline-flex;
+}
+
+.fork-github-row-mark svg {
+  width: var(--icon-size-sm);
+  height: var(--icon-size-sm);
+}
+
+.fork-github-row-mark.is-passing { color: var(--status-done); }
+.fork-github-row-mark.is-failing { color: var(--status-blocked); }
+.fork-github-row-mark.is-pending { color: var(--status-working); }
+.fork-github-row-mark.is-dim { color: var(--text-dim); }
+
+/* a narrow column's open search takes the head, Refresh giving way as the filter does (InboxList.css) */
+@container (max-width: 255.98px) {
+  .mode-inbox.is-wide.fork-github .inbox-top.is-search-open > .fork-github-refresh {
+    display: none;
+  }
+}
+
+/* the phone's list: rows the width of the screen, less its gutter */
+.mode-inbox.fork-github:not(.is-wide) .inbox-scroll {
+  padding-inline: var(--inbox-gutter);
 }

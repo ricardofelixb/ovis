@@ -117,10 +117,10 @@ test("creates from the main workspace when only a linked checkout is selected", 
 });
 
 test("rail is opt-in, switches current place, and Inbox switches back", async () => {
-  await rail(false); expect(button("GitHub")).toBeUndefined();
+  await rail(false); expect(button("Pull requests")).toBeUndefined();
   await act(async () => renderer?.unmount()); await rail(true);
-  await act(async () => button("GitHub").props.onClick());
-  expect(button("GitHub").props["aria-current"]).toBe("page");
+  await act(async () => button("Pull requests").props.onClick());
+  expect(button("Pull requests").props["aria-current"]).toBe("page");
   expect(button("Inbox").props["aria-current"]).toBeUndefined();
   await act(async () => button("Inbox").props.onClick());
   expect(button("Inbox").props["aria-current"]).toBe("page");
