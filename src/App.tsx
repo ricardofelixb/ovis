@@ -118,7 +118,7 @@ import { ConnectionRouteMark } from "./components/ConnectionRouteMark.tsx";
 import { StatusBar } from "./components/StatusBar.tsx";
 import { LensToggle } from "./components/LensToggle.tsx";
 import { HeaderLens } from "./fork/HeaderLens.tsx";
-import { ForkInboxBack } from "./fork/InboxBack.tsx";
+import { ForkInboxBack, forkInboxExitItem } from "./fork/InboxBack.tsx";
 import { PcLoadStatus } from "./components/MachineStats.tsx";
 import logoDark from "./assets/brand/logo-dark.png";
 import logoLight from "./assets/brand/logo-light.png";
@@ -970,7 +970,7 @@ export function App() {
   // palette, as near the top as in the classic More and for its reason: a phone's shell has no palette button, and
   // a touch screen no shortcut
   const modeLeadItems: RowMenuItem[] = [
-    { id: "exit-inbox", label: t("Back to Ovis"), icon: PanelsTopLeft, glyph: <OvisMark />, run: leaveMode },
+    { id: "exit-inbox", label: t("Back to Ovis"), icon: PanelsTopLeft, glyph: <OvisMark />, run: leaveMode, ...forkInboxExitItem(settings) },
     ...fromMore("palette"),
   ];
   const modeEndItems: RowMenuItem[] = [
