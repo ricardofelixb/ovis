@@ -129,8 +129,13 @@ async function readAccount(run: Run, account: string, repositories: readonly str
       if (!single) throw new PullRequestError("gh_missing", "The GitHub CLI (gh) is not installed on this PC");
       let answer;
       try { answer = JSON.parse(single.stdout); } catch { throw unreadable(); }
-      if (Array.isArray(answer.data?.t0?.nodes)) nodes.push(...answer.data.t0.nodes);
-      else if (!answer.errors?.length || !answer.errors.every((item: { path?: unknown[]; type?: string }) => item.path?.[0] === "t0" && (item.type === "NOT_FOUND" || item.type === "FORBIDDEN"))) throw unreadable();
+      if (answer.errors !== undefined && !Array.isArray(answer.errors)) throw unreadable();
+      if (answer.errors?.length) {
+        if (!answer.errors.every((item: { path?: unknown[]; type?: string }) => item.path?.length === 1 && item.path[0] === "t0" && (item.type === "NOT_FOUND" || item.type === "FORBIDDEN"))) throw unreadable();
+        continue;
+      }
+      if (single.code !== 0 || !Array.isArray(answer.data?.t0?.nodes)) throw unreadable();
+      nodes.push(...answer.data.t0.nodes);
     }
     envelope.data[alias] = { nodes };
   }
