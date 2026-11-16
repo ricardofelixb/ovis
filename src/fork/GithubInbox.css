@@ -45,18 +45,25 @@
   margin-inline: auto var(--space-2);
 }
 
-/* the sidebar foot's inbox row with Pull requests at its end, one row */
+/* the sidebar foot's ways in, icons after the gear on its row: the footer lays its rows out as a grid, the
+   gear's row lends it its gear and plan meters, and the icons go between them */
+.sidebar-footer:has(> .fork-github-foot) {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-1);
+}
+
+.sidebar-footer:has(> .fork-github-foot) > :not(.fork-github-foot, .sidebar-footer-row) { grid-column: 1 / -1; }
+.sidebar-footer:has(> .fork-github-foot) > .sidebar-footer-row { display: contents; }
+.sidebar-footer:has(> .fork-github-foot) > .sidebar-footer-row > * { order: 3; min-width: 0; }
+.sidebar-footer:has(> .fork-github-foot) > .sidebar-footer-row > .sidebar-footer-settings { order: 1; }
+
 .fork-github-foot {
+  order: 2;
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  margin-bottom: var(--space-1);
-}
-
-.fork-github-foot > .inbox-foot-entry {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin-bottom: 0;
 }
 
 .fork-github-foot > .fork-github-foot-open {
@@ -67,7 +74,7 @@
   justify-content: center;
 }
 
-.fork-github-foot > .fork-github-foot-open svg { margin-inline: 0; }
+.fork-github-foot > .fork-github-foot-open svg { margin-inline: auto; }
 
 /* a section's head: its name and count, small and dim, a press folds it */
 .fork-github h3 {

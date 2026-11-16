@@ -1,5 +1,5 @@
 import { cloneElement, useEffect, useRef, useState, useSyncExternalStore, type MouseEventHandler, type ReactElement, type ReactNode } from "react";
-import { ArrowLeft, Check, ChevronRight, CircleAlert, CircleCheck, CircleDot, CircleX, Eye, FolderGit2, GitPullRequest, GitPullRequestDraft, ListFilter, RefreshCw, Search, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, CircleAlert, CircleCheck, CircleDot, CircleX, Eye, FolderGit2, GitPullRequest, Inbox, GitPullRequestDraft, ListFilter, RefreshCw, Search, X } from "lucide-react";
 
 import { RowMenu } from "../components/RowMenu.tsx";
 
@@ -91,8 +91,8 @@ export function ForkGithubPane({ wide, watching, onOpened }: ViewProps) {
 }
 
 /**
- * The way in from the workspaces sidebar's foot: Pull requests beside the agent inbox's own row, opening the
- * agent inbox on it. The inbox row itself always opens the agents.
+ * The ways in from the workspaces sidebar's foot, as icons on the gear's row (GithubInbox.css): the agent inbox,
+ * always on the agents, and Pull requests, the agent inbox on that list. Off, upstream's inbox row stays.
  */
 export function ForkGithubFoot({ children }: { children: ReactElement<{ onOpen(): void }> }) {
   const { settings } = useSettings();
@@ -100,7 +100,8 @@ export function ForkGithubFoot({ children }: { children: ReactElement<{ onOpen()
   if (!settings.pullRequests) return children;
   const enter = children.props.onOpen;
   return <div className="fork-github-foot">
-    {cloneElement(children, { onOpen: () => { setGithubSection("inbox"); enter(); } })}
+    <button type="button" className="btn btn-ghost sidebar-footer-action fork-github-foot-open" aria-label={t("Open agent inbox")} title={t("Open agent inbox")}
+      onClick={() => { setGithubSection("inbox"); enter(); }}><Inbox aria-hidden="true" /></button>
     <button type="button" className="btn btn-ghost sidebar-footer-action fork-github-foot-open" aria-label={t("Pull requests")} title={t("Pull requests")}
       onClick={() => { setGithubSection("github"); enter(); }}><GitPullRequest aria-hidden="true" /></button>
   </div>;
