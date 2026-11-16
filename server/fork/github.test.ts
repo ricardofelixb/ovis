@@ -49,6 +49,20 @@ test("brings back a reviewed PR that got commits after the review, and lists oth
   expect(() => parseGithubPulls(JSON.stringify(data))).toThrow();
 });
 
+test("includes every repository's team PRs before excluding listed and authored rows", () => {
+  const data = JSON.parse(fixture());
+  for (let repo = 0; repo < 3; repo++) {
+    data.data[`t${repo}`] = { pullRequests: { nodes: Array.from({ length: 20 }, (_, i) => ({
+      ...pr(i + 1, `owner/repo${repo}`), author: { login: "other" }, updatedAt: `2026-02-${String(i + 1).padStart(2, "0")}T00:00:00Z`,
+    })) } };
+  }
+  data.data.t0.pullRequests.nodes[0].author.login = "me";
+  const result = parseGithubPulls(JSON.stringify(data));
+  expect(result.team).toHaveLength(59);
+  expect(result.team.filter((row) => row.repository === "owner/repo2")).toHaveLength(20);
+  expect(result.team[0]!.updated_at).toBe("2026-02-20T00:00:00Z");
+});
+
 test("asks for each open repository's PRs by alias, skipping names that are not owner/name", () => {
   const query = githubQuery(["owner/repo", "bad name", "corp/app"]);
   expect(query).toContain('t0: repository(owner:"owner",name:"repo")');
