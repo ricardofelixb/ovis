@@ -52,7 +52,7 @@
 }
 
 .fork-github-group + .fork-github-group {
-  margin-top: var(--space-3);
+  margin-top: var(--space-4);
 }
 
 .fork-github-group-head {
@@ -60,14 +60,13 @@
   align-items: center;
   gap: var(--space-1);
   width: 100%;
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: transparent;
   border: 0;
   color: var(--text-dim);
   font: inherit;
+  font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   cursor: pointer;
 }
 
@@ -88,22 +87,22 @@
 .fork-github-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-half);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* a row: the title on one line with its state's mark at the end, where and when under it */
+/* a row: the title, up to two lines, with its state's mark at the end; where and when under it */
 .fork-github-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: var(--space-2);
-  row-gap: var(--space-half);
+  align-items: start;
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
   width: 100%;
   min-height: var(--row-h);
-  padding: var(--space-2);
+  padding: var(--space-3);
   background: transparent;
   border: 0;
   border-radius: var(--radius-lg);
@@ -127,7 +126,6 @@
   font-weight: var(--fw-selected);
 }
 
-.fork-github-row-title,
 .fork-github-row-sub {
   overflow: hidden;
   white-space: nowrap;
@@ -135,7 +133,14 @@
 }
 
 .fork-github-row-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   font-size: var(--fs-md);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .fork-github-row-sub {
@@ -146,6 +151,8 @@
 
 .fork-github-row-mark {
   display: inline-flex;
+  /* level with the title's first line */
+  padding-top: 0.1em;
 }
 
 .fork-github-row-mark svg {
