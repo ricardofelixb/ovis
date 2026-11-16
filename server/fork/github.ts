@@ -54,7 +54,7 @@ export function parseGithubPulls(output: string): GithubPulls {
     const group = (nodes: unknown, keep: (value: Record<string, unknown>) => boolean = () => true, extra: Partial<GithubPull> = {}): GithubPull[] => {
       if (!Array.isArray(nodes)) throw unreadable();
       const unique = new Map<string, GithubPull>();
-      for (const value of nodes.slice(0, 50)) if (keep(value as Record<string, unknown>)) { const entry = { ...rowOf(value), ...extra }; unique.set(entry.url, entry); }
+      for (const value of nodes) if (keep(value as Record<string, unknown>)) { const entry = { ...rowOf(value), ...extra }; unique.set(entry.url, entry); }
       return [...unique.values()].sort((a, b) => b.updated_at.localeCompare(a.updated_at));
     };
     const review = group(data.review?.nodes);
