@@ -178,6 +178,19 @@ test("does not hide untyped Team search failures", async () => {
   await expect(read(["owner/repo"])).rejects.toMatchObject({ code: "gh_unreadable" });
 });
 
+test("rejects partial Team retry data when the retry also has an error", async () => {
+  const initial = JSON.parse(fixture());
+  initial.data.t0 = null; initial.errors = [{ path: ["t0"], message: "batch failed" }];
+  for (const retry of [
+    { code: 1, stdout: JSON.stringify({ data: { t0: { nodes: [] } }, errors: [{ path: ["t0", "nodes", 0], type: "RATE_LIMITED", message: "rate limit" }] }), stderr: "" },
+    { code: 1, stdout: JSON.stringify({ data: { t0: { nodes: [] } } }), stderr: "unexpected error" },
+  ]) {
+    let calls = 0;
+    const read = createGithubReader(async (args) => args[1] === "status" ? ok(signedIn("me")) : args[1] === "token" ? ok("token") : ++calls === 1 ? { code: 1, stdout: JSON.stringify(initial), stderr: "" } : retry);
+    await expect(read(["owner/repo"])).rejects.toMatchObject({ code: "gh_unreadable" });
+  }
+});
+
 test("reads every signed-in account with its own token and lists what the readable ones see", async () => {
   const tokens: string[] = [];
   const own = (login: string, number: number, repository: string) => JSON.stringify({ data: { viewer: { login }, review: { nodes: [pr(number, repository)] }, yours: { nodes: [pr(3)] }, reviewed: { nodes: [] } } });
