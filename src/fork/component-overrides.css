@@ -87,11 +87,11 @@
 .mode-inbox.is-wide .inbox-item { padding-block: calc(var(--space-1) / 2); }
 
 /* the agent's row has room under its mark: the line starts right under the mark, as the sidebar's does */
-.mode-inbox .inbox-item:has(+ .inbox-item[data-depth="1"]):not([data-depth]) {
+.mode-inbox .inbox-item:has(+ :is(.inbox-item[data-depth="1"], .agent-helpers)):not([data-depth]) {
   position: relative;
 }
 
-.mode-inbox .inbox-item:has(+ .inbox-item[data-depth="1"]):not([data-depth])::after {
+.mode-inbox .inbox-item:has(+ :is(.inbox-item[data-depth="1"], .agent-helpers)):not([data-depth])::after {
   position: absolute;
   top: calc(50% + var(--inbox-avatar) / 2 + var(--space-1));
   bottom: 0;
@@ -133,9 +133,18 @@
   font-weight: var(--fw-regular);
 }
 
+/* the sidebar's line that folds an agent's helpers (AgentSidebar.css), a helper's height and place here */
+.mode-inbox .agent-helpers-toggle {
+  min-height: var(--control-h);
+  padding-inline-start: calc(var(--tree-x) + var(--space-3) + var(--space-1));
+  padding-inline-end: var(--space-3);
+}
+.mode-inbox.is-wide .agent-helpers { padding-block: calc(var(--space-1) / 2); }
+
 /* a finger still gets its target */
 @media (pointer: coarse) {
-  .mode-inbox .inbox-item[data-depth] > .inbox-row {
+  .mode-inbox .inbox-item[data-depth] > .inbox-row,
+  .mode-inbox .agent-helpers-toggle {
     min-height: var(--touch-target);
   }
 }

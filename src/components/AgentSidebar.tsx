@@ -226,7 +226,7 @@ const RESTING_OPEN_KEY = "ovis:agents-resting-open";
 const BACKGROUND_FOLD_KEY = "ovis:agents-background-collapsed";
 
 /** Settings → Fold helpers under their agent: the agents whose helpers this device lists in full, each by its pin key; every other agent's start folded */
-const HELPERS_OPEN_KEY = "ovis:agents-helpers-open";
+export const HELPERS_OPEN_KEY = "ovis:agents-helpers-open";
 
 /**
  * The fold that hides a row: the nearest folded line above it in sight (an agent's helpers, a named group, the
@@ -263,7 +263,8 @@ function loadStateFolds(): AgentGroup[] {
   return keptStateFolds() ?? [...FOLDED_AT_FIRST];
 }
 
-function loadOpenHelpers(): string[] {
+/** the agents whose helpers this device keeps unfolded, by their pin key */
+export function loadOpenHelpers(): string[] {
   try {
     const stored: unknown = JSON.parse(window.localStorage.getItem(HELPERS_OPEN_KEY) ?? "[]");
     return Array.isArray(stored) ? stored.filter((key): key is string => typeof key === "string") : [];
@@ -629,22 +630,10 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
   const helpersLine = (agentRow: AgentRow, helpers: readonly AgentRow[], hidden: boolean) => {
     const key = sidebarPinKey(agentRow.machine.id, agentRow.entry.pane.pane_id);
     const open = openHelpers.includes(key);
-    const states = helpers.map((row) => agentGroup(rowStatus(row)));
-    const blockedCount = states.filter((state) => state === "blocked").length;
-    const workingCount = states.filter((state) => state === "working").length;
     // its tree line runs on to the helpers in sight under it
     const more = helpers.some((row) => !foldedHelpers.has(row));
-    // whose helpers they are, by the title that agent's row draws
-    const helpersOfTitle = t("Helpers of {title}", { title: describe(agentRow).title });
     return <li className="agent-helpers" key={`helpers:${key}`} data-helpers-of={key} data-more={more ? "" : undefined} hidden={hidden || undefined}>
-      <button type="button" className="agent-helpers-toggle" aria-expanded={open} title={helpersOfTitle} onClick={() => toggleHelpers(key)}>
-        {open ? <ChevronDown className="agent-section-caret" aria-hidden="true" /> : <ChevronRight className="agent-section-caret" aria-hidden="true" />}
-        <span className="agent-helpers-name" aria-hidden="true">{t("Helpers")}</span>
-        <span className="visually-hidden">{helpersOfTitle}</span>
-        {blockedCount > 0 && <span className="agent-named-group-dot" data-state="blocked" title={t("{count} need you", { count: blockedCount })}><span className="visually-hidden">{t("{count} need you", { count: blockedCount })}</span></span>}
-        {workingCount > 0 && <span className="agent-named-group-dot" data-state="working" title={t("{count} working", { count: workingCount })}><span className="visually-hidden">{t("{count} working", { count: workingCount })}</span></span>}
-        <span className="agent-section-count">{helpers.length}</span>
-      </button>
+      <HelpersToggle open={open} agentTitle={describe(agentRow).title} states={helpers.map((row) => agentGroup(rowStatus(row)))} onToggle={() => toggleHelpers(key)} />
     </li>;
   };
   // a list's rows, each agent followed by its helpers line while the helpers fold; `hidden` is a fold above them all,
@@ -885,4 +874,23 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
       }]),
     ]} />}
   </section>;
+}
+
+/**
+ * The button of the line under an agent that folds its helpers: its caret, how many, and a dot for each state among
+ * them that asks for a look. `agentTitle` is the title that agent's row draws: whose helpers they are.
+ */
+export function HelpersToggle({ open, agentTitle, states, onToggle }: { open: boolean; agentTitle: string; states: readonly AgentGroup[]; onToggle(): void }) {
+  const t = useT();
+  const blockedCount = states.filter((state) => state === "blocked").length;
+  const workingCount = states.filter((state) => state === "working").length;
+  const helpersOfTitle = t("Helpers of {title}", { title: agentTitle });
+  return <button type="button" className="agent-helpers-toggle" aria-expanded={open} title={helpersOfTitle} onClick={onToggle}>
+    {open ? <ChevronDown className="agent-section-caret" aria-hidden="true" /> : <ChevronRight className="agent-section-caret" aria-hidden="true" />}
+    <span className="agent-helpers-name" aria-hidden="true">{t("Helpers")}</span>
+    <span className="visually-hidden">{helpersOfTitle}</span>
+    {blockedCount > 0 && <span className="agent-named-group-dot" data-state="blocked" title={t("{count} need you", { count: blockedCount })}><span className="visually-hidden">{t("{count} need you", { count: blockedCount })}</span></span>}
+    {workingCount > 0 && <span className="agent-named-group-dot" data-state="working" title={t("{count} working", { count: workingCount })}><span className="visually-hidden">{t("{count} working", { count: workingCount })}</span></span>}
+    <span className="agent-section-count">{states.length}</span>
+  </button>;
 }
