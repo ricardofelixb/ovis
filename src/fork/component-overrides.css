@@ -15,6 +15,13 @@
   border-radius: var(--radius-circle);
 }
 
+/* a helper under its agent is its title alone, after the tree's elbow: no picture (its tab chip keeps one), and a
+   level steps in to where the title above it starts, as in the agent inbox */
+.agent-item[data-depth] { --tree-step: calc(var(--space-3) + var(--space-2)); }
+.agent-item[data-depth] .agent-row > .sidebar-mark { display: none; }
+.agent-item[data-depth="1"] .agent-row { padding-inline-start: calc(var(--side-box) / 2 + var(--tree-step)); }
+.agent-item[data-depth="2"] .agent-row { padding-inline-start: calc(var(--side-box) / 2 + 2 * var(--tree-step)); }
+
 /* src/components/AgentsSettings.css */
 [data-fork-square-corners="true"] .agents-state.is-ok::before,
 [data-fork-square-corners="true"] .agents-state.is-warn::before,
@@ -58,8 +65,11 @@
    where the mark's size is the agent row's. */
 .mode-inbox .inbox-rows {
   --tree-x: calc(var(--inbox-inset) + var(--inbox-avatar) / 2);
-  --tree-step: calc(var(--space-3) + var(--space-2) + var(--mark-size) / 2);
+  --tree-step: calc(var(--space-3) + var(--space-2));
 }
+
+/* as in the sidebar, a helper shows no picture: its title starts after the elbow */
+.mode-inbox .inbox-item[data-depth] .inbox-avatar { display: none; }
 
 .mode-inbox .inbox-item[data-depth] {
   position: relative;
