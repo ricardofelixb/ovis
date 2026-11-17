@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { GitPullRequest, NotebookPen } from "lucide-react";
+import { GitPullRequest, Notebook } from "lucide-react";
 
 import { useT } from "../../lib/i18n.ts";
 import { useSettings } from "../../lib/settings.ts";
@@ -35,7 +35,7 @@ export function ForkPlaceOpen() {
   const t = useT();
   return <>
     {settings.notes && <button type="button" className="icon-button inbox-round fork-github-open" aria-label={t("Notes")} title={t("Notes")}
-      onClick={() => openPlace("notes", true)}><NotebookPen aria-hidden="true" /></button>}
+      onClick={() => openPlace("notes", true)}><Notebook aria-hidden="true" /></button>}
     {settings.pullRequests && <button type="button" className="icon-button inbox-round fork-github-open" aria-label={t("Pull requests")} title={t("Pull requests")}
       onClick={() => openPlace("github", true)}><GitPullRequest aria-hidden="true" /></button>}
   </>;

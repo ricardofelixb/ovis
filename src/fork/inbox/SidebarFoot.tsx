@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { CircleHelp, FolderTree, GitPullRequest, Inbox, NotebookPen } from "lucide-react";
+import { CircleHelp, FolderTree, GitPullRequest, Inbox, Notebook } from "lucide-react";
 
 import type { InboxRailProps } from "../../components/InboxRail.tsx";
 import { SidebarFooter } from "../../components/SidebarFooter.tsx";
@@ -27,7 +27,7 @@ function FootPlaces({ current, onPlace, waiting = null }: { current: Place; onPl
     {settings.inboxFooter && place("workspaces", t("Workspace list"), FolderTree)}
     {place("inbox", t("Agent inbox"), Inbox)}
     {settings.pullRequests && place("github", t("Pull requests"), GitPullRequest)}
-    {settings.notes && place("notes", t("Notes"), NotebookPen)}
+    {settings.notes && place("notes", t("Notes"), Notebook)}
   </div>;
 }
 

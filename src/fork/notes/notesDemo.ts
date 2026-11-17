@@ -6,6 +6,8 @@ const files = new Map<string, NoteFile>([
   ["Todo.md", { path: "Todo.md", updated_at: minutes(4), text: "# This week\n\n- [x] Ship the retry flag\n- [ ] Review the export guard\n- [ ] Write the changelog\n\nAsk **mira** about the backoff cap." }],
   ["checkout-api/Release list.md", { path: "checkout-api/Release list.md", updated_at: minutes(60 * 26), text: "## Before the release\n\n1. Bump the version\n2. Run `bun run check`\n3. Tag it\n\n> Never tag by hand on a Friday." }],
   ["Ideas.md", { path: "Ideas.md", updated_at: minutes(60 * 24 * 3), text: "A notes place next to the inbox, so plans live where the agents are." }],
+  ["Agents/Follow-ups.md", { path: "Agents/Follow-ups.md", updated_at: minutes(30), text: "## Follow-ups\n\n- [ ] checkout-api: the export guard test is flaky on CI" }],
+  ["Agents/Lessons.md", { path: "Agents/Lessons.md", updated_at: minutes(60 * 5), text: "## Lessons\n\n- checkout-api: run the retry tests before pushing" }],
 ]);
 
 const listed = (file: NoteFile): Note => ({ path: file.path, title: noteTitle(file.path), folder: file.path.includes("/") ? file.path.slice(0, file.path.lastIndexOf("/")) : "", updated_at: file.updated_at, text: file.text });

@@ -3,6 +3,7 @@ const STRINGS: Record<string, [ko: string, ja: string, zh: string]> = {
   "Notes": ["노트", "ノート", "笔记"],
   "New note": ["새 노트", "新しいノート", "新建笔记"],
   "Search notes": ["노트 검색", "ノートを検索", "搜索笔记"],
+  "Agent notes": ["에이전트 노트", "エージェントのノート", "代理笔记"],
   "Reading notes…": ["노트를 읽는 중…", "ノートを読み込んでいます…", "正在读取笔记…"],
   "Could not read the notes": ["노트를 읽을 수 없습니다", "ノートを読み込めません", "无法读取笔记"],
   "Could not read this note": ["이 노트를 읽을 수 없습니다", "このノートを読み込めません", "无法读取此笔记"],

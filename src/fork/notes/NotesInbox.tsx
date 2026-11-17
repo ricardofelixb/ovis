@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowLeft, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Plus, Search, Trash2, X } from "lucide-react";
 
 import { noteTitle, type Note, type NoteFile } from "../../../shared/fork/notes.ts";
 import { ConfirmDialog } from "../../components/ConfirmDialog.tsx";
@@ -56,6 +56,12 @@ onPlaceLeft((from) => { if (from === "notes" && open !== null) { open = null; em
 
 interface ViewProps { wide: boolean; watching: boolean }
 
+/** The agents' notebook (the notes skill): its own section at the end of the list, folded until opened here. */
+const AGENTS_FOLDER = "Agents";
+const AGENTS_OPEN_KEY = "ovis:fork-notes-agents-open";
+const inAgents = (note: Note): boolean => note.folder === AGENTS_FOLDER || note.folder.startsWith(`${AGENTS_FOLDER}/`);
+const loadAgentsOpen = (): boolean => { try { return window.localStorage.getItem(AGENTS_OPEN_KEY) === "1"; } catch { return false; } };
+
 /** The agent inbox's column while Notes is its place: search and New over the notes, newest first. */
 export function NotesInbox({ wide, watching }: ViewProps) {
   const t = useT();
@@ -65,6 +71,11 @@ export function NotesInbox({ wide, watching }: ViewProps) {
   const [query, setQueryState] = useState(searched);
   const setQuery = (next: string): void => { searched = next; setQueryState(next); };
   const [searchAsked, setSearchAsked] = useState(false);
+  const [agentsOpen, setAgentsOpen] = useState(loadAgentsOpen);
+  const toggleAgents = (): void => setAgentsOpen((was) => {
+    try { window.localStorage.setItem(AGENTS_OPEN_KEY, was ? "0" : "1"); } catch { /* storage may be disabled */ }
+    return !was;
+  });
   const search = useRef<HTMLInputElement>(null);
   const searchToggle = useRef<HTMLButtonElement>(null);
   const scroll = useKeptScroll<HTMLDivElement>("notes", list !== null && (wide || current === null));
@@ -101,6 +112,16 @@ export function NotesInbox({ wide, watching }: ViewProps) {
   </div>;
   const newButton = !watching && <button type="button" className="icon-button inbox-round fork-notes-new" aria-label={t("New note")} title={t("New note")} onClick={() => void create()}><Plus aria-hidden="true" /></button>;
   const shown = list === null ? [] : searchedNotes(list, query);
+  const mine = shown.filter((note) => !inAgents(note));
+  const agents = shown.filter(inAgents);
+  // a search shows what it found, folded or not
+  const agentsShown = agentsOpen || query.trim() !== "";
+  const row = (note: Note, folder: string) => <li key={note.path} className={`fork-github-row${current === note.path ? " is-current" : ""}`}>
+    <button type="button" className="fork-github-summary" aria-current={current === note.path ? "true" : undefined} title={note.path} onClick={() => openNote(note.path, !wide)}>
+      <span className="fork-github-row-title" dir="auto">{note.title}</span>
+      <span className="fork-github-row-sub">{folder !== "" && <>{folder} · </>}{ago(note.updated_at)}</span>
+    </button>
+  </li>;
   return <section className={`mode-inbox fork-github fork-notes${wide ? " is-wide" : ""}`} aria-label={t("Notes")}>
     <header className={`inbox-top${wide && searchOpen ? " is-search-open" : ""}`}>
       {wide ? <>
@@ -117,13 +138,15 @@ export function NotesInbox({ wide, watching }: ViewProps) {
     <div ref={scroll} className="inbox-scroll">
       {error && list !== null && <p className="fork-github-note" role="alert">{t("Could not read the notes")}</p>}
       {list === null ? <p className="inbox-empty" role={error ? "alert" : "status"}>{error ? t("Could not read the notes") : t("Reading notes…")}</p>
-        : shown.length > 0 ? <ul className="fork-github-list">{shown.map((note) =>
-          <li key={note.path} className={`fork-github-row${current === note.path ? " is-current" : ""}`}>
-            <button type="button" className="fork-github-summary" aria-current={current === note.path ? "true" : undefined} title={note.path} onClick={() => openNote(note.path, !wide)}>
-              <span className="fork-github-row-title" dir="auto">{note.title}</span>
-              <span className="fork-github-row-sub">{note.folder !== "" && <>{note.folder} · </>}{ago(note.updated_at)}</span>
-            </button>
-          </li>)}</ul>
+        : shown.length > 0 ? <>
+          {mine.length > 0 && <ul className="fork-github-list">{mine.map((note) => row(note, note.folder))}</ul>}
+          {agents.length > 0 && <section className="fork-github-group" aria-label={t("Agent notes")}>
+            <h3><button type="button" className="fork-github-group-head" aria-expanded={agentsShown} onClick={toggleAgents}>
+              <ChevronRight aria-hidden="true" /><span>{t("Agent notes")}</span><span className="fork-github-group-count">{agents.length}</span>
+            </button></h3>
+            {agentsShown && <ul className="fork-github-list">{agents.map((note) => row(note, note.folder.slice(AGENTS_FOLDER.length + 1)))}</ul>}
+          </section>}
+        </>
         : <p className="inbox-empty" role="status">{query.trim() !== "" ? t("No notes match") : t("No notes yet")}</p>}
     </div>
     {!wide && <div className="inbox-foot">{searchField}</div>}
