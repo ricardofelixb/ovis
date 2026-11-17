@@ -1,7 +1,7 @@
 import { tally, usageCounters } from "../lib/usageCounters.ts";
 import { useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from "react";
 import { Ellipsis, ListFilter, Monitor, Plus, Search, Terminal, TriangleAlert, X } from "lucide-react";
-import { ForkGithubOpen } from "../fork/github/GithubInbox.tsx";
+import { ForkPlaceOpen } from "../fork/inbox/Places.tsx";
 
 import type { Machine } from "../../shared/machines.ts";
 import type { AgentStatus } from "../../shared/protocol.ts";
@@ -370,7 +370,7 @@ export function InboxList({ ref, machines, activity, watching, wide, filter, onF
           {moreButton}
           {note}
           {connectionLine}
-          <ForkGithubOpen />
+          <ForkPlaceOpen />
           {newButton}
         </>}
       </div>

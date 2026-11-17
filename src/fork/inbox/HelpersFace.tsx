@@ -9,7 +9,7 @@ import { useT } from "../../lib/i18n.ts";
  */
 export function ForkHelpersFace({ open, agentTitle, onToggle }: { open: boolean; agentTitle: string; onToggle(): void }) {
   const t = useT();
-  const label = t("Helpers of {title}", { title: agentTitle });
+  const label = t("Helpers of {title}|fork", { title: agentTitle });
   return <button type="button" className="fork-helpers-face" aria-expanded={open} aria-label={label} title={label} onClick={onToggle}>
     {open ? <ChevronDown aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
   </button>;
