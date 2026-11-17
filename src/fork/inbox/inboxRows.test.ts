@@ -47,7 +47,7 @@ test("the tree lines are the sidebar's: a line runs on to a later sibling and pa
   ]);
 });
 
-test("a folded agent hides its helpers behind one line, except the one that asks and the open one", () => {
+test("a folded agent hides its helpers in its row, except the one that asks and the open one", () => {
   const family = [row("root"), row("child", "root"), row("grandchild", "child"), row("asking", "root"), row("other")];
   const folds = (open: string[], shown = "") => ({
     on: true, open,
@@ -56,7 +56,7 @@ test("a folded agent hides its helpers behind one line, except the one that asks
   });
   const folded = forkInboxFolded(family, true, folds([]));
   expect(ids(folded)).toEqual(["local:root", "local:asking", "local:other"]);
-  expect(folded[0]!.forkFold).toEqual({ key: "local:root", open: false, states: ["idle", "idle", "blocked"], more: true });
+  expect(folded[0]!.forkFold).toEqual({ key: "local:root", open: false, hidden: 2 });
   expect(folded[1]!.forkTree).toEqual({ "data-depth": 1 });
   const held = forkInboxFolded(family, true, folds([], "grandchild"));
   expect(ids(held)).toEqual(["local:root", "local:grandchild", "local:asking", "local:other"]);

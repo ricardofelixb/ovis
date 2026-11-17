@@ -1,5 +1,5 @@
 import { tally, usageCounters } from "../lib/usageCounters.ts";
-import { Fragment, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from "react";
+import { useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from "react";
 import { Ellipsis, ListFilter, Monitor, Plus, Search, Terminal, TriangleAlert, X } from "lucide-react";
 import { ForkGithubOpen } from "../fork/github/GithubInbox.tsx";
 
@@ -27,7 +27,8 @@ import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { AgentMark } from "./AgentMark.tsx";
 import { ForkInboxAvatar } from "../fork/inbox/InboxAvatar.tsx";
 import { forkInboxFolded, forkInboxRows } from "../fork/inbox/inboxRows.ts";
-import { ForkHelpersLine, useForkOpenHelpers } from "../fork/inbox/HelpersFold.tsx";
+import { useForkOpenHelpers } from "../fork/inbox/HelpersFold.tsx";
+import { ForkFoldCount, ForkHelpersFace } from "../fork/inbox/HelpersFace.tsx";
 import { agentRowTitle, blockedNote, stateAge } from "./AgentSidebar.tsx";
 import { RowMenu } from "./RowMenu.tsx";
 import { compactWorktreeName, StatusBadge } from "./Sidebar.tsx";
@@ -411,7 +412,8 @@ export function InboxList({ ref, machines, activity, watching, wide, filter, onF
               // what a screen reader hears for the row: who it is, how it is, what it says, then for how long
               const spoken = [row.kind ? agentName(row.kind) : null, row.title, row.state, row.line === row.state ? null : row.line, age].filter((part) => part !== null).join(", ");
               return (
-                <Fragment key={row.key}><li className={`inbox-item${row.online ? "" : " is-offline"}${row.asks ? " is-asking" : ""}${open ? " is-current" : ""}`} {...row.forkTree} data-machine={row.machine.id} data-pane={row.pane.pane_id} data-state={row.group}>
+                <li key={row.key} className={`inbox-item${row.online ? "" : " is-offline"}${row.asks ? " is-asking" : ""}${open ? " is-current" : ""}`} {...row.forkTree} data-machine={row.machine.id} data-pane={row.pane.pane_id} data-state={row.group}>
+                  {row.forkFold && <ForkHelpersFace open={row.forkFold.open} agentTitle={row.title} onToggle={() => helperFolds.toggle(row.forkFold!.key)} />}
                   <button type="button" className="inbox-row" disabled={!row.online} aria-label={spoken} aria-current={open ? "true" : undefined}
                     ref={(node) => { if (node) rowNodes.current.set(row.key, node); else rowNodes.current.delete(row.key); }}
                     title={wide ? [row.title, row.line, at === null ? null : `${age} · ${at.toLocaleString(resolvedLanguage)}`].filter((part) => part !== null).join("\n") : undefined}
@@ -421,13 +423,14 @@ export function InboxList({ ref, machines, activity, watching, wide, filter, onF
                     <span className="inbox-body">
                       <span className="inbox-line">
                         <span className="inbox-name">{row.title}</span>
+                        <ForkFoldCount count={row.forkFold?.hidden ?? 0} />
                         {!wide && at !== null && <time className="inbox-time" dateTime={at.toISOString()} title={at.toLocaleString(resolvedLanguage)}>{age}</time>}
                       </span>
                       {wide ? words : <span className="inbox-sub">{words}{stateMark(row.status, row.failed, row.state)}</span>}
                     </span>
                     {wide && stateMark(row.status, row.failed, row.state)}
                   </button>
-                </li><ForkHelpersLine fold={row.forkFold} agentTitle={row.title} onToggle={helperFolds.toggle} /></Fragment>
+                </li>
               );
             })}
           </ul>

@@ -49,15 +49,13 @@ function withTree<T extends InboxRow>(rows: readonly T[], depths: readonly numbe
   });
 }
 
-/** The line under an agent that folds its helpers (AgentSidebar.tsx's), on that agent's row. */
+/** An agent's fold of its helpers (HelpersFace.tsx), on that agent's row. */
 export interface ForkFold {
   /** the agent's pin key, which the device keeps open */
   key: string;
   open: boolean;
-  /** each helper's state, folded or not */
-  states: AgentGroup[];
-  /** a helper in sight follows: the line runs on */
-  more: boolean;
+  /** how many helpers the fold hides */
+  hidden: number;
 }
 
 /** How the list folds helpers: off, or the agents kept open, each row's state, and the rows that stay in sight. */
@@ -70,8 +68,7 @@ export interface ForkFolds<T extends InboxRow> {
 }
 
 /**
- * Settings → Fold helpers under their agent, as the sidebar folds them: an agent's helpers fold under one line after
- * its row, except one that needs the reader and the open one, and the tree joins the rows in sight.
+ * Settings → Fold helpers under their agent, as the sidebar folds them: an agent's helpers fold into its row, except one that needs the reader and the open one, and the tree joins the rows in sight.
  */
 export function forkInboxFolded<T extends InboxRow>(rows: readonly T[], enabled: boolean, folds: ForkFolds<T>): (T & { forkTree: ForkTree; forkFold?: ForkFold })[] {
   const nested = forkInboxNesting(rows, enabled);
@@ -92,6 +89,6 @@ export function forkInboxFolded<T extends InboxRow>(rows: readonly T[], enabled:
     const key = keyOf(row);
     const helpers = helpersOf.get(key);
     if (helpers === undefined) return row;
-    return { ...row, forkFold: { key, open: folds.open.includes(key), states: helpers.map(folds.stateOf), more: helpers.some((helper) => !folded.has(keyOf(helper))) } };
+    return { ...row, forkFold: { key, open: folds.open.includes(key), hidden: helpers.filter((helper) => folded.has(keyOf(helper))).length } };
   });
 }

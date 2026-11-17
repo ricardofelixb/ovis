@@ -35,6 +35,7 @@ import type { Friend } from "../../shared/friends.ts";
 import { friendKey } from "../../shared/friends.ts";
 import { useFriends } from "../lib/friends.ts";
 import { ForkRolePicture } from "../fork/friends/AgentRole.tsx";
+import { ForkFoldCount, ForkHelpersFace } from "../fork/inbox/HelpersFace.tsx";
 import { RowMenu } from "./RowMenu.tsx";
 import { BackgroundBadge, compactWorktreeName, ContextBadge, displayPaneTitle, onRowContextMenu, PlanBadge, StatusBadge } from "./Sidebar.tsx";
 import "./AgentSidebar.css";
@@ -109,7 +110,7 @@ export function blockedLabel(pane: Pick<HerdrPane, "agent_kind" | "agent_message
  * One agent in a list: the coding agent's mark, what it is working on, who and where it is, what
  * its plugins report, and how it is doing.
  */
-function AgentRowBody({ mark, friend, markKind, title, name, context, tokens, backgroundTasks, plan, paneContext, status, note = null, muted, locked = false, blockedNote: blocked = null, blockedLabel: blockedShort = null, progress, helper = false, since = null, role }: AgentRowBodyProps) {
+function AgentRowBody({ mark, friend, markKind, title, name, context, tokens, backgroundTasks, plan, paneContext, status, note = null, muted, locked = false, blockedNote: blocked = null, blockedLabel: blockedShort = null, progress, helper = false, since = null, role, forkFolded = 0 }: AgentRowBodyProps & { forkFolded?: number }) {
   const t = useT();
   const showProgress = progress !== undefined && (status === "working" || status === "blocked");
   return <>
@@ -119,6 +120,7 @@ function AgentRowBody({ mark, friend, markKind, title, name, context, tokens, ba
       <span className="agent-main">
         <span className="agent-title-line">
           <span className="agent-title">{title}</span>
+          <ForkFoldCount count={forkFolded} />
           {/* the agent's own words, as text, cut to fit: what it waits for while it is blocked (the tooltip says it all) */}
           {status === "blocked" && blockedShort && <span className="agent-blocked" aria-hidden={blocked !== null && blocked !== blockedShort ? "true" : undefined}>{blockedShort}</span>}
           {status === "blocked" && blocked !== null && blocked !== blockedShort && <span className="visually-hidden">{blocked}</span>}
@@ -630,10 +632,22 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
   const helpersLine = (agentRow: AgentRow, helpers: readonly AgentRow[], hidden: boolean) => {
     const key = sidebarPinKey(agentRow.machine.id, agentRow.entry.pane.pane_id);
     const open = openHelpers.includes(key);
+    const states = helpers.map((row) => agentGroup(rowStatus(row)));
+    const blockedCount = states.filter((state) => state === "blocked").length;
+    const workingCount = states.filter((state) => state === "working").length;
     // its tree line runs on to the helpers in sight under it
     const more = helpers.some((row) => !foldedHelpers.has(row));
+    // whose helpers they are, by the title that agent's row draws
+    const helpersOfTitle = t("Helpers of {title}", { title: describe(agentRow).title });
     return <li className="agent-helpers" key={`helpers:${key}`} data-helpers-of={key} data-more={more ? "" : undefined} hidden={hidden || undefined}>
-      <HelpersToggle open={open} agentTitle={describe(agentRow).title} states={helpers.map((row) => agentGroup(rowStatus(row)))} onToggle={() => toggleHelpers(key)} />
+      <button type="button" className="agent-helpers-toggle" aria-expanded={open} title={helpersOfTitle} onClick={() => toggleHelpers(key)}>
+        {open ? <ChevronDown className="agent-section-caret" aria-hidden="true" /> : <ChevronRight className="agent-section-caret" aria-hidden="true" />}
+        <span className="agent-helpers-name" aria-hidden="true">{t("Helpers")}</span>
+        <span className="visually-hidden">{helpersOfTitle}</span>
+        {blockedCount > 0 && <span className="agent-named-group-dot" data-state="blocked" title={t("{count} need you", { count: blockedCount })}><span className="visually-hidden">{t("{count} need you", { count: blockedCount })}</span></span>}
+        {workingCount > 0 && <span className="agent-named-group-dot" data-state="working" title={t("{count} working", { count: workingCount })}><span className="visually-hidden">{t("{count} working", { count: workingCount })}</span></span>}
+        <span className="agent-section-count">{helpers.length}</span>
+      </button>
     </li>;
   };
   // a list's rows, each agent followed by its helpers line while the helpers fold; `hidden` is a fold above them all,
@@ -667,6 +681,9 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
     const since = stateBegan === null ? null : stateAge(Math.max(0, now - stateBegan));
     const tooltip = [...new Set([pane.pane_id, title, ownTitle, agent?.title?.trim(), place, machines.length === 1 ? machine.name : null, startedBy, blocked, progress, ...tokens, markKind, name, agent?.display_agent, pane.cwd, online ? null : stateWord(machine)].filter(Boolean))].join("\n");
     const pinKey = sidebarPinKey(machine.id, pane.pane_id);
+    // the fork folds an agent's helpers as a workspace folds its worktrees: its picture is the fold, its row says +N
+    const forkHelpers = helpersOf.get(row) ?? [];
+    const forkFace = settings.agentFriends && forkHelpers.length > 0;
     const menuOpen = menu?.key === pinKey;
     // one menu for the ⋯ and a right-click, which opens it at the pointer and leaves the focus where it was
     const toggleMenu = (anchor: HTMLElement, point?: { x: number; y: number }, previousFocus?: HTMLElement | null): void =>
@@ -680,6 +697,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
       data-state-own={group !== undefined && !stateSaid ? "" : undefined}
       onMouseDownCapture={(event) => { if (event.button === 2 || (event.button === 0 && event.ctrlKey)) event.preventDefault(); }}
       onContextMenu={(event) => onRowContextMenu(event, toggleMenu)}>
+      {forkFace && <ForkHelpersFace open={openHelpers.includes(pinKey)} agentTitle={title} onToggle={() => toggleHelpers(pinKey)} />}
       <button type="button" className="agent-select agent-row" disabled={!online} aria-current={selected ? "true" : undefined} title={tooltip} onClick={() => onSelect(machine.id, pane.pane_id)}
         onPointerDown={(event) => { if (event.button === 0 && !event.ctrlKey && online && !selected && pane.agent != null) pressPane?.(machine.id, pane.pane_id); }}
         draggable={online}
@@ -690,7 +708,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
         }}>
         {missingContext && <span className="visually-hidden">{missingContext} · </span>}
         {/* a saved roster's state is not news: a PC that is away says nothing about its agents */}
-        <AgentRowBody mark={mark} friend={friends[friendKey(machine.id, entry.pane.pane_id)]} markKind={markKind} title={title} name={name} context={context} tokens={tokens} backgroundTasks={online ? pane.background_tasks : 0} plan={online ? pane.plan : undefined} paneContext={online && settings.sidebarContext ? pane.context : undefined} status={status} note={filterContext && selected ? t("Selected") : null} muted={muted?.includes(paneMuteKey(machine.id, pane.pane_id)) === true} locked={locked.has(pinKey)} blockedNote={blocked} blockedLabel={blockedShort} progress={online ? pane.agent_progress : undefined} helper={depth > 0} since={since} role={pane.agent_role} />
+        <AgentRowBody mark={mark} friend={friends[friendKey(machine.id, entry.pane.pane_id)]} markKind={markKind} title={title} name={name} context={context} tokens={tokens} backgroundTasks={online ? pane.background_tasks : 0} plan={online ? pane.plan : undefined} paneContext={online && settings.sidebarContext ? pane.context : undefined} status={status} note={filterContext && selected ? t("Selected") : null} muted={muted?.includes(paneMuteKey(machine.id, pane.pane_id)) === true} locked={locked.has(pinKey)} blockedNote={blocked} blockedLabel={blockedShort} progress={online ? pane.agent_progress : undefined} helper={depth > 0} since={since} role={pane.agent_role} forkFolded={forkFace ? forkHelpers.filter((helper) => foldedHelpers.has(helper)).length : 0} />
       </button>
       <div className="agent-actions">
         <button type="button" className="sidebar-row-action row-menu-toggle" aria-label={t("More for {title}", { title })} aria-haspopup={sheet ? "dialog" : "menu"} aria-expanded={menuOpen} onClick={(event) => toggleMenu(event.currentTarget)}>
@@ -874,23 +892,4 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
       }]),
     ]} />}
   </section>;
-}
-
-/**
- * The button of the line under an agent that folds its helpers: its caret, how many, and a dot for each state among
- * them that asks for a look. `agentTitle` is the title that agent's row draws: whose helpers they are.
- */
-export function HelpersToggle({ open, agentTitle, states, onToggle }: { open: boolean; agentTitle: string; states: readonly AgentGroup[]; onToggle(): void }) {
-  const t = useT();
-  const blockedCount = states.filter((state) => state === "blocked").length;
-  const workingCount = states.filter((state) => state === "working").length;
-  const helpersOfTitle = t("Helpers of {title}", { title: agentTitle });
-  return <button type="button" className="agent-helpers-toggle" aria-expanded={open} title={helpersOfTitle} onClick={onToggle}>
-    {open ? <ChevronDown className="agent-section-caret" aria-hidden="true" /> : <ChevronRight className="agent-section-caret" aria-hidden="true" />}
-    <span className="agent-helpers-name" aria-hidden="true">{t("Helpers")}</span>
-    <span className="visually-hidden">{helpersOfTitle}</span>
-    {blockedCount > 0 && <span className="agent-named-group-dot" data-state="blocked" title={t("{count} need you", { count: blockedCount })}><span className="visually-hidden">{t("{count} need you", { count: blockedCount })}</span></span>}
-    {workingCount > 0 && <span className="agent-named-group-dot" data-state="working" title={t("{count} working", { count: workingCount })}><span className="visually-hidden">{t("{count} working", { count: workingCount })}</span></span>}
-    <span className="agent-section-count">{states.length}</span>
-  </button>;
 }

@@ -15,6 +15,41 @@
   border-radius: var(--radius-circle);
 }
 
+/* An agent folds its helpers as a workspace folds its worktrees (fork HelpersFace.tsx): its picture is the fold, a
+   button over it that shows the caret under a pointer or the keyboard, and its title says +N. No line under it. */
+[data-fork-agent-friends="true"] .agent-helpers { display: none; }
+.fork-helpers-face {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--fork-face, var(--side-box));
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.fork-helpers-face > svg { display: none; width: var(--icon-size); height: var(--icon-size); }
+.fork-helpers-face:focus-visible > svg { display: block; }
+:is(.agent-item, .inbox-item):has(> .fork-helpers-face:focus-visible) :is(.agent-row > .sidebar-mark, .inbox-avatar) { visibility: hidden; }
+@media (hover: hover) {
+  .fork-helpers-face:hover > svg { display: block; }
+  :is(.agent-item, .inbox-item):has(> .fork-helpers-face:hover) :is(.agent-row > .sidebar-mark, .inbox-avatar) { visibility: hidden; }
+}
+.mode-inbox .inbox-item:has(> .fork-helpers-face) {
+  position: relative;
+  --fork-face: calc(2 * var(--inbox-inset) + var(--inbox-avatar));
+}
+.mode-inbox.is-wide .inbox-item:has(> .fork-helpers-face) { --fork-face: calc(2 * var(--space-2) + var(--inbox-avatar)); }
+/* the +N follows the title, as in the sidebar; the time keeps the end */
+.mode-inbox .inbox-name:has(+ .workspace-fold-count) { flex: 0 1 auto; }
+.mode-inbox .inbox-line > .workspace-fold-count { margin-inline-end: auto; }
+
 /* a helper under its agent is its title alone, after the tree's elbow: no picture (its tab chip keeps one), and a
    level steps in to where the title above it starts, as in the agent inbox */
 .agent-item[data-depth] { --tree-step: calc(var(--space-3) + var(--space-2)); }
@@ -87,11 +122,11 @@
 .mode-inbox.is-wide .inbox-item { padding-block: calc(var(--space-1) / 2); }
 
 /* the agent's row has room under its mark: the line starts right under the mark, as the sidebar's does */
-.mode-inbox .inbox-item:has(+ :is(.inbox-item[data-depth="1"], .agent-helpers)):not([data-depth]) {
+.mode-inbox .inbox-item:has(+ .inbox-item[data-depth="1"]):not([data-depth]) {
   position: relative;
 }
 
-.mode-inbox .inbox-item:has(+ :is(.inbox-item[data-depth="1"], .agent-helpers)):not([data-depth])::after {
+.mode-inbox .inbox-item:has(+ .inbox-item[data-depth="1"]):not([data-depth])::after {
   position: absolute;
   top: calc(50% + var(--inbox-avatar) / 2 + var(--space-1));
   bottom: 0;
@@ -133,18 +168,9 @@
   font-weight: var(--fw-regular);
 }
 
-/* the sidebar's line that folds an agent's helpers (AgentSidebar.css), a helper's height and place here */
-.mode-inbox .agent-helpers-toggle {
-  min-height: var(--control-h);
-  padding-inline-start: calc(var(--tree-x) + var(--space-3) + var(--space-1));
-  padding-inline-end: var(--space-3);
-}
-.mode-inbox.is-wide .agent-helpers { padding-block: calc(var(--space-1) / 2); }
-
 /* a finger still gets its target */
 @media (pointer: coarse) {
-  .mode-inbox .inbox-item[data-depth] > .inbox-row,
-  .mode-inbox .agent-helpers-toggle {
+  .mode-inbox .inbox-item[data-depth] > .inbox-row {
     min-height: var(--touch-target);
   }
 }
