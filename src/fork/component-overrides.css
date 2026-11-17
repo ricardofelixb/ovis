@@ -19,6 +19,7 @@
    level steps in to where the title above it starts, as in the agent inbox */
 .agent-item[data-depth] { --tree-step: calc(var(--space-3) + var(--space-2)); }
 .agent-item[data-depth] .agent-row > .sidebar-mark { display: none; }
+.agent-item[data-depth] .agent-title { font-size: var(--fs-sm); }
 .agent-item[data-depth="1"] .agent-row { padding-inline-start: calc(var(--side-box) / 2 + var(--tree-step)); }
 .agent-item[data-depth="2"] .agent-row { padding-inline-start: calc(var(--side-box) / 2 + 2 * var(--tree-step)); }
 
@@ -123,6 +124,10 @@
 .mode-inbox .inbox-item[data-depth] .inbox-words {
   display: none;
 }
+
+/* a helper's title is a step smaller than its agent's, here as in the sidebar */
+.mode-inbox .inbox-item[data-depth] .inbox-name { font-size: var(--fs-md); }
+.mode-inbox.is-wide .inbox-item[data-depth] .inbox-name { font-size: var(--fs-sm); }
 
 .mode-inbox .inbox-item[data-depth]:not(.is-current) .inbox-name {
   font-weight: var(--fw-regular);
