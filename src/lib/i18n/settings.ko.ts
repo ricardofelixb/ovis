@@ -1,7 +1,7 @@
 /**
  * Korean for the keys only the settings files use:
  * components/SettingsDialog.tsx (with THEME_NAMES), components/SignOutRow.tsx, components/KeyBarSettings.tsx,
- * components/SettingsControls.tsx, components/TelemetryControls.tsx, lib/paletteSettings.ts.
+ * components/SettingsControls.tsx, components/TelemetryControls.tsx, components/MuteHelpersRow.tsx, lib/paletteSettings.ts.
  * Register and fixed terms follow ../i18n.ko.ts; a key another feature also uses goes there.
  */
 export const SETTINGS_KO: Record<string, string> = {
@@ -155,6 +155,9 @@ export const SETTINGS_KO: Record<string, string> = {
   "Every turn": "매번",
   "In the app": "앱 안에서",
   "Play sounds": "알림 소리 재생",
+  "Mute helpers": "도우미 알림 끄기",
+  "On every device, agents another agent started send no alerts; the one that started them still does.": "모든 기기에서, 다른 에이전트가 시작한 에이전트는 알림을 보내지 않습니다. 시작한 에이전트는 계속 알립니다.",
+  "On every device, a helper (an agent another agent started) sends no alert, push, notification or sound. The agent that started it still alerts. Only herdr-core tells helpers apart.": "모든 기기에서, 도우미(다른 에이전트가 시작한 에이전트)는 푸시, 알림, 소리 어느 것도 보내지 않습니다. 도우미를 시작한 에이전트는 계속 알립니다. 도우미는 herdr-core에서만 구분됩니다.",
   "While a tab of the app is open, it chimes for these alerts, also when a Focus or Do Not Disturb silences notifications.": "앱 탭이 열려 있으면 집중·방해 금지 중에도 알림 소리 재생",
   "Quick reply {number}": "빠른 답장 {number}",
   "Remove quick reply {number}": "빠른 답장 {number} 삭제",

@@ -28,6 +28,7 @@ import { paneLifetimes } from "../lib/paneLifetime.ts";
 import { KeyBarSettings, KeyBarToggles } from "./KeyBarSettings.tsx";
 import { FileTextSizeRow } from "./FileTextSizeRow.tsx";
 import { FoldHelpersRow } from "./FoldHelpersRow.tsx";
+import { MuteHelpersRow } from "./MuteHelpersRow.tsx";
 import { FilesPanelRow } from "./FilesPanelRow.tsx";
 import { onSettingsHistory, recordSettings, settingsEntry, settingsLevels, type SettingsLevel } from "../lib/settingsHistory.ts";
 import { ThemeFiles, themeLabel } from "./ThemeFiles.tsx";
@@ -720,6 +721,9 @@ function AlertsPage({ onEnableNotifications, machines }: { onEnableNotifications
           if (alertSound) void unlockAlertSound().then((ready) => { if (ready && alertSoundWanted.current) previewAlertSound(); });
         }} />
       </SettingsRow>
+    </SettingsGroup>
+    <SettingsGroup>
+      <MuteHelpersRow />
     </SettingsGroup>
     <AlertPcsGroup machines={machines} />
     {/* a destination's last failed post is said in its group, so the group stays in sight */}

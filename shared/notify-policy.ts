@@ -111,3 +111,11 @@ export function alertsAllow(prefs: AlertPrefs, status: AgentStatus, agentKind?: 
 export function paneAlertsMuted(mutedPanes: readonly string[] | null | undefined, machineId: string, paneId: string): boolean {
   return mutedPanes != null && mutedPanes.includes(paneStorageId(machineId, paneId));
 }
+
+/**
+ * Settings -> Alerts -> Mute helpers: a helper (a pane another agent started, herdr-core's `parent_pane_id`)
+ * alerts on no channel, push, in-app, chime or notification. The agent that started it still alerts.
+ */
+export function helperAlertsMuted(muteHelpers: unknown, helper: boolean): boolean {
+  return muteHelpers === true && helper;
+}

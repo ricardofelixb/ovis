@@ -1,7 +1,7 @@
 /**
  * Simplified Chinese for the keys only the settings files use:
  * components/SettingsDialog.tsx (with THEME_NAMES), components/SignOutRow.tsx, components/KeyBarSettings.tsx,
- * components/SettingsControls.tsx, components/TelemetryControls.tsx, lib/paletteSettings.ts.
+ * components/SettingsControls.tsx, components/TelemetryControls.tsx, components/MuteHelpersRow.tsx, lib/paletteSettings.ts.
  * Register and fixed terms follow ../i18n.zh.ts; a key another feature also uses goes there.
  */
 export const SETTINGS_ZH: Record<string, string> = {
@@ -155,6 +155,9 @@ export const SETTINGS_ZH: Record<string, string> = {
   "Every turn": "每一轮",
   "In the app": "应用内",
   "Play sounds": "播放提示音",
+  "Mute helpers": "静音助手",
+  "On every device, agents another agent started send no alerts; the one that started them still does.": "在所有设备上，由另一个代理启动的代理不发送提醒；启动它们的代理仍会提醒。",
+  "On every device, a helper (an agent another agent started) sends no alert, push, notification or sound. The agent that started it still alerts. Only herdr-core tells helpers apart.": "在所有设备上，助手（由另一个代理启动的代理）不会发送推送、通知或提示音。启动它的代理仍会提醒。只有 herdr-core 能识别助手。",
   "While a tab of the app is open, it chimes for these alerts, also when a Focus or Do Not Disturb silences notifications.": "应用的标签页打开时，每条提醒都会响起提示音。即使专注模式或勿扰模式让通知静音，也能听到。",
   "Quick reply {number}": "快捷回复 {number}",
   "Remove quick reply {number}": "删除快捷回复 {number}",

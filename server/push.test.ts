@@ -5,7 +5,7 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import webpush from "web-push";
 
-import { paneAlertsMuted, type AlertPrefs } from "../shared/notify-policy.ts";
+import { helperAlertsMuted, paneAlertsMuted, type AlertPrefs } from "../shared/notify-policy.ts";
 import { paneStorageId } from "../shared/machines.ts";
 import type { AgentStatus, HerdrPane, InteractivePrompt, SessionSnapshot } from "../shared/protocol.ts";
 import { CompletionTracker } from "./completion.ts";
@@ -1445,6 +1445,22 @@ describe("the shared pane mute (shared/preferences.ts muted_panes)", () => {
       stop();
       release?.();
     }
+  });
+
+  it("Mute helpers silences a helper, never the agent that started it", async () => {
+    let muteHelpers = true;
+    const push = createPushService({ loopbackHttp: true, stateDir, timing: { short: 0, long: 0, longTurn: 0 }, muted: (_machineId, _paneId, helper) => helperAlertsMuted(muteHelpers, helper) });
+    push.subscribe(fake.subscription, { input: true, done: "always" });
+    push.seed([pane("w1:p1", "working", "agent"), { ...pane("w1:p2", "working", "helper"), parent_pane_id: "w1:p1" }]);
+    await push.onStatus("w1:p2", "blocked");
+    await push.onStatus("w1:p1", "blocked");
+    await push.settled();
+    expect(fake.received.map((r) => r.payload.title)).toEqual(["agent"]);
+    muteHelpers = false;
+    await push.onStatus("w1:p2", "working");
+    await push.onStatus("w1:p2", "blocked");
+    await push.settled();
+    expect(fake.received.map((r) => r.payload.title)).toEqual(["agent", "helper"]);
   });
 
   it("holds back the phone app's native push as the browser's", async () => {

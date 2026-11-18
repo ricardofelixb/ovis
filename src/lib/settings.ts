@@ -79,6 +79,8 @@ export interface Settings {
   agentLocks: boolean;
   /** Settings -> Experimental -> OpenCode: subagent ends from their session: the server ends an OpenCode subagent where its parent session's record does (server/opencode-subagents.ts); off, by its own rows */
   opencodeParentEnds: boolean;
+  /** Settings -> Alerts -> Mute helpers: a helper (a pane another agent started) alerts on no channel; the server's push reads it too (shared/notify-policy.ts helperAlertsMuted) */
+  muteHelpers: boolean;
   /** Settings -> Experimental -> OMP on macOS herdr-core: the server reads an omp pane's chat from the session its omp holds open, through lsof (server/omp.ts ompHeldOpen); off, the chat there falls back to the terminal */
   ompHeldFiles: boolean;
   restoreReplacedServer: boolean;
@@ -203,7 +205,7 @@ export type DiffStyle = (typeof DIFF_STYLES)[number];
  * Settings field in the projection makes a new field require an explicit collection decision. */
 type TelemetrySourceSettings = Omit<Settings,
   "keyBarExtras" | "keyBarItems" | "keyBarExpanded" | "shortcutOverrides" | "herdrPrefixKeys" | "terminalFontFamily" | "chatFontFamily" | "uiFontFamily"
-  | "quickReplies" | "agentLocks" | "lockedAgents" | "opencodeParentEnds" | "ompHeldFiles" | "restoreReplacedServer" | "agentNamedGroups" | "agentGroupNames" | "agentGroupOf" | "usageOrder" | "usageHidden" | "fileOpen" | "filesPanel" | "webLinks" | "reuseExternalLinkTab" | "claudeLaunchMode" | "codexLaunchMode"
+  | "quickReplies" | "agentLocks" | "lockedAgents" | "opencodeParentEnds" | "muteHelpers" | "ompHeldFiles" | "restoreReplacedServer" | "agentNamedGroups" | "agentGroupNames" | "agentGroupOf" | "usageOrder" | "usageHidden" | "fileOpen" | "filesPanel" | "webLinks" | "reuseExternalLinkTab" | "claudeLaunchMode" | "codexLaunchMode"
   | "claudeLaunchModel" | "claudeLaunchEffort" | "codexLaunchModel" | "codexLaunchEffort"
   | "followHerdrFocus" | "sidebarPeek" | "phoneInbox" | "sidebarBackgroundWorkspaces" | "codexDrag" | "composerArtifacts" | "composerPasteSend" | "composerBtw" | "terminalMirrorWrap" | "sidebarFilter" | "sidebarContext" | "sidebarAgentTree" | "foldHelpers" | "pcLoad"
   | "expandThinking" | "foldWork" | "customThemes" | "autoTabNames" | "voiceEngine" | "agentGroups" | "agentGroupSort" | "terminalImages" | "terminalAttachButton"
@@ -274,7 +276,7 @@ export function telemetrySettingsSnapshot(settings: Settings): TelemetrySettings
 
 export const SETTING_SCOPE = {
   theme: "shared", palette: "shared", darkTheme: "shared", lightTheme: "shared", language: "shared", sidebarRows: "shared", agentOrder: "shared",
-  agentMarks: "shared", agentLocks: "shared", lockedAgents: "shared", opencodeParentEnds: "shared", ompHeldFiles: "shared", restoreReplacedServer: "shared", agentNamedGroups: "shared", agentGroupNames: "shared", agentGroupOf: "shared", autoSendQueued: "shared", autoTabNames: "shared", showThinking: "shared", quickReplies: "shared",
+  agentMarks: "shared", agentLocks: "shared", lockedAgents: "shared", opencodeParentEnds: "shared", muteHelpers: "shared", ompHeldFiles: "shared", restoreReplacedServer: "shared", agentNamedGroups: "shared", agentGroupNames: "shared", agentGroupOf: "shared", autoSendQueued: "shared", autoTabNames: "shared", showThinking: "shared", quickReplies: "shared",
   showQuickReplies: "shared", showUsage: "shared", usageCount: "shared",
   usageGlance: "shared", usageOrder: "shared", usageHidden: "shared", defaultView: "device", suggestionChip: "device",
   terminalInputMode: "device", keyBarExtras: "device", keyBarItems: "device", keyBarExpanded: "device", shortcutOverrides: "device", herdrPrefixKeys: "device", density: "device", phoneTabs: "device",
@@ -337,6 +339,7 @@ export const DEFAULT_SETTINGS: Settings = {
   agentMarks: "color",
   agentLocks: false,
   opencodeParentEnds: false,
+  muteHelpers: false,
   ompHeldFiles: false,
   restoreReplacedServer: false,
   lockedAgents: [],
@@ -539,6 +542,7 @@ export function sanitizeSettings(raw: unknown): Settings {
     agentMarks: record["agentMarks"] === "color" || record["agentMarks"] === "mono" ? record["agentMarks"] : DEFAULT_SETTINGS.agentMarks,
     agentLocks: typeof record["agentLocks"] === "boolean" ? record["agentLocks"] : DEFAULT_SETTINGS.agentLocks,
     opencodeParentEnds: typeof record["opencodeParentEnds"] === "boolean" ? record["opencodeParentEnds"] : DEFAULT_SETTINGS.opencodeParentEnds,
+    muteHelpers: typeof record["muteHelpers"] === "boolean" ? record["muteHelpers"] : DEFAULT_SETTINGS.muteHelpers,
     ompHeldFiles: typeof record["ompHeldFiles"] === "boolean" ? record["ompHeldFiles"] : DEFAULT_SETTINGS.ompHeldFiles,
     restoreReplacedServer: typeof record["restoreReplacedServer"] === "boolean" ? record["restoreReplacedServer"] : DEFAULT_SETTINGS.restoreReplacedServer,
     lockedAgents: Array.isArray(record["lockedAgents"])

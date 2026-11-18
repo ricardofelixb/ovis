@@ -893,6 +893,13 @@ describe("chat font size", () => {
 });
 
 describe("queued messages", () => {
+  it("Mute helpers is off by default and shared with every device", () => {
+    expect(DEFAULT_SETTINGS.muteHelpers).toBe(false);
+    expect(sanitizeSettings({ muteHelpers: true }).muteHelpers).toBe(true);
+    expect(sanitizeSettings({ muteHelpers: "yes" }).muteHelpers).toBe(false);
+    expect(SETTING_SCOPE.muteHelpers).toBe("shared");
+  });
+
   it("sends queued messages by themselves unless that was turned off", () => {
     expect(DEFAULT_SETTINGS.autoSendQueued).toBe(true);
     expect(sanitizeSettings({}).autoSendQueued).toBe(true);

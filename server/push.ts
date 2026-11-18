@@ -45,7 +45,9 @@
  * A pane on the shared mute list (`muted`, shared/preferences.ts `muted_panes`) gets no alert
  * on any device: none is scheduled for it, one already waiting is called off when the list
  * changes (`mutesChanged`), and the list is asked again right before a waiting one goes out.
- * Its status is tracked all the same, so an unmute tells only what changes after it.
+ * Its status is tracked all the same, so an unmute tells only what changes after it. `muted` is also
+ * told whether the pane is a helper (`parent_pane_id`: another agent started it), for Settings ->
+ * Alerts -> Mute helpers.
  *
  * Each device also says which kinds of alert it wants (shared/notify-policy.ts AlertPrefs: a
  * question, a permission, a finish, an error) and which PCs it hears nothing of (`pcs_off`, by the
@@ -208,7 +210,7 @@ export interface PushServiceOptions {
   now?: () => number;
   canDeliver?: (deviceId: string | null | undefined) => boolean;
   inUse?: () => boolean;
-  muted?: (machineId: string, paneId: string) => boolean;
+  muted?: (machineId: string, paneId: string, helper: boolean) => boolean;
   /** accept plain-http loopback endpoints: only for the tests' fake push service (push.fake.ts) */
   loopbackHttp?: boolean;
   onAlertDelivered?: () => void;
@@ -772,7 +774,9 @@ export function createPushService(options: PushServiceOptions): PushService {
     waiting.delete(key);
   }
 
-  const muted = (machineId: string, paneId: string): boolean => options.muted?.(machineId, paneId) === true;
+  // the panes another agent started, as last seeded
+  const helpers = new Set<string>();
+  const muted = (machineId: string, paneId: string): boolean => options.muted?.(machineId, paneId, helpers.has(paneStorageId(machineId, paneId))) === true;
   // A web push the device received has to be shown (iOS takes the subscription away from a page
   // that shows none), so a device's alert choices are applied here, not on the device.
   const wants = (subscription: PushSubscriptionRecord, kind: AlertKind, machineId: string): boolean => {
@@ -904,6 +908,7 @@ export function createPushService(options: PushServiceOptions): PushService {
         titles.set(key, `${machineName ? machineName + " · " : ""}${pushPaneTitle(pane)}`);
         workspaces.set(key, pane.workspace_id);
         if (pane.agent_kind) kinds.set(key, pane.agent_kind); else kinds.delete(key);
+        if (pane.parent_pane_id) helpers.add(key); else helpers.delete(key);
         if (!lastStatus.has(key)) lastStatus.set(key, pane.agent_status);
       }
     },
@@ -920,6 +925,7 @@ export function createPushService(options: PushServiceOptions): PushService {
         changes.delete(key);
         turnStart.delete(key);
         lastStatus.delete(key);
+        helpers.delete(key);
       }
       for (const pane of panes) {
         if (newer.has(pane.pane_id)) continue;

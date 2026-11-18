@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type { AgentStatus, HerdrPane, ServerMessage } from "../../shared/protocol.ts";
-import type { AlertPrefs } from "../../shared/notify-policy.ts";
+import { helperAlertsMuted, type AlertPrefs } from "../../shared/notify-policy.ts";
 import { paneStorageId, pcAlertKey, type Machine } from "../../shared/machines.ts";
 import { keyedAlertPcs, readAlertFilters, updateAlertFilters } from "./alertFilters.ts";
 import { alertPaneTitle } from "../components/Sidebar.tsx";
@@ -40,6 +40,11 @@ export interface AlertSignalsParams {
 }
 
 export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRef, splitShownRef, machinesRef, alertsRef, alertsOnRef, pushOnRef, statusRef, turnStartRef, lastTurnRef, alertSoundRef }: AlertSignalsParams) {
+  // a pane on the mute list, or a helper while helpers are muted, alerts on no channel
+  const muteHelpersRef = useRef(settings.muteHelpers);
+  muteHelpersRef.current = settings.muteHelpers;
+  const paneMuted = useCallback((machineId: string, paneId: string, pane: HerdrPane | undefined): boolean =>
+    paneAlertsMuted(currentPaneMutes(), machineId, paneId) || helperAlertsMuted(muteHelpersRef.current, Boolean(pane?.parent_pane_id)), []);
   const dropIn = useCallback((machine: Machine, pane: HerdrPane, kind: DropletKind) => {
     if (!alertsOnRef.current || document.visibilityState !== "visible") return;
     const open = selectionRef.current;
@@ -101,7 +106,7 @@ export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRe
     const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
     const worked = trackTurn(turnStartRef.current, key, previous, status, Date.now());
     if (worked !== null) lastTurnRef.current.set(key, worked);
-    const muted = paneAlertsMuted(currentPaneMutes(), machine.id, message.pane_id) || !alertPcAllowed(alertsRef.current, pcAlertKey(machine), machine.name);
+    const muted = paneMuted(machine.id, message.pane_id, pane) || !alertPcAllowed(alertsRef.current, pcAlertKey(machine), machine.name);
     if (pane && !muted && shouldNotifyStatus(previous, status) && dropletAllows(alertsRef.current, status, worked, pane.agent_kind)) {
       const kind = status === "blocked" ? "blocked" : "done";
       dropIn(machine, pane, kind);
@@ -113,11 +118,11 @@ export function useAlertSignals({ settings, selectionRef, drawerOpenRef, splitRe
     const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
     const worked = endedTurn(turnStartRef.current, lastTurnRef.current, paneStorageId(machine.id, message.pane_id), Date.now());
     if (!alertPcAllowed(alertsRef.current, pcAlertKey(machine), machine.name)) return;
-    if (pane && !paneAlertsMuted(currentPaneMutes(), machine.id, message.pane_id) && dropletAllows(alertsRef.current, "done", worked)) {
+    if (pane && !paneMuted(machine.id, message.pane_id, pane) && dropletAllows(alertsRef.current, "done", worked)) {
       dropIn(machine, pane, "ended");
       chime(machine, pane, "done");
     }
-    if (message.type === "pane-exited" && alertsOnRef.current && !pushOnRef.current && alertsRef.current.done !== "off" && !paneAlertsMuted(currentPaneMutes(), machine.id, message.pane_id)) {
+    if (message.type === "pane-exited" && alertsOnRef.current && !pushOnRef.current && alertsRef.current.done !== "off" && !paneMuted(machine.id, message.pane_id, pane)) {
       const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
       if (pane) showPaneEndedNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, view: "chat", workspace_id: pane.workspace_id }), machine.id, pane.workspace_id);
     }

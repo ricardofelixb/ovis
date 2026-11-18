@@ -1,7 +1,7 @@
 /**
  * Japanese for the keys only the settings files use:
  * components/SettingsDialog.tsx (with THEME_NAMES), components/SignOutRow.tsx, components/KeyBarSettings.tsx,
- * components/SettingsControls.tsx, components/TelemetryControls.tsx, lib/paletteSettings.ts.
+ * components/SettingsControls.tsx, components/TelemetryControls.tsx, components/MuteHelpersRow.tsx, lib/paletteSettings.ts.
  * Register and fixed terms follow ../i18n.ja.ts; a key another feature also uses goes there.
  */
 export const SETTINGS_JA: Record<string, string> = {
@@ -155,6 +155,9 @@ export const SETTINGS_JA: Record<string, string> = {
   "Every turn": "毎ターン",
   "In the app": "アプリ内",
   "Play sounds": "通知音を鳴らす",
+  "Mute helpers": "ヘルパーの通知をオフ",
+  "On every device, agents another agent started send no alerts; the one that started them still does.": "すべてのデバイスで、別のエージェントが起動したエージェントは通知しません。起動したエージェントは引き続き通知します。",
+  "On every device, a helper (an agent another agent started) sends no alert, push, notification or sound. The agent that started it still alerts. Only herdr-core tells helpers apart.": "すべてのデバイスで、ヘルパー（別のエージェントが起動したエージェント）はプッシュ、通知、通知音のどれも送りません。起動したエージェントは引き続き通知します。ヘルパーを見分けられるのは herdr-core だけです。",
   "While a tab of the app is open, it chimes for these alerts, also when a Focus or Do Not Disturb silences notifications.": "アプリのタブを開いている間は、これらの通知ごとに音を鳴らします。集中モードやおやすみモードで通知が消音されていても聞こえます。",
   "Quick reply {number}": "クイック返信 {number}",
   "Remove quick reply {number}": "クイック返信 {number} を削除",
