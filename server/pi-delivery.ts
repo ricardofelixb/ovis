@@ -281,6 +281,14 @@ export async function capturePiDeliveryAnchorRetrying(path: string, allowMissing
  * The same text submitted elsewhere after that Enter, or staged by Pi during compaction (stamped
  * only when the stage drains), remains indistinguishable.
  */
+/** A record that holds a send's whole text with other text typed before or after it, apart by white space. */
+function joinsRecord(record: string, text: string): boolean {
+  const sent = text.trim();
+  if (sent === "" || record.length <= sent.length) return false;
+  return record.startsWith(sent) && /^\s/.test(record.slice(sent.length))
+    || record.endsWith(sent) && /\s$/.test(record.slice(0, record.length - sent.length));
+}
+
 export function matchPiDeliveries(path: string, candidates: readonly PiDeliveryCandidate[], consumedEntries = new Set<string>()): { consumed: string[]; changed: string[]; ambiguous?: string[]; unavailable?: string[]; retry: boolean } {
   if (candidates.length === 0) return { consumed: [], changed: [], retry: false };
   let fd: number | undefined;
@@ -345,12 +353,18 @@ export function matchPiDeliveries(path: string, candidates: readonly PiDeliveryC
         }
         continue;
       }
-      const match = same.find(fresh);
-      const earlier = match ? undefined : same[0];
+      const exact = same.find(fresh);
+      const earlier = exact ? undefined : same[0];
+      // text that reached Pi's box between the paste and Enter (another program's notice typed into the
+      // terminal, as hc's `<hc>…</hc>`) is submitted with it, as one record that holds the send's text
+      const joined = exact || earlier ? undefined : chain.find((entry) => entry.start > afterMatched && entry.role === "user"
+        && fresh(entry) && joinsRecord(entry.text, candidate.text) && !consumedEntries.has(key(entry)));
+      const match = exact ?? joined;
       if (match) consumed.push(candidate.id);
       else if (earlier) ambiguous.push(candidate.id);
       else break;
       const used = (match ?? earlier)!;
+      if (joined) matchedEntries.push(key(joined));
       const laterCapture = Math.min(...candidates.slice(index + 1)
         .filter((later) => later.text.trim() === candidate.text.trim()).map((later) => later.anchor.at));
       for (const entry of same) {

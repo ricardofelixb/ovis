@@ -544,6 +544,25 @@ describe("Pi delivery transcript matching", () => {
     expect(matchPiDeliveries(path, [candidate("r1", "first", anchor), candidate("r2", "second", anchor)])).toEqual({ consumed: ["r1", "r2"], changed: [], retry: false });
   });
 
+  it("confirms a send Pi recorded joined with text typed into its box before Enter, so the receipts behind it confirm too", () => {
+    const path = join(dir(), "session.jsonl");
+    writeFileSync(path, header() + entry("a0", null, "assistant", "working"));
+    const anchor = capturePiDeliveryAnchor(path)!;
+    // hc typed a finished terminal's notice into Pi's box between Ovis's paste and its Enter
+    appendFileSync(path, entry("u1", "a0", "user", "I have access now... <hc>t236 build exited (exit 0). Read: hc read t236</hc>")
+      + entry("a1", "u1", "assistant", "ok") + entry("u2", "a1", "user", "next"));
+    expect(matchPiDeliveries(path, [candidate("r1", "I have access now...", anchor), candidate("r2", "next", anchor)]))
+      .toEqual({ consumed: ["r1", "r2"], changed: [], retry: false });
+  });
+
+  it("does not take a record that only begins with a send's text for it", () => {
+    const path = join(dir(), "session.jsonl");
+    writeFileSync(path, header() + entry("a0", null, "assistant", "working"));
+    const anchor = capturePiDeliveryAnchor(path)!;
+    appendFileSync(path, entry("u1", "a0", "user", "okay then"));
+    expect(matchPiDeliveries(path, [candidate("r1", "ok", anchor)])).toEqual({ consumed: [], changed: [], retry: false });
+  });
+
   it("accepts an unwritten session only when that exact path becomes its first file", () => {
     const path = join(dir(), "session.jsonl");
     const session = crypto.randomUUID();
