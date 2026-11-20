@@ -272,23 +272,17 @@ export async function capturePiDeliveryAnchorRetrying(path: string, allowMissing
 
 /**
  * Match Ovis-origin typed receipts to durable user records on the active Pi branch.
- * Candidates and matching entries are both FIFO. Unrelated user records are skipped, while a
- * later Ovis receipt may not cross an earlier unmatched one. Content is only a bounded scoped
- * correlator: Pi does not expose a submission id in its TUI or transcript. A record stamped no
+ * Candidates and matching entries are both FIFO. A record with a send's text is its record; where
+ * none has it, a plain send takes the next record no later receipt's text claims, since Pi changes
+ * text on the way in ways no list keeps up with. A later Ovis receipt may not cross an earlier
+ * unmatched one. Content is only a bounded scoped correlator: Pi does not expose a submission id
+ * in its TUI or transcript. A record stamped no
  * earlier than the receipt's capture confirms it. Where the only such text was stamped earlier,
  * either someone else submitted it before Ovis's Enter or the wall clock was set back, so the
  * receipt is `ambiguous`: neither confirmed nor left waiting for a record that may never come.
  * The same text submitted elsewhere after that Enter, or staged by Pi during compaction (stamped
  * only when the stage drains), remains indistinguishable.
  */
-/** A record that holds a send's whole text with other text typed before or after it, apart by white space. */
-function joinsRecord(record: string, text: string): boolean {
-  const sent = text.trim();
-  if (sent === "" || record.length <= sent.length) return false;
-  return record.startsWith(sent) && /^\s/.test(record.slice(sent.length))
-    || record.endsWith(sent) && /\s$/.test(record.slice(0, record.length - sent.length));
-}
-
 export function matchPiDeliveries(path: string, candidates: readonly PiDeliveryCandidate[], consumedEntries = new Set<string>()): { consumed: string[]; changed: string[]; ambiguous?: string[]; unavailable?: string[]; retry: boolean } {
   if (candidates.length === 0) return { consumed: [], changed: [], retry: false };
   let fd: number | undefined;
@@ -353,18 +347,19 @@ export function matchPiDeliveries(path: string, candidates: readonly PiDeliveryC
         }
         continue;
       }
-      const exact = same.find(fresh);
-      const earlier = exact ? undefined : same[0];
-      // text that reached Pi's box between the paste and Enter (another program's notice typed into the
-      // terminal, as hc's `<hc>…</hc>`) is submitted with it, as one record that holds the send's text
-      const joined = exact || earlier ? undefined : chain.find((entry) => entry.start > afterMatched && entry.role === "user"
-        && fresh(entry) && joinsRecord(entry.text, candidate.text) && !consumedEntries.has(key(entry)));
-      const match = exact ?? joined;
-      if (match) consumed.push(candidate.id);
+      const match = same.find(fresh);
+      const earlier = match ? undefined : same[0];
+      // Pi changed a plain message on the way (a notice typed into its box before Enter, a character its
+      // editor reads otherwise): the next record after the last one matched is this send's, unless a later
+      // receipt's own text claims it, so a changed text never holds the receipts behind it. A `/name` send
+      // keeps to its own text above: Pi may record it as something else, or as nothing.
+      const following = match || earlier || skill !== undefined || piMaybeCommand(candidate.text) ? undefined : chain.find((entry) => entry.start > afterMatched && entry.role === "user"
+        && fresh(entry) && !consumedEntries.has(key(entry)) && !later.some((other) => piRecordOf(other.text, entry)));
+      if (match ?? following) consumed.push(candidate.id);
       else if (earlier) ambiguous.push(candidate.id);
       else break;
-      const used = (match ?? earlier)!;
-      if (joined) matchedEntries.push(key(joined));
+      const used = (match ?? following ?? earlier)!;
+      if (following) matchedEntries.push(key(following));
       const laterCapture = Math.min(...candidates.slice(index + 1)
         .filter((later) => later.text.trim() === candidate.text.trim()).map((later) => later.anchor.at));
       for (const entry of same) {

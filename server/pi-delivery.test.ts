@@ -53,7 +53,8 @@ describe("Pi delivery transcript matching", () => {
     const consumed = new Set<string>();
     if (budget === "retention") {
       appendFileSync(path, entry("large", "base", "user", "x".repeat(9 * 1024 * 1024)));
-      expect(matchPiDeliveries(path, receipts, consumed).retry).toBe(false);
+      // under the budget it is read (and the next record taken for the first send): the larger one is not
+      expect(matchPiDeliveries(path, receipts, new Set()).retry).toBe(false);
       appendFileSync(path, entry("larger", "large", "user", "x".repeat(9 * 1024 * 1024)));
     } else if (budget === "entry count") {
       for (let index = 0; index < 100_001; index++) appendFileSync(path, entry(`e${index}`, index ? `e${index - 1}` : "base", "assistant", ""));
@@ -555,12 +556,16 @@ describe("Pi delivery transcript matching", () => {
       .toEqual({ consumed: ["r1", "r2"], changed: [], retry: false });
   });
 
-  it("does not take a record that only begins with a send's text for it", () => {
+  it("takes the next record for a plain send whose text Pi changed, so the receipts behind it never wait on it", () => {
     const path = join(dir(), "session.jsonl");
     writeFileSync(path, header() + entry("a0", null, "assistant", "working"));
     const anchor = capturePiDeliveryAnchor(path)!;
-    appendFileSync(path, entry("u1", "a0", "user", "okay then"));
-    expect(matchPiDeliveries(path, [candidate("r1", "ok", anchor)])).toEqual({ consumed: [], changed: [], retry: false });
+    // the first send's text never reaches the transcript as sent (a character Pi's editor reads otherwise)
+    appendFileSync(path, entry("u1", "a0", "user", "first, changed") + entry("a1", "u1", "assistant", "ok"));
+    expect(matchPiDeliveries(path, [candidate("r1", "first", anchor), candidate("r2", "second", anchor)]))
+      .toEqual({ consumed: ["r1"], changed: [], retry: false });
+    appendFileSync(path, entry("u2", "a1", "user", "second"));
+    expect(matchPiDeliveries(path, [candidate("r2", "second", anchor)])).toEqual({ consumed: ["r2"], changed: [], retry: false });
   });
 
   it("accepts an unwritten session only when that exact path becomes its first file", () => {
