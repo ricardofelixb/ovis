@@ -1,8 +1,23 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useSettings } from "../../lib/settings.ts";
 
-/** Minutes the view stays connected out of sight after Chat or Terminal is picked, so coming back needs no new connection. */
-const KEEP_MINUTES = 2;
+const KEEP_CHOICES = [0, 2, 5, 10];
+const KEEP_DEFAULT = 2;
+
+/**
+ * Minutes the view stays connected out of sight after Chat or Terminal is picked, so coming back needs no new
+ * connection. The choice an older Computer view saved for this PC in this browser (`keep`) still counts; none, or
+ * one it doesn't know, is the default.
+ */
+export function keepMinutes(machineId: string): number {
+  try {
+    const value = JSON.parse(localStorage.getItem(`ovis:computer:${encodeURIComponent(machineId)}`) ?? "null") as { keep?: unknown } | null;
+    const keep = typeof value?.keep === "string" ? Number(value.keep) : NaN;
+    return KEEP_CHOICES.includes(keep) ? keep : KEEP_DEFAULT;
+  } catch {
+    return KEEP_DEFAULT;
+  }
+}
 
 // Logins an older Computer view kept on this device; it no longer reads or writes them, only wipes them.
 const LOGIN_PREFIX = "ovis:computer-login:";
@@ -28,7 +43,7 @@ export function useComputerView(): [shown: string | null, show: Dispatch<SetStat
       return;
     }
     if (kept === null) return;
-    const timer = setTimeout(() => setKept(null), KEEP_MINUTES * 60_000);
+    const timer = setTimeout(() => setKept(null), keepMinutes(kept) * 60_000);
     return () => clearTimeout(timer);
   }, [shown, kept]);
   useEffect(() => { if (!settings.computerView) { setShown(null); setKept(null); } }, [settings.computerView]);
