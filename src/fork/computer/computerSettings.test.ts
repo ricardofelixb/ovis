@@ -26,6 +26,8 @@ describe("how long the Computer view stays connected out of sight", () => {
     records.set("ovis:computer:odd", JSON.stringify({ keep: "7" }));
     records.set("ovis:computer:number", JSON.stringify({ keep: 5 }));
     records.set("ovis:computer:null", "null");
-    for (const id of ["bad", "odd", "number", "null"]) expect(keepMinutes(id)).toBe(2);
+    records.set("ovis:computer:empty", JSON.stringify({ keep: "" }));
+    records.set("ovis:computer:blank", JSON.stringify({ keep: " 5" }));
+    for (const id of ["bad", "odd", "number", "null", "empty", "blank"]) expect(keepMinutes(id)).toBe(2);
   });
 });

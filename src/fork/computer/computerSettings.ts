@@ -1,7 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useSettings } from "../../lib/settings.ts";
 
-const KEEP_CHOICES = [0, 2, 5, 10];
+const KEEP_CHOICES = ["0", "2", "5", "10"];
 const KEEP_DEFAULT = 2;
 
 /**
@@ -12,8 +12,8 @@ const KEEP_DEFAULT = 2;
 export function keepMinutes(machineId: string): number {
   try {
     const value = JSON.parse(localStorage.getItem(`ovis:computer:${encodeURIComponent(machineId)}`) ?? "null") as { keep?: unknown } | null;
-    const keep = typeof value?.keep === "string" ? Number(value.keep) : NaN;
-    return KEEP_CHOICES.includes(keep) ? keep : KEEP_DEFAULT;
+    const keep = value?.keep;
+    return typeof keep === "string" && KEEP_CHOICES.includes(keep) ? Number(keep) : KEEP_DEFAULT;
   } catch {
     return KEEP_DEFAULT;
   }
