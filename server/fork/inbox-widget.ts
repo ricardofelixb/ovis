@@ -21,7 +21,7 @@ import type { FriendLookup } from "./friends.ts";
 const MIN_GAP_MS = 30_000;
 const SETTLE_MS = 2_000;
 const HEARTBEAT_MS = 10 * 60_000;
-/** what one push's JSON may take, under what the relay passes on (server/push.ts RELAY_MAX_BODY_BYTES) with the encryption's overhead */
+/** UTF-8 bytes before encryption, leaving 315 bytes of the relay's limit for Web Push overhead. */
 const MAX_JSON_BYTES = 2_700;
 const TOPIC = "ovis-inbox";
 const STATE_FILE = "inbox-widget.json";
@@ -91,7 +91,7 @@ export function inboxMessage(rows: readonly InboxWidgetRow[], endpoint: string, 
   for (;;) {
     const inbox: InboxDigest = { at, endpoint, ...(serverId ? { server_id: serverId } : {}), rows: kept, more: rows.length - kept.length };
     const message: PushPayload = { pane_id: null, title: "", body: "", tag: TOPIC, inbox };
-    if (kept.length === 0 || JSON.stringify(message).length <= MAX_JSON_BYTES) return message;
+    if (kept.length === 0 || Buffer.byteLength(JSON.stringify(message)) <= MAX_JSON_BYTES) return message;
     kept.pop();
   }
 }
