@@ -15,8 +15,8 @@ import type { FriendLookup } from "./friends.ts";
 /**
  * The phone app's home-screen widget (app/android/ovis-widget): the agents of the alerts' own view
  * of every PC (the push service's seed, resync and status calls, watched here), sent as a quiet push
- * to each phone that placed one. Coalesced to one push every MIN_GAP_MS, and sent again every
- * HEARTBEAT_MS so the widget can tell a quiet PC from one it lost; the push relay takes 60 a window.
+ * to each phone that placed one. Changes are coalesced to one push every MIN_GAP_MS, with a
+ * HEARTBEAT_MS keepalive so the widget can tell a quiet PC from one it lost.
  */
 const MIN_GAP_MS = 30_000;
 const SETTLE_MS = 2_000;
@@ -86,11 +86,11 @@ export function paneLastWords(stores: PaneStores, endpoint: (machineId: string) 
 }
 
 /** The digest for one endpoint, its rows cut from the end until it fits one push. */
-export function inboxMessage(rows: readonly InboxWidgetRow[], endpoint: string, at: number, serverId?: string): PushPayload {
+export function inboxMessage(rows: readonly InboxWidgetRow[], endpoint: string, at: number, serverId?: string): PushPayload & { inbox: InboxDigest } {
   const kept = [...rows];
   for (;;) {
     const inbox: InboxDigest = { at, endpoint, ...(serverId ? { server_id: serverId } : {}), rows: kept, more: rows.length - kept.length };
-    const message: PushPayload = { pane_id: null, title: "", body: "", tag: TOPIC, inbox };
+    const message = { pane_id: null, title: "", body: "", tag: TOPIC, inbox };
     if (kept.length === 0 || Buffer.byteLength(JSON.stringify(message)) <= MAX_JSON_BYTES) return message;
     kept.pop();
   }
@@ -101,19 +101,23 @@ export class InboxWidget {
   private readonly endpoints: Set<string>;
   /** each row's last words, with the status and time they were read at */
   private readonly words = new Map<string, { stamp: string; text: string | null }>();
-  private timer: ReturnType<typeof setTimeout> | null = null;
-  private heartbeat: ReturnType<typeof setInterval> | null = null;
+  private timer?: { id: ReturnType<typeof setTimeout>; at: number };
+  private readonly deliveries = new Map<string, { at: number; rows: string | undefined }>();
   private readonly pending = new Set<string>();
+  private readonly startedAt: number;
+  private lastChecked: number;
   private sending = false;
-  private lastSent = 0;
-  private lastRows = "";
+  private stopped = false;
+  private lastSent = -Infinity;
+  private lastRows = "[]";
 
   constructor(private readonly push: PushService, private readonly options: { stateDir: string; friendOf?: FriendLookup; serverId?: () => string | undefined; now?: () => number; lastWords?: LastWords }) {
     let saved: unknown = null;
     try { saved = JSON.parse(readFileSync(join(options.stateDir, STATE_FILE), "utf8")); } catch { }
     const list = (saved as { endpoints?: unknown } | null)?.endpoints;
     this.endpoints = new Set(Array.isArray(list) ? list.filter((item): item is string => typeof item === "string") : []);
-    this.beat();
+    this.startedAt = this.lastChecked = this.now();
+    this.changed();
   }
 
   private now(): number { return (this.options.now ?? Date.now)(); }
@@ -146,13 +150,18 @@ export class InboxWidget {
     if (this.agents.delete(`${machineId}\u0000${paneId}`)) this.changed();
   }
 
-  /** A phone placed (or removed) its widget; a placed one gets the agents at once. */
+  /** A newly placed widget gets the agents at once; reporting it again need not refresh it. */
   place(endpoint: string, placed: boolean): void {
-    if (placed === this.endpoints.has(endpoint)) { if (placed) void this.sendTo([endpoint]); return; }
-    if (placed) this.endpoints.add(endpoint); else this.endpoints.delete(endpoint);
-    this.save();
-    this.beat();
-    if (placed) void this.sendTo([endpoint]);
+    if (placed !== this.endpoints.has(endpoint)) {
+      if (placed) this.endpoints.add(endpoint);
+      else {
+        this.endpoints.delete(endpoint);
+        this.deliveries.delete(endpoint);
+      }
+      this.save();
+    }
+    if (placed && !this.deliveries.has(endpoint)) void this.sendTo([endpoint]);
+    else this.changed();
   }
 
   rows(): InboxWidgetRow[] {
@@ -160,26 +169,36 @@ export class InboxWidget {
   }
 
   stop(): void {
-    if (this.timer) clearTimeout(this.timer);
-    if (this.heartbeat) clearInterval(this.heartbeat);
-    this.timer = this.heartbeat = null;
+    this.stopped = true;
+    this.clearTimer();
     this.pending.clear();
   }
 
-  private changed(): void {
-    if (this.endpoints.size === 0 || this.timer || JSON.stringify(this.rows()) === this.lastRows) return;
-    this.timer = setTimeout(() => { this.timer = null; void this.sendTo([...this.endpoints]); }, Math.max(SETTLE_MS, this.lastSent + MIN_GAP_MS - this.now()));
-    this.timer.unref?.();
+  private clearTimer(): void {
+    if (this.timer) clearTimeout(this.timer.id);
+    this.timer = undefined;
   }
 
-  private beat(): void {
-    if (this.endpoints.size > 0 && !this.heartbeat) {
-      this.heartbeat = setInterval(() => void this.sendTo([...this.endpoints]), HEARTBEAT_MS);
-      this.heartbeat.unref?.();
-    } else if (this.endpoints.size === 0 && this.heartbeat) {
-      clearInterval(this.heartbeat);
-      this.heartbeat = null;
+  private changed(): void {
+    if (this.stopped || this.sending || this.endpoints.size === 0) return this.clearTimer();
+    const now = this.now();
+    const rows = this.rows();
+    // Conversation change events only exist for panes a client is watching. With just the widget
+    // open, check the working rows that can fit, at most once per push interval.
+    const working = this.options.lastWords && rows.slice(0, WORDS_ROWS).some((row) => row.s === "w");
+    const refreshAt = JSON.stringify(rows) !== this.lastRows
+      ? Math.min(now + SETTLE_MS, this.timer?.at ?? Infinity)
+      : working ? this.lastChecked + MIN_GAP_MS : Infinity;
+    let next = refreshAt;
+    for (const endpoint of this.endpoints) {
+      next = Math.min(next, (this.deliveries.get(endpoint)?.at ?? this.startedAt) + HEARTBEAT_MS);
     }
+    const at = Math.max(this.lastSent + MIN_GAP_MS, next);
+    if (this.timer?.at === at) return;
+    this.clearTimer();
+    const id = setTimeout(() => { this.timer = undefined; void this.sendTo([...this.endpoints]); }, Math.max(0, at - now));
+    this.timer = { id, at };
+    id.unref?.();
   }
 
   /** The rows with their last words: read again for a row whose status moved, and for a working one, which goes on talking. */
@@ -208,8 +227,10 @@ export class InboxWidget {
   }
 
   private async sendTo(endpoints: readonly string[]): Promise<void> {
+    if (this.stopped) return;
     for (const endpoint of endpoints) this.pending.add(endpoint);
     if (this.sending) return;
+    this.clearTimer();
     this.sending = true;
     try {
       // Read and deliver one snapshot at a time so a slow read can't publish older status last.
@@ -220,6 +241,7 @@ export class InboxWidget {
       }
     } finally {
       this.sending = false;
+      this.changed();
     }
   }
 
@@ -227,14 +249,25 @@ export class InboxWidget {
     const bare = this.rows();
     this.lastRows = JSON.stringify(bare);
     const rows = await this.withWords(bare);
-    this.lastSent = this.now();
-    const at = Math.floor(this.lastSent / 1000);
-    await Promise.all(endpoints.map(async (endpoint) => {
-      if (!this.endpoints.has(endpoint)) return;
-      const delivery = await this.push.sendQuiet(endpoint, inboxMessage(rows, endpoint, at, this.options.serverId?.()), TOPIC).catch(() => undefined);
-      // an endpoint this PC no longer pushes to has no widget to keep
-      if (delivery === null || (delivery && !delivery.ok && delivery.gone)) this.place(endpoint, false);
-    }));
+    this.lastChecked = this.now();
+    await Promise.all(endpoints.map((endpoint) => this.deliver(endpoint, rows, this.lastChecked)));
+  }
+
+  private async deliver(endpoint: string, rows: readonly InboxWidgetRow[], now: number): Promise<void> {
+    if (this.stopped || !this.endpoints.has(endpoint)) return;
+    const previous = this.deliveries.get(endpoint);
+    if (previous && now - previous.at < MIN_GAP_MS) return;
+    const message = inboxMessage(rows, endpoint, Math.floor(now / 1000), this.options.serverId?.());
+    const shown = JSON.stringify([message.inbox.rows, message.inbox.more]);
+    if (previous?.rows === shown && now - previous.at < HEARTBEAT_MS) return;
+    this.lastSent = now;
+    const attempt = { at: now, rows: previous?.rows };
+    this.deliveries.set(endpoint, attempt);
+    const delivery = await this.push.sendQuiet(endpoint, message, TOPIC).catch(() => undefined);
+    if (this.deliveries.get(endpoint) !== attempt) return;
+    if (delivery?.ok) attempt.rows = shown;
+    // An endpoint this PC no longer pushes to has no widget to keep.
+    if (delivery === null || (delivery && !delivery.ok && delivery.gone)) this.place(endpoint, false);
   }
 
   private save(): void {
@@ -256,6 +289,10 @@ export function watchInbox(push: PushService, options: ConstructorParameters<typ
   };
   widgets.set(watched, widget);
   return watched;
+}
+
+export function stopInbox(push: PushService): void {
+  widgets.get(push)?.stop();
 }
 
 /** POST /api/fork/inbox-widget `{ subscription, placed }`: only the phone holding the subscription's keys places one. */
