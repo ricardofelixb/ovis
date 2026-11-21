@@ -158,6 +158,35 @@ describe("inbox widget", () => {
     }
   });
 
+  test("placing a second widget does not consume the first widget's pending update", async () => {
+    const { sent, widget, tick } = setup();
+    const a = "https://relay.example/v1/push/a";
+    const b = "https://relay.example/v1/push/b";
+    const states = () => sent.map(({ endpoint, message }) => [endpoint, message.inbox!.rows[0]!.s]);
+    jest.useFakeTimers();
+    const advance = async (ms: number) => {
+      tick(ms);
+      jest.advanceTimersByTime(ms);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    };
+    try {
+      widget.panes([pane("p1", "working")]);
+      widget.place(a, true);
+      await advance(0);
+      await advance(10_000);
+      widget.status("p1", "blocked");
+      widget.place(b, true);
+      await advance(0);
+      await advance(19_999);
+      expect(states()).toEqual([[a, "w"], [b, "b"]]);
+      await advance(1);
+      expect(states()).toEqual([[a, "w"], [b, "b"], [a, "b"]]);
+    } finally {
+      widget.stop();
+      jest.useRealTimers();
+    }
+  });
+
   test("a delayed words read cannot send a working row after its blocked update", async () => {
     const first = Promise.withResolvers<Record<string, string>>();
     let reads = 0;
