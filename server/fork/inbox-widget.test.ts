@@ -5,7 +5,8 @@ import { join } from "node:path";
 import type { HerdrPane } from "../../shared/protocol.ts";
 import type { InboxWidgetRow } from "../../shared/fork/inbox-widget.ts";
 import type { PushPayload } from "../../shared/push.ts";
-import type { PushService } from "../push.ts";
+import webpush from "web-push";
+import { RELAY_MAX_BODY_BYTES, type PushService } from "../push.ts";
 import { InboxWidget, inboxMessage, inboxOrder, shownWords, type LastWords } from "./inbox-widget.ts";
 
 const dirs: string[] = [];
@@ -51,6 +52,17 @@ describe("inbox widget", () => {
     expect(message.inbox!.rows.length + message.inbox!.more).toBe(80);
     expect(message.inbox!.rows[0]!.n).toBe(rows[0]!.n);
     expect(message.pane_id).toBeNull();
+  });
+
+  test("multibyte summaries fit the relay after encryption", () => {
+    const rows = Array.from({ length: 20 }, (_, index) => ({ ...row(`agent ${index}`, "b", index), d: "回复".repeat(45) }));
+    const message = inboxMessage(rows, "https://relay.example/v1/push/x", 1);
+    const { publicKey } = webpush.generateVAPIDKeys();
+    const auth = Buffer.alloc(16, 1).toString("base64url");
+    const { cipherText } = webpush.encrypt(publicKey, auth, JSON.stringify(message), "aes128gcm");
+    expect(cipherText.byteLength).toBeLessThanOrEqual(RELAY_MAX_BODY_BYTES);
+    expect(message.inbox!.rows[0]).toEqual(rows[0]!);
+    expect(message.inbox!.rows.length + message.inbox!.more).toBe(rows.length);
   });
 
   test("sends only to a placed widget, at once when placed, with helpers left out", async () => {
