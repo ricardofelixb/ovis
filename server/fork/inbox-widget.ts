@@ -103,6 +103,8 @@ export class InboxWidget {
   private readonly words = new Map<string, { stamp: string; text: string | null }>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private heartbeat: ReturnType<typeof setInterval> | null = null;
+  private readonly pending = new Set<string>();
+  private sending = false;
   private lastSent = 0;
   private lastRows = "";
 
@@ -161,6 +163,7 @@ export class InboxWidget {
     if (this.timer) clearTimeout(this.timer);
     if (this.heartbeat) clearInterval(this.heartbeat);
     this.timer = this.heartbeat = null;
+    this.pending.clear();
   }
 
   private changed(): void {
@@ -205,12 +208,29 @@ export class InboxWidget {
   }
 
   private async sendTo(endpoints: readonly string[]): Promise<void> {
+    for (const endpoint of endpoints) this.pending.add(endpoint);
+    if (this.sending) return;
+    this.sending = true;
+    try {
+      // Read and deliver one snapshot at a time so a slow read can't publish older status last.
+      while (this.pending.size > 0) {
+        const batch = [...this.pending].filter((endpoint) => this.endpoints.has(endpoint));
+        this.pending.clear();
+        if (batch.length > 0) await this.sendBatch(batch);
+      }
+    } finally {
+      this.sending = false;
+    }
+  }
+
+  private async sendBatch(endpoints: readonly string[]): Promise<void> {
     const bare = this.rows();
     this.lastRows = JSON.stringify(bare);
     const rows = await this.withWords(bare);
     this.lastSent = this.now();
     const at = Math.floor(this.lastSent / 1000);
     await Promise.all(endpoints.map(async (endpoint) => {
+      if (!this.endpoints.has(endpoint)) return;
       const delivery = await this.push.sendQuiet(endpoint, inboxMessage(rows, endpoint, at, this.options.serverId?.()), TOPIC).catch(() => undefined);
       // an endpoint this PC no longer pushes to has no widget to keep
       if (delivery === null || (delivery && !delivery.ok && delivery.gone)) this.place(endpoint, false);
