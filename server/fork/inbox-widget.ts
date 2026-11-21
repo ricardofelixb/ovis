@@ -104,12 +104,13 @@ export class InboxWidget {
   private timer?: { id: ReturnType<typeof setTimeout>; at: number };
   private readonly deliveries = new Map<string, { at: number; rows: string | undefined }>();
   private readonly pending = new Set<string>();
+  private readonly unchecked = new Set<string>();
   private readonly startedAt: number;
   private lastChecked: number;
   private sending = false;
   private stopped = false;
-  private lastSent = -Infinity;
   private lastRows = "[]";
+  private snapshot: { rows: InboxWidgetRow[]; rendered: string } = { rows: [], rendered: "[]" };
 
   constructor(private readonly push: PushService, private readonly options: { stateDir: string; friendOf?: FriendLookup; serverId?: () => string | undefined; now?: () => number; lastWords?: LastWords }) {
     let saved: unknown = null;
@@ -157,6 +158,7 @@ export class InboxWidget {
       else {
         this.endpoints.delete(endpoint);
         this.deliveries.delete(endpoint);
+        this.unchecked.delete(endpoint);
       }
       this.save();
     }
@@ -172,6 +174,7 @@ export class InboxWidget {
     this.stopped = true;
     this.clearTimer();
     this.pending.clear();
+    this.unchecked.clear();
   }
 
   private clearTimer(): void {
@@ -189,11 +192,13 @@ export class InboxWidget {
     const refreshAt = JSON.stringify(rows) !== this.lastRows
       ? Math.min(now + SETTLE_MS, this.timer?.at ?? Infinity)
       : working ? this.lastChecked + MIN_GAP_MS : Infinity;
-    let next = refreshAt;
+    let at = Infinity;
     for (const endpoint of this.endpoints) {
-      next = Math.min(next, (this.deliveries.get(endpoint)?.at ?? this.startedAt) + HEARTBEAT_MS);
+      const last = this.deliveries.get(endpoint)?.at;
+      const heartbeatAt = (last ?? this.startedAt) + HEARTBEAT_MS;
+      const due = Math.min(refreshAt, heartbeatAt, this.unchecked.has(endpoint) ? now : Infinity);
+      at = Math.min(at, Math.max((last ?? -Infinity) + MIN_GAP_MS, due));
     }
-    const at = Math.max(this.lastSent + MIN_GAP_MS, next);
     if (this.timer?.at === at) return;
     this.clearTimer();
     const id = setTimeout(() => { this.timer = undefined; void this.sendTo([...this.endpoints]); }, Math.max(0, at - now));
@@ -247,20 +252,30 @@ export class InboxWidget {
 
   private async sendBatch(endpoints: readonly string[]): Promise<void> {
     const bare = this.rows();
-    this.lastRows = JSON.stringify(bare);
-    const rows = await this.withWords(bare);
-    this.lastChecked = this.now();
-    await Promise.all(endpoints.map((endpoint) => this.deliver(endpoint, rows, this.lastChecked)));
+    const signature = JSON.stringify(bare);
+    if (signature !== this.lastRows || this.now() - this.lastChecked >= MIN_GAP_MS) {
+      this.lastRows = signature;
+      const rows = await this.withWords(bare);
+      const rendered = JSON.stringify(rows);
+      // Placement sends to just one endpoint; the others still need to compare this snapshot.
+      if (rendered !== this.snapshot.rendered) {
+        for (const endpoint of this.endpoints) this.unchecked.add(endpoint);
+      }
+      this.snapshot = { rows, rendered };
+      this.lastChecked = this.now();
+    }
+    const now = this.now();
+    await Promise.all(endpoints.map((endpoint) => this.deliver(endpoint, this.snapshot.rows, now)));
   }
 
   private async deliver(endpoint: string, rows: readonly InboxWidgetRow[], now: number): Promise<void> {
     if (this.stopped || !this.endpoints.has(endpoint)) return;
     const previous = this.deliveries.get(endpoint);
     if (previous && now - previous.at < MIN_GAP_MS) return;
+    this.unchecked.delete(endpoint);
     const message = inboxMessage(rows, endpoint, Math.floor(now / 1000), this.options.serverId?.());
     const shown = JSON.stringify([message.inbox.rows, message.inbox.more]);
     if (previous?.rows === shown && now - previous.at < HEARTBEAT_MS) return;
-    this.lastSent = now;
     const attempt = { at: now, rows: previous?.rows };
     this.deliveries.set(endpoint, attempt);
     const delivery = await this.push.sendQuiet(endpoint, message, TOPIC).catch(() => undefined);
