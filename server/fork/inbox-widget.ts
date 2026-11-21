@@ -4,7 +4,10 @@ import type { AgentStatus, HerdrPane } from "../../shared/protocol.ts";
 import type { InboxDigest, InboxWidgetRow } from "../../shared/fork/inbox-widget.ts";
 import { pushPaneTitle } from "../../shared/notify-policy.ts";
 import type { PushPayload } from "../../shared/push.ts";
+import { summaryOf, type PaneSummaries, type PaneSummary } from "../../shared/pane-summary.ts";
+import { paneConversation } from "../conversation.ts";
 import { jsonResponse } from "../http.ts";
+import type { PaneStores } from "../pane-routes.ts";
 import { writePrivateState } from "../private-state.ts";
 import type { PushService } from "../push.ts";
 import type { FriendLookup } from "./friends.ts";
@@ -23,6 +26,14 @@ const MAX_JSON_BYTES = 2_700;
 const TOPIC = "ovis-inbox";
 const STATE_FILE = "inbox-widget.json";
 const ORDER: Readonly<Record<InboxWidgetRow["s"], number>> = { b: 0, d: 1, w: 2, i: 3 };
+/** rows whose last words are read: more never fit one push */
+const WORDS_ROWS = 20;
+/** what one row's words may take: the widget shows a line or two */
+const WORDS_MAX = 90;
+const WORDS_READ_MS = 3_000;
+
+/** Last words by pane id, for some of one PC's panes; null for a pane with none, a pane left out was not read. */
+export type LastWords = (machineId: string, paneIds: readonly string[]) => Promise<Record<string, string | null> | null>;
 
 interface Agent { row: Omit<InboxWidgetRow, "t">; at: number }
 
@@ -32,6 +43,46 @@ const short = (status: AgentStatus | undefined): InboxWidgetRow["s"] =>
 /** Waiting on you first, the longest wait on top; then the latest finished, working, and idle. */
 export function inboxOrder(rows: readonly InboxWidgetRow[]): InboxWidgetRow[] {
   return [...rows].sort((a, b) => ORDER[a.s] - ORDER[b.s] || (a.s === "b" ? a.t - b.t : b.t - a.t) || a.n.localeCompare(b.n));
+}
+
+/** A summary as the inbox row shows it (src/components/InboxList.tsx lastWords), on one short line. */
+export function shownWords(summary: PaneSummary | null): string | null {
+  if (!summary) return null;
+  const text = summary.text.replace(/\*\*|__|`/g, "").replace(/^#+\s*/, "").replace(/\s+/g, " ").trim();
+  if (text === "") return null;
+  const said = summary.role === "user" ? `You: ${text}` : text;
+  return said.length > WORDS_MAX ? `${[...said].slice(0, WORDS_MAX - 1).join("").trimEnd()}…` : said;
+}
+
+/**
+ * The inbox's own summary read (/api/pane/summary): this PC's panes from their conversations, another
+ * PC's from that PC, through its endpoint as the PC proxy reaches it.
+ */
+export function paneLastWords(stores: PaneStores, endpoint: (machineId: string) => { url: string; token: string } | undefined): LastWords {
+  return async (machineId, paneIds) => {
+    if (machineId === "local") {
+      const words: Record<string, string | null> = {};
+      await Promise.all(paneIds.map(async (paneId) => {
+        const read = paneConversation(paneId, stores.codexHome, { prompts: 1 }, stores.devinDbPath, stores.opencodeDb, stores.hermesHome, stores.grokHome, stores.museData)
+          .then((conversation) => shownWords(summaryOf(conversation.turns)));
+        const late = new Promise<undefined>((resolve) => AbortSignal.timeout(WORDS_READ_MS).addEventListener("abort", () => resolve(undefined)));
+        const said = await Promise.race([read, late]).catch(() => undefined);
+        if (said !== undefined) words[paneId] = said;
+      }));
+      return words;
+    }
+    const pc = endpoint(machineId);
+    if (!pc) return null;
+    const query = new URLSearchParams(paneIds.map((paneId) => ["pane_id", paneId]));
+    try {
+      const response = await fetch(`${pc.url}/api/pane/summary?${query.toString()}`, { headers: { authorization: `Bearer ${pc.token}` }, redirect: "error", signal: AbortSignal.timeout(WORDS_READ_MS) });
+      if (!response.ok) return null;
+      const { summaries } = await response.json() as PaneSummaries;
+      return Object.fromEntries(Object.entries(summaries ?? {}).map(([paneId, summary]) => [paneId, shownWords(summary)]));
+    } catch {
+      return null;
+    }
+  };
 }
 
 /** The digest for one endpoint, its rows cut from the end until it fits one push. */
@@ -48,12 +99,14 @@ export function inboxMessage(rows: readonly InboxWidgetRow[], endpoint: string, 
 export class InboxWidget {
   private readonly agents = new Map<string, Agent>();
   private readonly endpoints: Set<string>;
+  /** each row's last words, with the status and time they were read at */
+  private readonly words = new Map<string, { stamp: string; text: string | null }>();
   private timer: ReturnType<typeof setTimeout> | null = null;
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private lastSent = 0;
   private lastRows = "";
 
-  constructor(private readonly push: PushService, private readonly options: { stateDir: string; friendOf?: FriendLookup; serverId?: () => string | undefined; now?: () => number }) {
+  constructor(private readonly push: PushService, private readonly options: { stateDir: string; friendOf?: FriendLookup; serverId?: () => string | undefined; now?: () => number; lastWords?: LastWords }) {
     let saved: unknown = null;
     try { saved = JSON.parse(readFileSync(join(options.stateDir, STATE_FILE), "utf8")); } catch { }
     const list = (saved as { endpoints?: unknown } | null)?.endpoints;
@@ -126,9 +179,35 @@ export class InboxWidget {
     }
   }
 
+  /** The rows with their last words: read again for a row whose status moved, and for a working one, which goes on talking. */
+  private async withWords(rows: InboxWidgetRow[]): Promise<InboxWidgetRow[]> {
+    const read = this.options.lastWords;
+    if (!read) return rows;
+    const keyOf = (row: InboxWidgetRow) => `${row.m ?? "local"}\u0000${row.p}`;
+    const stampOf = (row: InboxWidgetRow) => `${row.s}:${row.t}`;
+    const wanted = new Map<string, InboxWidgetRow[]>();
+    for (const row of rows.slice(0, WORDS_ROWS)) {
+      const held = this.words.get(keyOf(row));
+      if (held && held.stamp === stampOf(row) && row.s !== "w") continue;
+      const machine = row.m ?? "local";
+      wanted.set(machine, [...wanted.get(machine) ?? [], row]);
+    }
+    await Promise.all([...wanted].map(async ([machine, asked]) => {
+      const words = await read(machine, asked.map((row) => row.p)).catch(() => null);
+      for (const row of asked) if (words && row.p in words) this.words.set(keyOf(row), { stamp: stampOf(row), text: words[row.p] ?? null });
+    }));
+    const shown = new Set(rows.map(keyOf));
+    for (const key of this.words.keys()) if (!shown.has(key)) this.words.delete(key);
+    return rows.map((row) => {
+      const text = this.words.get(keyOf(row))?.text;
+      return text ? { ...row, d: text } : row;
+    });
+  }
+
   private async sendTo(endpoints: readonly string[]): Promise<void> {
-    const rows = this.rows();
-    this.lastRows = JSON.stringify(rows);
+    const bare = this.rows();
+    this.lastRows = JSON.stringify(bare);
+    const rows = await this.withWords(bare);
     this.lastSent = this.now();
     const at = Math.floor(this.lastSent / 1000);
     await Promise.all(endpoints.map(async (endpoint) => {

@@ -45,10 +45,6 @@ final class InboxStore {
 
     static final class View {
         final List<Row> rows = new ArrayList<>();
-        int more;
-        int waiting;
-        /** seconds since the epoch of the oldest PC's last push, or 0 with none */
-        long heard;
         boolean any;
     }
 
@@ -86,8 +82,6 @@ final class InboxStore {
             long at = digest.optLong("at", 0);
             if (now - at > FORGET_S) continue;
             view.any = true;
-            view.heard = view.heard == 0 ? at : Math.min(view.heard, at);
-            view.more += digest.optInt("more", 0);
             boolean stale = now - at > STALE_S;
             String serverId = digest.optString("server_id", "");
             String proof = held.isNull("proof") ? null : held.optString("proof", null);
@@ -96,7 +90,6 @@ final class InboxStore {
                 JSONObject row = rows.optJSONObject(index);
                 if (row == null) continue;
                 Row kept = new Row(row, origin.isEmpty() ? null : origin, serverId.isEmpty() ? null : serverId, proof, stale);
-                if (!stale && "b".equals(kept.status())) view.waiting++;
                 view.rows.add(kept);
             }
         }

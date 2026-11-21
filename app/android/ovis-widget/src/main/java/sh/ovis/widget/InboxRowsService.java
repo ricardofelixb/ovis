@@ -67,16 +67,19 @@ public class InboxRowsService extends RemoteViewsService {
             InboxStore.Row held = rows.get(position);
             JSONObject row = held.row;
             long since = Math.max(0, System.currentTimeMillis() / 1000 - row.optLong("t", 0));
+            String words = row.optString("d", "");
             String status;
             int color;
             switch (held.status()) {
-                case "b": status = context.getString(R.string.ovis_widget_status_waiting, ago(since)); color = WAITING; break;
-                case "d": status = context.getString(R.string.ovis_widget_status_done, ago(since)); color = DONE; break;
+                case "b": status = context.getString(R.string.ovis_widget_status_waiting); color = WAITING; break;
+                case "d": status = context.getString(R.string.ovis_widget_status_done); color = DONE; break;
                 case "w": status = context.getString(R.string.ovis_widget_status_working); color = WORKING; break;
                 default: status = context.getString(R.string.ovis_widget_status_idle); color = IDLE; break;
             }
             views.setTextViewText(R.id.ovis_widget_name, row.optString("n", ""));
-            views.setTextViewText(R.id.ovis_widget_status, status);
+            // the last words as the inbox row shows them; the status word while there are none
+            views.setTextViewText(R.id.ovis_widget_status, words.isEmpty() ? status : words);
+            views.setTextViewText(R.id.ovis_widget_time, ago(since));
             views.setTextColor(R.id.ovis_widget_name, held.stale ? DIM : TEXT);
             views.setInt(R.id.ovis_widget_dot, "setColorFilter", held.stale ? IDLE : color);
             Bitmap face = FriendIcon.of(context, row.isNull("f") ? null : row.optString("f", null));

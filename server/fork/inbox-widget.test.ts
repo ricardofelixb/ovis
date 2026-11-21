@@ -6,7 +6,7 @@ import type { HerdrPane } from "../../shared/protocol.ts";
 import type { InboxWidgetRow } from "../../shared/fork/inbox-widget.ts";
 import type { PushPayload } from "../../shared/push.ts";
 import type { PushService } from "../push.ts";
-import { InboxWidget, inboxMessage, inboxOrder } from "./inbox-widget.ts";
+import { InboxWidget, inboxMessage, inboxOrder, shownWords, type LastWords } from "./inbox-widget.ts";
 
 const dirs: string[] = [];
 const widgets: InboxWidget[] = [];
@@ -19,7 +19,7 @@ const row = (n: string, s: InboxWidgetRow["s"], t: number): InboxWidgetRow => ({
 const pane = (id: string, status: HerdrPane["agent_status"], extra: Partial<HerdrPane> = {}) =>
   ({ pane_id: id, workspace_id: "w1", agent: "pi", agent_status: status, title: id, ...extra }) as unknown as HerdrPane;
 
-function setup() {
+function setup(lastWords?: LastWords) {
   const dir = mkdtempSync(join(tmpdir(), "inbox-widget-"));
   dirs.push(dir);
   const sent: { endpoint: string; message: PushPayload; topic: string }[] = [];
@@ -31,7 +31,7 @@ function setup() {
     },
   } as unknown as PushService;
   let now = 1_000_000_000_000;
-  const widget = new InboxWidget(push, { stateDir: dir, now: () => now });
+  const widget = new InboxWidget(push, { stateDir: dir, now: () => now, ...(lastWords ? { lastWords } : {}) });
   widgets.push(widget);
   return { dir, push, sent, widget, tick: (ms: number) => { now += ms; }, goneFor: (endpoint: string) => { gone = new Set([endpoint]); } };
 }
@@ -95,5 +95,27 @@ describe("inbox widget", () => {
     expect(widget.rows()[0]).toMatchObject({ s: "b", t: first + 60 });
     widget.ended("p1");
     expect(widget.rows()).toEqual([]);
+  });
+
+  test("each row carries its last words as the inbox shows them, read again only for a row that moved or works", async () => {
+    const asked: string[][] = [];
+    const words: LastWords = async (_machine, paneIds) => { asked.push([...paneIds]); return Object.fromEntries(paneIds.map((id) => [id, id === "p2" ? null : `said by ${id}`])); };
+    const { sent, widget, tick } = setup(words);
+    widget.panes([pane("p1", "blocked"), pane("p2", "done"), pane("p3", "working")]);
+    widget.place("https://relay.example/v1/push/a", true);
+    await flush(); await flush();
+    expect(sent[0]!.message.inbox!.rows.map((row) => row.d)).toEqual(["said by p1", undefined, "said by p3"]);
+    tick(60_000);
+    widget.place("https://relay.example/v1/push/a", true);
+    await flush(); await flush();
+    expect(asked[1]).toEqual(["p3"]);
+    expect(sent[1]!.message.inbox!.rows[0]!.d).toBe("said by p1");
+  });
+
+  test("words are one plain line, the user's marked, cut short", () => {
+    expect(shownWords({ role: "assistant", text: "## Done: **all** `tests` pass", at: null, asked_at: null })).toBe("Done: all tests pass");
+    expect(shownWords({ role: "user", text: "go", at: null, asked_at: null })).toBe("You: go");
+    expect(shownWords({ role: "assistant", text: "x".repeat(200), at: null, asked_at: null })!.length).toBe(90);
+    expect(shownWords(null)).toBeNull();
   });
 });

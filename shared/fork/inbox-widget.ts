@@ -18,6 +18,8 @@ export interface InboxWidgetRow {
   s: "b" | "d" | "w" | "i";
   /** since when, in seconds since the epoch */
   t: number;
+  /** its last words, as the inbox row shows them, cut short */
+  d?: string;
 }
 
 /**
