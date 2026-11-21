@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -122,6 +122,26 @@ describe("inbox widget", () => {
     await flush(); await flush();
     expect(asked[1]).toEqual(["p3"]);
     expect(sent[1]!.message.inbox!.rows[0]!.d).toBe("said by p1");
+  });
+
+  test("a delayed words read cannot send a working row after its blocked update", async () => {
+    const first = Promise.withResolvers<Record<string, string>>();
+    let reads = 0;
+    const { sent, widget, tick } = setup(async () => ++reads === 1 ? first.promise : { p1: "needs you" });
+    jest.useFakeTimers();
+    try {
+      widget.panes([pane("p1", "working")]);
+      widget.place("https://relay.example/v1/push/a", true);
+      tick(2_000);
+      widget.status("p1", "blocked");
+      jest.advanceTimersByTime(2_000);
+    } finally {
+      jest.useRealTimers();
+    }
+    await flush();
+    first.resolve({ p1: "still working" });
+    await flush();
+    expect(sent.map(({ message }) => message.inbox!.rows[0]!.s)).toEqual(["w", "b"]);
   });
 
   test("words are one plain line, the user's marked, cut short", () => {
