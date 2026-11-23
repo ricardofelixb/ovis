@@ -42,6 +42,7 @@ public class LiveCallService extends Service {
     static Consumer<String> onAction;
     // the service whose notification is up, which the page's mute updates
     private static LiveCallService shown;
+    private static boolean overlayVisible;
     private String title = "Ovis";
     private String body = "";
     private String muteLabel = "Mute";
@@ -168,6 +169,12 @@ public class LiveCallService extends Service {
         shown.post();
     }
 
+    static void setOverlayVisible(boolean visible) {
+        if (overlayVisible == visible) return;
+        overlayVisible = visible;
+        if (shown != null) shown.post();
+    }
+
     /** The page's call muted or unmuted: the notification's button turns to match. */
     static void setMuted(boolean muted) {
         LiveCallService service = shown;
@@ -238,23 +245,24 @@ public class LiveCallService extends Service {
     private void post() {
         // a tap goes back to the app as its launcher icon does
         Intent open = getPackageManager().getLaunchIntentForPackage(getPackageName());
-        Person caller = new Person.Builder().setName(title).setIcon(IconCompat.createWithResource(this, R.mipmap.ic_launcher)).setImportant(true).build();
-        Notification notification = new NotificationCompat.Builder(this, CHANNEL)
+        if (overlayVisible) AssistantCallNotification.createChannel(getSystemService(NotificationManager.class), title);
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, overlayVisible ? AssistantCallNotification.CHANNEL : CHANNEL)
             .setSmallIcon(sh.ovis.push.R.drawable.ic_stat_ovis)
             .setContentText(body)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            // as ChatGPT's voice: a live update, the call card on the lock screen and the status bar's
-            // chip, with no banner over the app the call started in
-            .setRequestPromotedOngoing(true)
             .setSilent(true)
             .setShowWhen(false)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setCategory(NotificationCompat.CATEGORY_CALL)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setContentIntent(open == null ? null : PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE))
-            .setStyle(NotificationCompat.CallStyle.forOngoingCall(caller, button(HANG_UP)))
-            .addAction(new NotificationCompat.Action.Builder(
+            .setContentIntent(open == null ? null : PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE));
+        if (overlayVisible) AssistantCallNotification.quiet(builder, title);
+        else {
+            // The public card carries Hang up and a status-bar chip, without a banner.
+            Person caller = new Person.Builder().setName(title).setIcon(IconCompat.createWithResource(this, R.mipmap.ic_launcher)).setImportant(true).build();
+            builder.setRequestPromotedOngoing(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setCategory(NotificationCompat.CATEGORY_CALL).setStyle(NotificationCompat.CallStyle.forOngoingCall(caller, button(HANG_UP)));
+        }
+        Notification notification = builder.addAction(new NotificationCompat.Action.Builder(
                 IconCompat.createWithResource(this, muted ? R.drawable.ic_call_mic : R.drawable.ic_call_mic_off),
                 muted ? unmuteLabel : muteLabel, button(TOGGLE_MUTE)).build())
             .build();

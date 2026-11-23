@@ -89,6 +89,7 @@ class AssistantSession(context: Context) : VoiceInteractionSession(context) {
             return
         }
         showing = true
+        AssistantAndroid.overlayVisible(true)
         state.value = OverlayState()
         if (!AssistantCalls.active()) OverlayCallPage(context, target).start()
         AssistantCalls.watch(true)
@@ -102,6 +103,7 @@ class AssistantSession(context: Context) : VoiceInteractionSession(context) {
 
     /** Home, lock or another app have already hidden the window; keep the call in its notification. */
     override fun onHide() {
+        AssistantAndroid.overlayVisible(false)
         if (showing) {
             stopWatching()
             finish()
@@ -114,6 +116,7 @@ class AssistantSession(context: Context) : VoiceInteractionSession(context) {
     }
 
     override fun onDestroy() {
+        AssistantAndroid.overlayVisible(false)
         if (showing) stopWatching()
         scope.cancel()
         owners.destroy()

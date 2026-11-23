@@ -46,6 +46,8 @@ internal object AssistantAndroid {
 
     fun muted(muted: Boolean) = LiveCallService.setMuted(muted)
 
+    fun overlayVisible(visible: Boolean) = LiveCallService.setOverlayVisible(visible)
+
     fun blockedSshRequest(request: android.webkit.WebResourceRequest) = SshWebRequests.blocked(request)
 
     fun stop(context: Context, action: java.util.function.Consumer<String>) {

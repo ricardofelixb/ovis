@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
 
-import { PI_VOICE_PATH, PI_VOICE_STATUS_PATH } from "../../shared/pi-voice.ts";
+import { PI_VOICE_PATH, PI_VOICE_STATUS_PATH, parsePiFrame } from "../../shared/pi-voice.ts";
 import { FrameType } from "../../shared/relay-mux.ts";
+import { RelaySession, type RelaySessionOptions } from "../relay/session.ts";
 import { bounded, relayConnection, relayDevice, relayFixture } from "../relay/test-helpers.ts";
 import { PiVoiceHub } from "./pi-voice.ts";
 
@@ -11,7 +12,10 @@ for (const role of ["drive", "watch"] as const) {
     const services = fixture.app.context.services;
     const calls: string[] = [];
     const piVoice = new PiVoiceHub({ candidates: async (pane) => { calls.push(pane); return null; } });
-    const link = await relayConnection(fixture, { services: { ...services, piVoice }, websocket: services.core.socketHandlers });
+    class TestSession extends RelaySession {
+      constructor(options: RelaySessionOptions) { super({ ...options, services: { ...services, piVoice } }); }
+    }
+    const link = await relayConnection(fixture, { websocket: services.core.socketHandlers }, TestSession);
     try {
       await link.auth(await relayDevice(fixture, role));
       const status = await link.open(`${PI_VOICE_STATUS_PATH}?pane_id=w1:p1`).response;
@@ -20,7 +24,7 @@ for (const role of ["drive", "watch"] as const) {
       expect(calls).toEqual(["w1:p1"]);
       const stream = link.mux.openWs({ target: `${PI_VOICE_PATH}?pane_id=w1:p1`, headers: [], protocols: [] });
       const result = Promise.withResolvers<unknown>();
-      stream.onMessage = (data) => result.resolve(JSON.parse(String(data)));
+      stream.onMessage = (data) => result.resolve(parsePiFrame(String(data)));
       link.onFrame = (frame) => {
         if (frame.type === FrameType.HTTP_HEADERS && frame.stream_id === stream.id) result.resolve(frame.payload.status);
       };
