@@ -172,6 +172,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         registerPlugin(HerdrShellPlugin.class);
+        if (Build.VERSION.SDK_INT >= 33) registerPlugin(AssistantPlugin.class);
         registerPlugin(OvisAuthPlugin.class);
         registerPlugin(SaveImagePlugin.class);
         registerPlugin(OvisDirectPlugin.class);

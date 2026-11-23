@@ -49,6 +49,8 @@ export interface PiVoiceMediaDeps {
   stream: MediaStream;
   audio: HTMLAudioElement;
   audioContext: AudioContext | null;
+  /** This WebView plays the reply as Android's call audio, not media audio. */
+  callAudio?: boolean;
   createPeer(): RTCPeerConnection;
   send(frame: PhoneToPiFrame): void;
   /** the call cannot go on; Pi has been told */
@@ -297,7 +299,7 @@ export class BrowserLiveMedia {
   /** Plays the reply raised, with a limiter so its loudest moments can't clip; false where there is no Web Audio. */
   #playLouder(stream: MediaStream): boolean {
     const context = this.#deps.audioContext;
-    if (!context || nativeCallAudio()) return false;
+    if (!context || this.#deps.callAudio || nativeCallAudio()) return false;
     try {
       const gain = context.createGain();
       gain.gain.value = REPLY_GAIN;

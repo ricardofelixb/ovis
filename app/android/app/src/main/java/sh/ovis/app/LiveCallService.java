@@ -144,14 +144,28 @@ public class LiveCallService extends Service {
         }
     }
 
-    /** The window (its activity) whose page has the call: another window's page loading or closing leaves it alone. */
+    /** The activity or voice session that owns the call. Closing a different window leaves it alone. */
     private static Context owner;
 
     /** Throws when the app is no longer in view, where Android starts no service. */
     static void start(Context context, String title, String body, String mute, String unmute) {
+        start(context, title, body, mute, unmute, false);
+    }
+
+    static void start(Context context, String title, String body, String mute, String unmute, boolean foreground) {
+        Intent intent = new Intent(context, LiveCallService.class).putExtra("title", title).putExtra("body", body)
+            .putExtra("mute", mute).putExtra("unmute", unmute);
+        if (foreground) context.startForegroundService(intent);
+        else context.startService(intent);
         owner = context;
-        context.startService(new Intent(context, LiveCallService.class).putExtra("title", title).putExtra("body", body)
-            .putExtra("mute", mute).putExtra("unmute", unmute));
+    }
+
+    static void updateText(Context context, String title, String mute, String unmute) {
+        if (owner != context || shown == null) return;
+        shown.title = title;
+        shown.muteLabel = mute;
+        shown.unmuteLabel = unmute;
+        shown.post();
     }
 
     /** The page's call muted or unmuted: the notification's button turns to match. */
@@ -267,10 +281,10 @@ public class LiveCallService extends Service {
         return value == null ? fallback : value;
     }
 
-    /** Swiped away from the recent apps: the page, and its call, are gone. */
+    /** Swiping Ovis away from Recents removes the activity's page, not the voice session's. */
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        stopSelf();
+        if (owner == null || owner instanceof android.app.Activity) stopSelf();
     }
 
     @Override
