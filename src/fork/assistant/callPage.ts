@@ -5,17 +5,16 @@ import type { CallMirror } from "./callMirror.ts";
 const IDLE_MS = 5 * 60_000;
 
 /** The side-button call ends after five quiet minutes, but not while Pi is working or parked. */
-function quietCallLimit(): () => void {
+function quietCallLimit(): { speech(): void; stop(): void } {
   let lastSpeech = performance.now();
   const timer = setInterval(() => {
     const { status, phase, muted } = piVoiceState();
     const { input, output } = piVoiceLevels();
     const now = performance.now();
-    const quietPhase = phase === "listening" || phase === "muted";
-    if (status !== "live" || !quietPhase || (!muted && phase !== "muted" && input >= 0.3) || output >= 0.015) lastSpeech = now;
+    if (status !== "live" || phase !== "listening" || (!muted && input >= 0.3) || output >= 0.015) lastSpeech = now;
     else if (now - lastSpeech >= IDLE_MS) assistantCallCommand("hangup");
   }, 250);
-  return () => clearInterval(timer);
+  return { speech: () => { lastSpeech = performance.now(); }, stop: () => clearInterval(timer) };
 }
 
 interface AssistantHost {
@@ -28,12 +27,13 @@ export function bootAssistantCall(): boolean {
   const host = (window as Window & { OvisAssistantHost?: AssistantHost }).OvisAssistantHost;
   if (!host) return false;
   const send = (event: string, payload?: object) => host.postMessage(JSON.stringify({ event, ...payload }));
-  let stopLimit: (() => void) | undefined;
+  let idleLimit: ReturnType<typeof quietCallLimit> | undefined;
   const mirror: CallMirror = {
     state: (snapshot) => send("state", { snapshot }),
     notice: (notice) => send("notice", notice),
     muted: (muted) => send("muted", { muted }),
-    release: () => { stopLimit?.(); send("release"); },
+    transcript: () => idleLimit?.speech(),
+    release: () => { idleLimit?.stop(); send("release"); },
   };
   host.onmessage = ({ data }) => {
     const { action, target, muted } = JSON.parse(data) as {
@@ -42,7 +42,7 @@ export function bootAssistantCall(): boolean {
       target?: { machineId: string; paneId: string; label: string; voice?: string };
     };
     if (action === "start" && target) {
-      stopLimit = quietCallLimit();
+      idleLimit = quietCallLimit();
       startPiVoice({ ...target, voice: isPiVoice(target.voice) ? target.voice : undefined }, mirror, muted === true);
     } else assistantCallCommand(action);
   };

@@ -91,7 +91,8 @@ it.each([true, false])("keeps the assistant mic muted through startup (before th
     socket.receive({ type: "activate" });
     expect(tracks[0]?.enabled).toBe(false);
     socket.receive({ type: "mute", muted: true });
-    expect(piVoiceState().muted).toBe(true);
+    socket.receive({ type: "phase", phase: "muted" });
+    expect(piVoiceState()).toMatchObject({ muted: true, status: "live", phase: "connecting" });
     command("mute");
     socket.receive({ type: "mute", muted: false });
     expect(tracks[0]?.enabled).toBe(true);
@@ -208,7 +209,7 @@ it.each(["listening", "working"] as const)("keeps the last %s phase when muted a
     expect(piVoiceState()).toMatchObject({ phase, muted: true });
     advance(5 * 60_000 - 250);
     expect(socket.closed).toBe(false);
-    socket.receive({ type: "transcript", role: "assistant", text: "Still here" });
+    socket.receive({ type: "transcript", role: "assistant", text: "Still here", turn: 1, final: true });
     advance(5 * 60_000 - 250);
     expect(socket.closed).toBe(false);
     advance(250);

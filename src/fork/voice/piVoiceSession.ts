@@ -82,8 +82,8 @@ interface Call {
   keepAwake: () => void;
   /** the tap on End: the socket closing after it is not a loss */
   userEnded: boolean;
-  /** The assistant notification can request mute before Pi or the microphone is ready. */
-  pendingMute?: boolean;
+  /** One assistant mute request at a time; state.muted keeps the latest local choice. */
+  muteInFlight?: boolean;
 }
 
 /**
@@ -190,6 +190,10 @@ function showPhase(phase: PiVoicePhase): void {
     update({ phase });
     return;
   }
+  showLive(phase);
+}
+
+function showLive(phase: PiVoicePhase): void {
   // ready to talk, on the opening chime. The phone's sound is a call's by now, so the chime is not
   // cut off switching to it
   playVoiceChime("open");
@@ -202,20 +206,42 @@ function showMute(muted: boolean): void {
   else nativeLiveCallMuted(muted);
 }
 
+function syncAssistantMute(active: Call, confirmed: boolean): void {
+  if (active.muteInFlight !== undefined || state.muted === confirmed || active.socket?.readyState !== WebSocket.OPEN) return;
+  active.muteInFlight = state.muted;
+  send({ type: "set-muted", muted: state.muted });
+}
+
 function onFrame(frame: PiToPhoneFrame): void {
-  if (frame.type === "mute" && call?.pendingMute !== undefined) {
-    if (frame.muted !== call.pendingMute) return;
-    call.pendingMute = undefined;
+  const active = call;
+  if (frame.type === "mute" && active && active.muteInFlight !== undefined) {
+    if (frame.muted === active.muteInFlight) {
+      active.muteInFlight = undefined;
+      syncAssistantMute(active, frame.muted);
+    }
+    // Acknowledgements must not override a newer local choice or touch the track.
+    return;
   }
   call?.media?.receive(frame);
   switch (frame.type) {
+    case "activate":
+      // A call started muted may never get a listening phase until the user unmutes.
+      if (mirror?.notice && state.muted && state.status === "starting") showLive(state.phase);
+      break;
     case "phase":
-      showPhase(frame.phase);
+      if (mirror?.notice && frame.phase === "muted") {
+        // Older Pi sends this in place of the work phase. Preserve that phase, as the Fold did.
+        if (active?.muteInFlight === undefined) {
+          active?.media?.setMuted(true);
+          showMute(true);
+        }
+      } else showPhase(frame.phase);
       break;
     case "mute":
       showMute(frame.muted);
       break;
     case "transcript":
+      mirror?.transcript?.();
       // only the reply shows; what was said to it is in the chat once the call ends
       if (frame.role === "assistant") update({ assistantText: frame.text });
       break;
@@ -259,12 +285,11 @@ function connect(active: Call, machineId: string, paneId: string, voice: PiVoice
     },
   });
   active.media = media;
-  if (active.pendingMute) media.setMuted(true);
+  if (mirror?.notice && state.muted) media.setMuted(true);
   socket.onopen = () => {
     if (call !== active) return;
     media.hello();
-    if (active.pendingMute) send({ type: "set-muted", muted: true });
-    else active.pendingMute = undefined; // Pi starts unmuted; there is nothing to acknowledge.
+    if (mirror?.notice) syncAssistantMute(active, false); // Pi starts unmuted.
   };
   socket.onmessage = (event) => {
     if (call !== active || typeof event.data !== "string") return;
@@ -331,7 +356,6 @@ function open({ machineId, paneId, label, voice }: CallTarget, muted = false): v
   audio.autoplay = true;
   void audio.play().catch(() => undefined);
   const started: Call = { socket: null, media: null, stream: null, audio, audioContext, wakeLock: null, keepAwake: () => {}, userEnded: false };
-  if (muted) started.pendingMute = true;
   call = started;
   started.keepAwake = () => {
     if (call !== started || document.visibilityState !== "visible" || (started.wakeLock && !started.wakeLock.released)) return;
@@ -401,11 +425,11 @@ export function piVoiceLabel(cwd: string | null | undefined): string {
 /** The assistant notification must mute locally even if Pi cannot receive the request yet. */
 export function setPiVoiceMuted(muted: boolean): void {
   if (call && mirror?.notice) {
-    call.pendingMute = muted;
+    const previous = state.muted;
     call.media?.setMuted(muted);
     showMute(muted);
-  }
-  send({ type: "set-muted", muted });
+    syncAssistantMute(call, previous);
+  } else send({ type: "set-muted", muted });
 }
 
 /** Linear 0..1 levels of the microphone and the reply, read each frame by the orb. */

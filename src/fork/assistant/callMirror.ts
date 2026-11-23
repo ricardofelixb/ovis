@@ -9,6 +9,7 @@ export interface CallMirror {
   // The assistant window has no Capacitor bridge; its native host keeps the same notification.
   notice?(notice: CallNotice): void;
   muted?(muted: boolean): void;
+  transcript?(): void;
 }
 
 const call = (method: string, options?: Record<string, unknown>) => { void callNative(ASSISTANT_PLUGIN, method, options).catch(() => undefined); };
