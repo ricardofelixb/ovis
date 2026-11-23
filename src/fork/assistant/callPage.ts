@@ -11,7 +11,8 @@ function quietCallLimit(): () => void {
     const { status, phase, muted } = piVoiceState();
     const { input, output } = piVoiceLevels();
     const now = performance.now();
-    if (status !== "live" || phase !== "listening" || (!muted && input >= 0.3) || output >= 0.015) lastSpeech = now;
+    const quietPhase = phase === "listening" || phase === "muted";
+    if (status !== "live" || !quietPhase || (!muted && phase !== "muted" && input >= 0.3) || output >= 0.015) lastSpeech = now;
     else if (now - lastSpeech >= IDLE_MS) assistantCallCommand("hangup");
   }, 250);
   return () => clearInterval(timer);
@@ -35,13 +36,14 @@ export function bootAssistantCall(): boolean {
     release: () => { stopLimit?.(); send("release"); },
   };
   host.onmessage = ({ data }) => {
-    const { action, target } = JSON.parse(data) as {
+    const { action, target, muted } = JSON.parse(data) as {
       action: string;
+      muted?: boolean;
       target?: { machineId: string; paneId: string; label: string; voice?: string };
     };
     if (action === "start" && target) {
       stopLimit = quietCallLimit();
-      startPiVoice({ ...target, voice: isPiVoice(target.voice) ? target.voice : undefined }, mirror);
+      startPiVoice({ ...target, voice: isPiVoice(target.voice) ? target.voice : undefined }, mirror, muted === true);
     } else assistantCallCommand(action);
   };
   send("ready");

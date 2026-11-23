@@ -82,6 +82,8 @@ interface Call {
   keepAwake: () => void;
   /** the tap on End: the socket closing after it is not a loss */
   userEnded: boolean;
+  /** The assistant notification can request mute before Pi or the microphone is ready. */
+  pendingMute?: boolean;
 }
 
 /**
@@ -194,16 +196,24 @@ function showPhase(phase: PiVoicePhase): void {
   update({ phase, status: "live" });
 }
 
+function showMute(muted: boolean): void {
+  update({ muted });
+  if (mirror?.muted) mirror.muted(muted);
+  else nativeLiveCallMuted(muted);
+}
+
 function onFrame(frame: PiToPhoneFrame): void {
+  if (frame.type === "mute" && call?.pendingMute !== undefined) {
+    if (frame.muted !== call.pendingMute) return;
+    call.pendingMute = undefined;
+  }
   call?.media?.receive(frame);
   switch (frame.type) {
     case "phase":
       showPhase(frame.phase);
       break;
     case "mute":
-      update({ muted: frame.muted });
-      if (mirror?.muted) mirror.muted(frame.muted);
-      else nativeLiveCallMuted(frame.muted);
+      showMute(frame.muted);
       break;
     case "transcript":
       // only the reply shows; what was said to it is in the chat once the call ends
@@ -249,7 +259,13 @@ function connect(active: Call, machineId: string, paneId: string, voice: PiVoice
     },
   });
   active.media = media;
-  socket.onopen = () => media.hello();
+  if (active.pendingMute) media.setMuted(true);
+  socket.onopen = () => {
+    if (call !== active) return;
+    media.hello();
+    if (active.pendingMute) send({ type: "set-muted", muted: true });
+    else active.pendingMute = undefined; // Pi starts unmuted; there is nothing to acknowledge.
+  };
   socket.onmessage = (event) => {
     if (call !== active || typeof event.data !== "string") return;
     let frame;
@@ -274,11 +290,11 @@ export interface CallTarget { machineId: string; paneId: string; label: string; 
  * the speaker element and the audio context are made, and the screen kept awake, all before
  * anything is waited for.
  */
-export function startPiVoice(target: CallTarget, host?: CallMirror): void {
+export function startPiVoice(target: CallTarget, host?: CallMirror, muted = false): void {
   if (claiming || state.status === "starting" || state.status === "live") return;
   if (host || !hasAssistantPlugin()) {
     mirror = host ?? null;
-    open(target);
+    open(target, muted);
     return;
   }
   claiming = true;
@@ -298,9 +314,9 @@ export function startPiVoice(target: CallTarget, host?: CallMirror): void {
   });
 }
 
-function open({ machineId, paneId, label, voice }: CallTarget): void {
+function open({ machineId, paneId, label, voice }: CallTarget, muted = false): void {
   clearTimeout(ending);
-  update({ ...IDLE, status: "starting", machineId, paneId, label });
+  update({ ...IDLE, status: "starting", machineId, paneId, label, muted });
   // the opening chime plays once the call is ready to talk; only a tap lets sound start
   primeVoiceChime();
   const getUserMedia = navigator.mediaDevices?.getUserMedia?.bind(navigator.mediaDevices);
@@ -315,6 +331,7 @@ function open({ machineId, paneId, label, voice }: CallTarget): void {
   audio.autoplay = true;
   void audio.play().catch(() => undefined);
   const started: Call = { socket: null, media: null, stream: null, audio, audioContext, wakeLock: null, keepAwake: () => {}, userEnded: false };
+  if (muted) started.pendingMute = true;
   call = started;
   started.keepAwake = () => {
     if (call !== started || document.visibilityState !== "visible" || (started.wakeLock && !started.wakeLock.released)) return;
@@ -381,8 +398,13 @@ export function piVoiceLabel(cwd: string | null | undefined): string {
   return cwd?.split("/").filter(Boolean).at(-1) ?? "Pi";
 }
 
-/** Asks Pi to mute or unmute; the answer comes back as a `mute` frame, which is what the view shows. */
+/** The assistant notification must mute locally even if Pi cannot receive the request yet. */
 export function setPiVoiceMuted(muted: boolean): void {
+  if (call && mirror?.notice) {
+    call.pendingMute = muted;
+    call.media?.setMuted(muted);
+    showMute(muted);
+  }
   send({ type: "set-muted", muted });
 }
 

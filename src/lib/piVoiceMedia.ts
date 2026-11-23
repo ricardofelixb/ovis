@@ -111,8 +111,7 @@ export class BrowserLiveMedia {
         this.#startLevels();
         break;
       case "mute":
-        this.#muted = frame.muted;
-        this.#syncTrack();
+        this.setMuted(frame.muted);
         break;
       case "park":
         this.#park();
@@ -123,6 +122,12 @@ export class BrowserLiveMedia {
       default:
         break;
     }
+  }
+
+  /** Apply a mute at the microphone without waiting for Pi's acknowledgement. */
+  setMuted(muted: boolean): void {
+    this.#muted = muted;
+    this.#syncTrack();
   }
 
   /** Linear 0..1 levels of what the microphone hears and what the reply plays. */

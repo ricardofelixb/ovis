@@ -29,6 +29,7 @@ internal class OverlayCallPage(private val context: Context, private val target:
     private var view: WebView? = null
     private var reply: JavaScriptReplyProxy? = null
     private var callStarted = false
+    private var mutedBeforeReady = false
 
     fun start() {
         if (!AssistantCalls.claim(this)) return
@@ -94,7 +95,7 @@ internal class OverlayCallPage(private val context: Context, private val target:
                 when (data.optString("event")) {
                     "ready" -> if (reply == null) {
                         reply = proxy
-                        send(JSONObject().put("action", "start").put("target", target))
+                        send(JSONObject().put("action", "start").put("target", target).put("muted", mutedBeforeReady))
                         AssistantCalls.ready(this)
                     }
                     "state" -> {
@@ -113,8 +114,15 @@ internal class OverlayCallPage(private val context: Context, private val target:
     }
 
     override fun command(action: String) {
-        if (action == "hangup" && reply == null) close()
-        else send(JSONObject().put("action", action))
+        if (reply != null) {
+            send(JSONObject().put("action", action))
+        } else when (action) {
+            "hangup" -> close()
+            "mute" -> {
+                mutedBeforeReady = !mutedBeforeReady
+                AssistantAndroid.muted(mutedBeforeReady)
+            }
+        }
     }
 
     private fun send(message: JSONObject) { reply?.postMessage(message.toString()) }
