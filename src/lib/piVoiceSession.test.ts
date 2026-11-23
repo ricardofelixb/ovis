@@ -98,6 +98,36 @@ it.each([true, false])("keeps the assistant mic muted through startup (before th
   } finally { command("hangup"); }
 });
 
+it("never opens the assistant mic on delayed replies to rapid mute changes", async () => {
+  const command = openAssistantPage();
+  try {
+    grant?.();
+    await flush();
+    const socket = FakeSocket.all[0]!;
+    socket.open();
+    socket.receive({ type: "activate" });
+    command("mute");
+    command("mute");
+    command("mute");
+    const sentMutes = () => socket.sent.map((text) => JSON.parse(text)).filter((frame) => frame.type === "set-muted").map((frame) => frame.muted);
+    expect(sentMutes()).toEqual([true]);
+    socket.receive({ type: "mute", muted: true });
+    expect(sentMutes()).toEqual([true]);
+    // This time the unmute request has already gone out when the user mutes again.
+    command("mute");
+    command("mute");
+    expect(sentMutes()).toEqual([true, false]);
+    socket.receive({ type: "mute", muted: false });
+    expect(sentMutes()).toEqual([true, false, true]);
+    expect(tracks[0]?.enabled).toBe(false);
+    expect(piVoiceState().muted).toBe(true);
+    socket.receive({ type: "mute", muted: true });
+    command("mute");
+    socket.receive({ type: "mute", muted: false });
+    expect(tracks[0]?.enabled).toBe(true);
+  } finally { command("hangup"); }
+});
+
 describe("starting a call from the phone", () => {
   it("opens the connection only once the microphone is allowed, and listens to it from its first frame", async () => {
     startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
@@ -154,7 +184,7 @@ describe("starting a call from the phone", () => {
   });
 });
 
-it("ends a muted assistant call after five quiet minutes", async () => {
+it.each(["listening", "working"] as const)("keeps the last %s phase when muted and only times out while listening", async (phase) => {
   let now = 0;
   const previous = Object.getOwnPropertyDescriptor(performance, "now");
   Object.defineProperty(performance, "now", { configurable: true, value: () => now });
@@ -165,6 +195,7 @@ it("ends a muted assistant call after five quiet minutes", async () => {
     await Promise.resolve();
     const socket = FakeSocket.all[0]!;
     socket.open();
+    socket.receive({ type: "phase", phase });
     socket.receive({ type: "phase", phase: "muted" });
     socket.receive({ type: "mute", muted: true });
     const advance = (milliseconds: number) => {
@@ -174,11 +205,14 @@ it("ends a muted assistant call after five quiet minutes", async () => {
         jest.advanceTimersByTime(250);
       }
     };
+    expect(piVoiceState()).toMatchObject({ phase, muted: true });
+    advance(5 * 60_000 - 250);
+    expect(socket.closed).toBe(false);
+    socket.receive({ type: "transcript", role: "assistant", text: "Still here" });
     advance(5 * 60_000 - 250);
     expect(socket.closed).toBe(false);
     advance(250);
-    expect(socket.closed).toBe(true);
-    jest.runOnlyPendingTimers();
+    expect(socket.closed).toBe(phase === "listening");
   } finally {
     endPiVoice();
     jest.runOnlyPendingTimers();
