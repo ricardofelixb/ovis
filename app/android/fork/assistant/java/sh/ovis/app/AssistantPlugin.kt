@@ -46,6 +46,8 @@ internal object AssistantAndroid {
 
     fun muted(muted: Boolean) = LiveCallService.setMuted(muted)
 
+    fun blockedSshRequest(request: android.webkit.WebResourceRequest) = SshWebRequests.blocked(request)
+
     fun stop(context: Context, action: java.util.function.Consumer<String>) {
         if (LiveCallService.onAction === action) LiveCallService.onAction = null
         LiveCallService.stop(context)

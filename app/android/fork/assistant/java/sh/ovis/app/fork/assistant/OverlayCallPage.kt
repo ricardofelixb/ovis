@@ -60,6 +60,9 @@ internal class OverlayCallPage(private val context: Context, private val target:
         page.settings.allowFileAccess = false
         page.settings.allowContentAccess = false
         page.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                AssistantAndroid.blockedSshRequest(request)
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
                 request.isForMainFrame && request.url.toString() != url
 

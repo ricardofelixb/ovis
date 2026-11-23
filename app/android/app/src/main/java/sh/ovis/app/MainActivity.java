@@ -345,10 +345,8 @@ public class MainActivity extends BridgeActivity {
                     @Override
                     public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                         Uri url = request.getUrl();
-                        // an SSH PC's host at another port would get that PC's gate cookie (SshPcs.otherLoopbackPort)
-                        if (SshPcs.otherLoopbackPort(url.toString())) {
-                            return new WebResourceResponse("text/plain", "utf-8", 403, "Forbidden", null, new ByteArrayInputStream(new byte[0]));
-                        }
+                        WebResourceResponse blocked = SshWebRequests.blocked(request);
+                        if (blocked != null) return blocked;
                         if (
                             signingIn &&
                             request.isForMainFrame() &&
