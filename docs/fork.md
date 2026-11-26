@@ -293,14 +293,18 @@ Kind: Ricardo's own presentation (pile B), no setting: both apply on every touch
   that already says whether it is folded) on touch, and tapping it still folds them. Upstream shows the fold's
   folder there instead whenever the screen has no hover. With a pointer the folder still replaces the face on
   hover, and under a keyboard's focus everywhere. CSS only: `src/fork/component-overrides.css` (Sidebar.css section).
-- The open phone drawer's header toggle is an X, as on a wider screen, where upstream draws the Ovis mark. Its
-  `secondTapOfOpening` guard stays, so the opening double tap's second half still does not close it.
+- The open phone drawer's header toggle is a `+` that opens New workspace, where upstream draws the Ovis mark
+  (upstream left the `+` out of that row in #3820). Like the desktop header's `+`, it starts the workspace on the
+  selected PC and is off on a view-only device or a PC that is not connected. The drawer closes by a tap outside,
+  a swipe, Back, Escape or its named close for screen readers. The `secondTapOfOpening` guard moved onto the `+`,
+  so the opening double tap's second half does not start a workspace.
 
 Hooks in upstream files:
-- `src/App.tsx`: the drawer toggle draws `drawerOpen ? <X /> : <Menu />` and drops the unused `is-mark` class.
+- `src/App.tsx`: `newWorkspaceOff` and `newWorkspaceTitle`, shared with the desktop header's `+`; the drawer toggle
+  takes the `+`'s label, title, disabled state and click while `drawerHead`, and drops the unused `is-mark` class.
 
-Checks: `scripts/drawer-modal-regression.ts` (the X, the face on touch and its fold);
-`scripts/inbox-mode-demo-regression.ts` no longer looks for `.is-mark`.
+Checks: `scripts/drawer-modal-regression.ts` (the `+`, its double-tap guard, the face on touch and its fold);
+`scripts/inbox-mode-demo-regression.ts` reads the `+`'s label instead of `.is-mark`.
 
 ## Three piles
 
