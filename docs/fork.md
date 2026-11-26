@@ -259,7 +259,8 @@ With both on:
   `parent_pane_id`; a helper whose agent is in another workspace stays a normal row. The agent's picture is
   the fold caret (`ForkHelpersFace`) and its title gets the hidden helpers' "+N" (`ForkFoldCount`). A blocked
   helper and the selected pane stay in sight while folded; a sidebar filter folds nothing. Which agents are
-  open is shared with the Agents list and the agent inbox (`HELPERS_OPEN_KEY`, `useForkOpenHelpers`).
+  open is shared with the Agents list and the agent inbox (`HELPERS_OPEN_KEY`, `useForkOpenHelpers`, a store read
+  from storage on each draw, so turning the tree on shows what the Agents list opened meanwhile).
 - An agent row drops its tab name after the title (the row's hover title keeps it); the agent's live name stays.
 
 Code: `src/fork/sidebar/treeRows.ts` (`forkTreeOn`, `forkTreeRows`, `forkTreeTab`, pure),
