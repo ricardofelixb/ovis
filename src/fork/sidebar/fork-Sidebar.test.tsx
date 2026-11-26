@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, spyOn } from "bun:test";
 import { act, createElement } from "react";
 import { create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 
-import type { PaneInfo, SessionSnapshot, WorkspaceInfo } from "../../../shared/protocol.ts";
+import type { HerdrPane, SessionSnapshot, WorkspaceInfo } from "../../../shared/protocol.ts";
 import { HELPERS_OPEN_KEY } from "../../components/AgentSidebar.tsx";
 import { Sidebar } from "../../components/Sidebar.tsx";
 import type { AppActions } from "../../lib/actions.ts";
@@ -13,7 +13,7 @@ import { currentSidebarPins, setSidebarPins } from "../../lib/sidebarPins.ts";
 
 const workspace = (id: string, tabs: number): WorkspaceInfo =>
   ({ workspace_id: id, label: id, active_tab_id: `${id}:t1`, number: 1, tab_count: tabs, pane_count: 1, focused: false, agent_status: "idle", worktree: null });
-const pane = (id: string, workspaceId: string, tab: string, extra: Partial<PaneInfo> = {}): PaneInfo =>
+const pane = (id: string, workspaceId: string, tab: string, extra: Partial<HerdrPane> = {}): HerdrPane =>
   ({ pane_id: id, workspace_id: workspaceId, tab_id: `${workspaceId}:${tab}`, terminal_id: `${id}:term`, revision: 1, focused: false, agent_status: "idle", ...extra });
 // an agent with two helpers, one idle and one that needs the person, and a helper of it that runs in another workspace
 const snapshot: SessionSnapshot = {
