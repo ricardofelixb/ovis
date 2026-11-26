@@ -6,7 +6,7 @@ import type { HerdrPane, SessionSnapshot, WorkspaceInfo } from "../../../shared/
 import { HELPERS_OPEN_KEY } from "../../components/AgentSidebar.tsx";
 import { Sidebar } from "../../components/Sidebar.tsx";
 import type { AppActions } from "../../lib/actions.ts";
-import { FOLD_HELPERS_STORAGE_KEY, SettingsProvider, SIDEBAR_AGENT_TREE_STORAGE_KEY } from "../../lib/settings.ts";
+import { FOLD_HELPERS_STORAGE_KEY, SettingsProvider, SIDEBAR_AGENT_TREE_STORAGE_KEY, useSettings, type Settings } from "../../lib/settings.ts";
 import { inactiveSidebarFilter } from "../../lib/sidebarFilter.ts";
 import { SidebarFilterProvider } from "../../lib/sidebarFilterContext.ts";
 import { currentSidebarPins, setSidebarPins } from "../../lib/sidebarPins.ts";
@@ -74,8 +74,13 @@ async function draw(settings: { foldHelpers: boolean; agentTree: boolean }, sele
   stored.set(FOLD_HELPERS_STORAGE_KEY, String(settings.foldHelpers));
   await act(async () => {
     renderer = create(createElement(SettingsProvider, null, createElement(SidebarFilterProvider, { value: { filter: inactiveSidebarFilter(), reportBranches: () => {} } },
-      createElement(Sidebar, { snapshot, online: true, selectedPaneId, actions }))));
+      createElement(SettingsHandle), createElement(Sidebar, { snapshot, online: true, selectedPaneId, actions }))));
   });
+}
+let updateSettings: (patch: Partial<Settings>) => void = () => {};
+function SettingsHandle() {
+  updateSettings = useSettings().update;
+  return null;
 }
 const tree = () => renderer!.root.findAll((node) => node.type === "li" && typeof node.props["data-workspace"] === "string").map((row) =>
   [row.props["data-workspace"] as string, ...row.findAll((node) => node.type === "li" && typeof node.props["data-agent-pane"] === "string").map((agent) => agent.props["data-agent-pane"] as string)]);
@@ -113,6 +118,19 @@ it("opens the agents the Agents list and the inbox keep open, and shows the sele
   stored.delete(HELPERS_OPEN_KEY);
   await draw({ foldHelpers: true, agentTree: true }, "api:helper");
   expect(tree()[0]).toEqual(["api", "api:lead", "api:helper", "api:asking"]);
+});
+
+it("takes the agents the Agents list opened while the tree was off, and its first click folds them", async () => {
+  await draw({ foldHelpers: true, agentTree: false });
+  // the Agents list, drawn while the tree is off, opens the agent
+  stored.set(HELPERS_OPEN_KEY, JSON.stringify(["local:api:lead"]));
+  await act(async () => updateSettings({ sidebarAgentTree: true }));
+  expect(tree()[0]).toEqual(["api", "api:lead", "api:helper", "api:asking"]);
+  const face = agentRow("api:lead").find((node) => node.props.className === "fork-helpers-face");
+  expect(face.props["aria-expanded"]).toBe(true);
+  await act(async () => face.props.onClick());
+  expect(JSON.parse(stored.get(HELPERS_OPEN_KEY)!)).toEqual([]);
+  expect(tree()[0]).toEqual(["api", "api:lead", "api:asking"]);
 });
 
 it("drops the tab name from an agent row while both are on, keeping it in the row's hover title", async () => {
