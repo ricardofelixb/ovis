@@ -1,3 +1,4 @@
+import type { AgentRow } from "../../lib/agentRoster.ts";
 import { forkFamiliesFolded, type ForkFold, type ForkTree } from "../inbox/inboxRows.ts";
 
 /** What the fork adds to a workspace tree's agent row: its place in its agent's family, and an agent's fold. */
@@ -36,7 +37,12 @@ export function forkTreeTab(on: boolean, tabName: string | null): string | null 
   return on ? null : tabName;
 }
 
-/** An Agents list row's tab name (AgentSidebar.tsx): Settings → Fold helpers drops it there as in the tree. */
-export function forkAgentsTab(settings: { foldHelpers: boolean }, tabName: string | null): string | null {
-  return forkTreeTab(settings.foldHelpers, tabName);
+/**
+ * The Agents list's rows (AgentSidebar.tsx) without their tab while Settings → Fold helpers is on, as the tree drops it:
+ * the row's title (one-line rows put a named tab first), its second line and its hover title then say only the agent.
+ */
+export function forkAgentsRoster<R extends { pinned: AgentRow[]; rest: AgentRow[] }>(settings: { foldHelpers: boolean }, roster: R): R {
+  if (!settings.foldHelpers) return roster;
+  const untabbed = (row: AgentRow): AgentRow => ({ ...row, entry: { ...row.entry, tab: null } });
+  return { ...roster, pinned: roster.pinned.map(untabbed), rest: roster.rest.map(untabbed) };
 }
