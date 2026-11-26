@@ -35,3 +35,8 @@ export function forkTreeRows<T extends { pane: { pane_id: string; parent_pane_id
 export function forkTreeTab(on: boolean, tabName: string | null): string | null {
   return on ? null : tabName;
 }
+
+/** An Agents list row's tab name (AgentSidebar.tsx): Settings → Fold helpers drops it there as in the tree. */
+export function forkAgentsTab(settings: { foldHelpers: boolean }, tabName: string | null): string | null {
+  return forkTreeTab(settings.foldHelpers, tabName);
+}

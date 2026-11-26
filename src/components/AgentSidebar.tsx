@@ -37,6 +37,7 @@ import { friendKey } from "../../shared/friends.ts";
 import { useFriends } from "../lib/friends.ts";
 import { ForkRolePicture } from "../fork/friends/AgentRole.tsx";
 import { ForkFoldCount, ForkHelpersFace } from "../fork/inbox/HelpersFace.tsx";
+import { forkAgentsTab } from "../fork/sidebar/treeRows.ts";
 import { RowMenu } from "./RowMenu.tsx";
 import { BackgroundBadge, compactWorktreeName, ContextBadge, displayPaneTitle, onRowContextMenu, PlanBadge, StatusBadge } from "./Sidebar.tsx";
 import "./AgentSidebar.css";
@@ -437,7 +438,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
     const markAgent = mark && hasAgentMark(mark) ? mark : null;
     const { own: said, title, replaced, drawn } = agentRowTitle(row, compact);
     const ownTitle = replaced ? said : null;
-    const parts = { agentLabel: kindLabel !== null && titleOnlyNamesAgent(kindLabel, markNames(entry)) ? null : kindLabel, title, markAgent, machineName: machineName(machine), workspaceLabel: workspace.label, tabName: agentTabName(tab, tabs, t) };
+    const parts = { agentLabel: kindLabel !== null && titleOnlyNamesAgent(kindLabel, markNames(entry)) ? null : kindLabel, title, markAgent, machineName: machineName(machine), workspaceLabel: workspace.label, tabName: forkAgentsTab(settings, agentTabName(tab, tabs, t)) };
     const contextParts = agentContext(parts).filter((part) => part !== title && !(replaced && part === workspace.label));
     const context = contextParts.join(" · ");
     const kind = kindLabel?.trim() || null;

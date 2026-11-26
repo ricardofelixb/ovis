@@ -263,7 +263,10 @@ With both on:
   from storage on each draw, so turning the tree on shows what the Agents list opened meanwhile).
 - An agent row drops its tab name after the title (the row's hover title keeps it); the agent's live name stays.
 
-Code: `src/fork/sidebar/treeRows.ts` (`forkTreeOn`, `forkTreeRows`, `forkTreeTab`, pure),
+With Fold helpers under their agent on alone (the Agents list still drawn), the Agents list's rows drop the tab
+name too, from the row's second line, its one-line lead and its hover title; the agent's live name stays.
+
+Code: `src/fork/sidebar/treeRows.ts` (`forkTreeOn`, `forkTreeRows`, `forkTreeTab`, `forkAgentsTab`, pure),
 `src/fork/sidebar/useForkTree.tsx` (the hook the tree calls), `forkFamiliesFolded` in
 `src/fork/inbox/inboxRows.ts` (the inbox's own nesting and folds, reused, no third copy), CSS in
 `src/fork/component-overrides.css` (Sidebar.css section). Tests: `src/fork/sidebar/fork-treeRows.test.ts`,
@@ -275,6 +278,8 @@ Hooks in upstream files:
   `forkTree.count(...)` in the row, and `forkTree.rows(workers)` before the map.
 - `src/components/MachineSidebar.tsx`: one import, `forkTreeOn(settings) ? null :` before `agentList`, and
   `agentList &&` on its two `SidebarSplit`s.
+- `src/components/AgentSidebar.tsx`: one import, and `forkAgentsTab(settings, ...)` around `agentTabName(...)` in
+  `describe`'s `parts`.
 
 Upstream candidate: folding the workspace tree's helpers like the Agents list could suit upstream as part of
 Fold helpers under their agent; dropping the Agents list and the tab name are Ricardo's own layout.
