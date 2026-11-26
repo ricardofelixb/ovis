@@ -44,6 +44,7 @@ import { paneDrag } from "../lib/paneDrag.ts";
 import { publishWorkspaceRows, workspaceRows } from "../lib/adjacentTarget.ts";
 import { currentSidebarPins, pinnedGroupIds, pinnedWorkspaceIds, pruneWorkspacePins, reorderWorkspacePins, setSidebarPins, splitPinnedGroups, subscribeSidebarPins, toggleSidebarPin, workspacePinKey, type WorkspaceGroup } from "../lib/sidebarPins.ts";
 import { AgentAvatar } from "../fork/friends/AgentAvatar.tsx";
+import { forkWorktreeMark } from "../fork/friends/worktreeMark.ts";
 import { useForkTree, type ForkTreeAgent } from "../fork/sidebar/useForkTree.tsx";
 
 const ERROR_NOTE_MS = 5000;
@@ -470,7 +471,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions, watching = 
   };
 
   const rowMark = (pane: PaneInfo, linked: boolean) => {
-    const mark = paneMark(agentByPane.get(pane.pane_id));
+    const mark = forkWorktreeMark(paneMark(agentByPane.get(pane.pane_id)), settings.agentFriends, linked);
     return (
       <span className="sidebar-mark" aria-hidden="true">
         {mark !== null ? <AgentAvatar agent={mark} size={18} paneId={pane.pane_id} machineId={machineId} status={paneStatus(pane)} /> : linked ? <GitBranch /> : <Terminal />}
