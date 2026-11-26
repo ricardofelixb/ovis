@@ -285,6 +285,23 @@ Hooks in upstream files:
 Upstream candidate: folding the workspace tree's helpers like the Agents list could suit upstream as part of
 Fold helpers under their agent; dropping the Agents list and the tab name are Ricardo's own layout.
 
+## Phone drawer icons
+
+Kind: Ricardo's own presentation (pile B), no setting: both apply on every touch device.
+
+- A workspace with linked worktrees under it keeps its own face (its project icon, or the open or closed folder
+  that already says whether it is folded) on touch, and tapping it still folds them. Upstream shows the fold's
+  folder there instead whenever the screen has no hover. With a pointer the folder still replaces the face on
+  hover, and under a keyboard's focus everywhere. CSS only: `src/fork/component-overrides.css` (Sidebar.css section).
+- The open phone drawer's header toggle is an X, as on a wider screen, where upstream draws the Ovis mark. Its
+  `secondTapOfOpening` guard stays, so the opening double tap's second half still does not close it.
+
+Hooks in upstream files:
+- `src/App.tsx`: the drawer toggle draws `drawerOpen ? <X /> : <Menu />` and drops the unused `is-mark` class.
+
+Checks: `scripts/drawer-modal-regression.ts` (the X, the face on touch and its fold);
+`scripts/inbox-mode-demo-regression.ts` no longer looks for `.is-mark`.
+
 ## Three piles
 
 - **A: reusable changes.** Upstream PR candidates, not submitted. Optional presentation features should arrive upstream disabled; protocol correctness fixes should retain their focused tests rather than acquire a switch.
