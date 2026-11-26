@@ -1009,18 +1009,18 @@ export function App() {
           {inboxBack ? <button type="button" id="inbox-back" className="icon-button inbox-back" aria-label={t("Back")} title={t("Back")} onClick={inbox.back}><ChevronLeft /></button> : <button
             type="button"
             id="drawer-toggle"
-            className={`icon-button drawer-toggle${drawerHead ? " is-mark" : ""}`}
+            className="icon-button drawer-toggle"
             aria-label={t(drawerOpen ? "Close workspace list" : "Open workspace list")}
             aria-haspopup="dialog"
             aria-expanded={drawerOpen}
             aria-controls="workspace-drawer"
             onClick={(event) => {
-              // the mark stands where the menu button was: the opening double tap's second half does not close it
+              // the X stands where the menu button was: the opening double tap's second half does not close it
               if (drawerHead && secondTapOfOpening(event.timeStamp)) return;
               toggleDrawerByButton(event.timeStamp);
             }}
           >
-            {drawerHead ? <OvisMark width="22" height="22" /> : drawerOpen ? <X /> : <Menu />}
+            {drawerOpen ? <X /> : <Menu />}
           </button>}
           {!inMode && wideScreen && !sidebarCollapsed && settings.sidebarRows !== "two" && <button type="button" className="icon-button new-workspace-button" disabled={viewOnly(selectedMachineId) || selectedMachine?.state !== "connected"} aria-label={t("New workspace")} title={viewOnly(selectedMachineId) ? `${t("New workspace")} · ${t("View only")}` : t("New workspace")} onClick={() => { actions.counted?.("new_workspace", "button"); actions.openNewSession(); }}>
             <Plus aria-hidden="true" />

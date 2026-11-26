@@ -771,7 +771,7 @@ try {
           await frames(page);
           assert.equal(await page.locator("#workspace-drawer, .scrim.is-open").count(), 0, "a swipe from the edge opens no drawer in the mode");
           await page.locator(".mode-inbox").waitFor();
-          pass(13, "the open drawer's head is the Ovis mark, which closes it, and Inbox beside the gear at its foot opens the list; in the mode a swipe from the left edge opens no drawer");
+          pass(13, "the open drawer's head is an X, which closes it, and Inbox beside the gear at its foot opens the list; in the mode a swipe from the left edge opens no drawer");
         });
 
         await withPage(browser, base, off, "/?app=inbox", block("New workspace from the list"), async (page) => {

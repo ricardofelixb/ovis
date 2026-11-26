@@ -300,6 +300,13 @@
   border-radius: var(--radius-circle);
 }
 
+/* On touch a workspace with worktrees keeps its own face, which still folds them; the fold's folder shows only
+   under a keyboard's focus, as with a pointer. */
+@media (hover: none) {
+  .workspace-toggle:not(:focus-visible) .sidebar-mark { visibility: visible; }
+  .workspace-toggle:not(:focus-visible) .workspace-toggle-fold { display: none; }
+}
+
 /* Fold helpers under their agent with Agents under workspaces (fork sidebar/useForkTree.tsx): the Agents list is not
    drawn, so the PCs section takes its room, also from a split that was dragged before. */
 .sidebar-shell:not(:has(> .agents-sidebar)) > .pcs-sidebar { flex: 1 1 0; min-height: 0; max-height: none; }

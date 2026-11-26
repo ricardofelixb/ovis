@@ -162,16 +162,16 @@ try {
     // the click's own handlers ran in its dispatch; the render a way in would cause is drawn by the next frame
     await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
     assert.ok(second - opened < SECOND_TAP_MS, `the two taps landed ${Math.round(second - opened)} ms apart, not a double tap: the guard was not exercised`);
-    assert.equal(await page.locator("#workspace-drawer.is-open").count(), 1, `the second tap of a double tap (${Math.round(second - opened)} ms apart) on the mark's spot leaves the drawer open`);
+    assert.equal(await page.locator("#workspace-drawer.is-open").count(), 1, `the second tap of a double tap (${Math.round(second - opened)} ms apart) on the X's spot leaves the drawer open`);
     await toggle.tap();
     await page.locator("#workspace-drawer:not(.is-open)").waitFor({ state: "attached" });
-    assert.equal(await page.locator(".mode-inbox").count(), 0, "a tap on the mark past the double tap closes the drawer and opens no inbox");
+    assert.equal(await page.locator(".mode-inbox").count(), 0, "a tap on the X past the double tap closes the drawer and opens no inbox");
     await toggle.tap();
     await page.locator("#workspace-drawer.is-open .sidebar-footer-inbox").tap();
     await page.locator(".mode-inbox").waitFor();
     assert.equal(new URL(page.url()).searchParams.get("app"), "inbox", "Inbox beside the drawer's gear opens the agent inbox");
     await guarded.close();
-    console.log(`PASS a double tap on the menu button (${Math.round(second - opened)} ms apart) opens the drawer and keeps it open; the mark closes it after ${SECOND_TAP_MS} ms, and Inbox at the drawer's foot opens the inbox`);
+    console.log(`PASS a double tap on the menu button (${Math.round(second - opened)} ms apart) opens the drawer and keeps it open; the X closes it after ${SECOND_TAP_MS} ms, and Inbox at the drawer's foot opens the inbox`);
   }
 
   {
