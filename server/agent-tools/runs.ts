@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { writeStateDocument } from "../state-document.ts";
 import { HARNESS_LIMITS } from "../../shared/harness-tool.ts";
 import { readProcessBirth } from "../process-owner.ts";
+import { launchedWithToken } from "../fork/agent-tool-launch-proof.ts";
 import { localPane, procLink, sameKey, type PaneKey, type PaneTerminal } from "./pane-proof.ts";
 import { idPattern, paneRegistry, readPaneRuns, readTokenRuns, type PaneSaved, type Run, type RunState, type Saved } from "./run-state.ts";
 
@@ -183,8 +184,8 @@ export class RunStore {
       const id = keeper(run.self);
       const birth = foreground && t?.foreground?.pid === foreground.pid ? readProcessBirth(foreground.pid) : null;
       const verified = run.started_by === null
-        ? birth?.state === "identified" && birth.birth.value === foreground?.birth && argv.some((word, i) => (word === "--mcp-config" && argv[i + 1] === config) || (word === "-e" && argv[i + 1] === extension) || (word === "--additional-mcp-config" && argv[i + 1] === `@${config}`)
-          || (word.startsWith("mcp_servers.ovis-agent.args=") && argv[i - 1] === "-c" && word.includes(`'${join(this.dir, "tokens", `${run.id}.token`)}'`)))
+        ? birth?.state === "identified" && birth.birth.value === foreground?.birth && (launchedWithToken(foreground?.pid, this.dir, run.id) || argv.some((word, i) => (word === "--mcp-config" && argv[i + 1] === config) || (word === "-e" && argv[i + 1] === extension) || (word === "--additional-mcp-config" && argv[i + 1] === `@${config}`)
+          || (word.startsWith("mcp_servers.ovis-agent.args=") && argv[i - 1] === "-c" && word.includes(`'${join(this.dir, "tokens", `${run.id}.token`)}'`))))
         : !!id && t?.labels["ovis.acp"] === id && t.labels["ovis.run"] === run.id;
       if (!verified) this.revoke(run.id);
     }
