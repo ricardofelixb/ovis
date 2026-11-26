@@ -755,7 +755,7 @@ try {
         await withPage(browser, base, off, "/", block("Inbox at the drawer's foot, and no drawer in the mode"), async (page) => {
           await page.locator(".pane-slot").first().waitFor();
           await openDrawerForMark(page);
-          assert.equal(await page.locator(".app-header #drawer-toggle.is-mark").getAttribute("aria-label"), "Close workspace list", "the Ovis mark at the drawer's head closes it: it is no way into the inbox");
+          assert.equal(await page.locator(".app-header #drawer-toggle").getAttribute("aria-label"), "Close workspace list", "the X at the drawer's head closes it: it is no way into the inbox");
           const entry = page.locator(FOOT_INBOX);
           assert.equal(await entry.getAttribute("title"), "Inbox", "the drawer's foot holds Inbox beside the gear");
           await shot(page, `inbox-mode-drawer-entry-390-${theme}.png`);

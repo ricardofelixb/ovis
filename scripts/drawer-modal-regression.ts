@@ -52,9 +52,9 @@ try {
   assert.deepEqual(owned, ["drawer-toggle"], "the open drawer owns the header's toggle");
   for (const id of owned) assert.equal(await page.locator(`.app-header #${id}`).count(), 1, `the owned ${id} is the header's own control`);
   assert.equal(await page.locator(".app-header .new-workspace-button").count(), 0, "the header draws no + over the open drawer");
-  const mark = page.locator(".app-header #drawer-toggle");
-  assert.deepEqual(await mark.evaluate((node) => [node.getAttribute("aria-label"), node.getAttribute("aria-expanded"), node.querySelector("img") !== null]),
-    ["Close workspace list", "true", true], "the open drawer's head is the Ovis mark, the toggle that closes it, not a way into the inbox");
+  const toggle = page.locator(".app-header #drawer-toggle");
+  assert.deepEqual(await toggle.evaluate((node) => [node.getAttribute("aria-label"), node.getAttribute("aria-expanded"), node.querySelector("img") !== null, node.querySelector("svg") !== null]),
+    ["Close workspace list", "true", false, true], "the open drawer's head is an X, the toggle that closes it, not a way into the inbox");
   assert.equal(await page.locator(".app-header").getByRole("button", { name: "Open agent inbox" }).count(), 0, "the header over the open drawer offers no inbox");
   const headTitle = page.locator(".app-header .drawer-head-title");
   const pcName = await page.evaluate(async () => ((await (await fetch("/api/machines")).json()) as { machines: { id: string; name: string }[] }).machines.find((machine) => machine.id === "local")?.name ?? null);
@@ -69,6 +69,19 @@ try {
   const ringless = () => page.evaluate(() => document.activeElement?.id === "workspace-drawer" && document.querySelector(":focus-visible:not(#workspace-drawer)") === null);
   assert.equal(await ringless(), true, "the opened drawer holds the focus itself, with no control's ring");
   assert.equal(await page.locator(".pane-column").getAttribute("inert"), "", "the pane behind the drawer is inert");
+  // fork: on touch a workspace with worktrees under it keeps its own face, which still folds them
+  const fold = drawer.locator('.workspace[data-workspace="w1C"] > .workspace-header > .workspace-toggle');
+  const faceShown = () => fold.evaluate((node) => [matchMedia("(hover: none)").matches,
+    getComputedStyle(node.querySelector(".sidebar-mark")!).visibility, getComputedStyle(node.querySelector(".workspace-toggle-fold")!).display]);
+  assert.deepEqual(await faceShown(), [true, "visible", "none"], "on touch the fold shows the workspace's own face, not the fold's folder");
+  const expanded = await fold.getAttribute("aria-expanded");
+  await fold.tap();
+  await page.waitForFunction(([selector, before]) => document.querySelector(selector)?.getAttribute("aria-expanded") !== before,
+    ['#workspace-drawer .workspace[data-workspace="w1C"] > .workspace-header > .workspace-toggle', expanded] as const, { timeout: 5_000 });
+  assert.deepEqual(await faceShown(), [true, "visible", "none"], "a tapped fold still shows the workspace's face");
+  await fold.tap();
+  await page.waitForFunction(([selector, before]) => document.querySelector(selector)?.getAttribute("aria-expanded") === before,
+    ['#workspace-drawer .workspace[data-workspace="w1C"] > .workspace-header > .workspace-toggle', expanded] as const, { timeout: 5_000 });
   const drawerButtons = drawer.locator("button:visible");
   assert.ok(await drawerButtons.count() > 0, "the drawer has focusable controls");
   await drawerButtons.last().focus();
@@ -123,7 +136,7 @@ try {
   await page.locator("#workspace-drawer:not([role])").waitFor();
   assert.equal(await drawer.getAttribute("aria-modal"), null, "the desktop sidebar is not modal");
   await context.close();
-  console.log("PASS phone drawer is a modal focus-trapped surface, headed by the Ovis mark and the PC's name with Inbox beside the gear at its foot, closed by a tap outside, a swipe, Back, Escape and its named close");
+  console.log("PASS phone drawer is a modal focus-trapped surface, headed by an X and the PC's name with Inbox beside the gear at its foot, closed by a tap outside, a swipe, Back, Escape and its named close");
 
   {
     const guarded = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
