@@ -37,6 +37,7 @@ import { friendKey } from "../../shared/friends.ts";
 import { useFriends } from "../lib/friends.ts";
 import { ForkRolePicture } from "../fork/friends/AgentRole.tsx";
 import { ForkFoldCount, ForkHelpersFace } from "../fork/inbox/HelpersFace.tsx";
+import { forkAgentsRoster } from "../fork/sidebar/treeRows.ts";
 import { RowMenu } from "./RowMenu.tsx";
 import { BackgroundBadge, compactWorktreeName, ContextBadge, displayPaneTitle, onRowContextMenu, PlanBadge, StatusBadge } from "./Sidebar.tsx";
 import "./AgentSidebar.css";
@@ -271,7 +272,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
   // Settings → Agents order: herdr's order, or Activity within each PC (each herdr counts its own changes);
   // the pinned rows stand first, in the order they were pinned (lib/agentRoster.ts)
   const byActivity = settings.agentOrder === "activity" && !settings.agentGroups;
-  const roster = useMemo(() => agentRoster(machines, { byActivity, seqs: activity.seqs, pinned }), [machines, byActivity, activity, pinned]);
+  const roster = useMemo(() => forkAgentsRoster(settings, agentRoster(machines, { byActivity, seqs: activity.seqs, pinned })), [machines, byActivity, activity, pinned, settings.foldHelpers]);
   const allRows = useMemo(() => [...roster.pinned, ...roster.rest], [roster]);
   const { filter } = useSidebarFilter();
   const split = useMemo(() => {
