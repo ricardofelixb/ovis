@@ -1,5 +1,10 @@
 import { expect, test } from "bun:test";
-import { forkAgentsTab, forkTreeOn, forkTreeRows, forkTreeTab } from "./treeRows.ts";
+import type { Machine } from "../../../shared/machines.ts";
+import type { HerdrPane } from "../../../shared/protocol.ts";
+import { agentRowTitle } from "../../components/AgentSidebar.tsx";
+import { agentRoster } from "../../lib/agentRoster.ts";
+import { agentTabName } from "../../lib/sidebarAgents.ts";
+import { forkAgentsRoster, forkTreeOn, forkTreeRows, forkTreeTab } from "./treeRows.ts";
 
 const entry = (id: string, parent?: string) => ({ pane: { pane_id: id, parent_pane_id: parent } });
 type Entry = ReturnType<typeof entry>;
@@ -50,8 +55,28 @@ test("the tree's agent rows drop the tab name only while its folds are on", () =
   expect(forkTreeTab(false, "Tab 1")).toBe("Tab 1");
 });
 
-test("the Agents list's rows drop the tab name while Fold helpers is on, with or without the tree", () => {
-  expect(forkAgentsTab({ foldHelpers: true }, "Tab 1")).toBeNull();
-  expect(forkAgentsTab({ foldHelpers: false }, "Tab 1")).toBe("Tab 1");
-  expect(forkAgentsTab({ foldHelpers: false }, null)).toBeNull();
+// one agent in a tab the user named "release", beside a second tab
+const pane: HerdrPane = { pane_id: "w1:p1", workspace_id: "w1", tab_id: "w1:t1", terminal_id: "term-1", focused: false, revision: 1, agent: "claude", agent_status: "idle", title: "Guard the export button" };
+const machine: Machine = { id: "local", name: "workstation", kind: "local", enabled: true, state: "connected", error: null, snapshot: {
+  protocol: 22, version: "0.9.5", layouts: [], panes: [pane], agents: [],
+  workspaces: [{ workspace_id: "w1", label: "checkout-api", number: 1, focused: false, pane_count: 1, tab_count: 2, active_tab_id: "w1:t1", agent_status: "idle" }],
+  tabs: [
+    { tab_id: "w1:t1", workspace_id: "w1", label: "release", number: 1, focused: false, pane_count: 1, agent_status: "idle" },
+    { tab_id: "w1:t2", workspace_id: "w1", label: "2", number: 2, focused: false, pane_count: 0, agent_status: "idle" },
+  ],
+} };
+const listRow = (foldHelpers: boolean) => forkAgentsRoster({ foldHelpers }, agentRoster([machine], { byActivity: false, seqs: () => new Map(), pinned: [] })).rest[0]!;
+const tabs = machine.snapshot!.tabs;
+const t = (key: string, values?: Record<string, string | number>) => values ? `${key} ${Object.values(values).join(" ")}` : key;
+
+test("the Agents list's rows drop the tab name while Fold helpers is on, from the one-line title and the second line", () => {
+  expect(agentRowTitle(listRow(true), true).drawn).toBe("Guard the export button");
+  expect(agentTabName(listRow(true).entry.tab, tabs, t)).toBeNull();
+  expect(agentRowTitle(listRow(false), true).drawn).toBe("release");
+  expect(agentTabName(listRow(false).entry.tab, tabs, t)).toBe("release");
+});
+
+test("with Fold helpers off the Agents list gets upstream's roster untouched", () => {
+  const roster = agentRoster([machine], { byActivity: false, seqs: () => new Map(), pinned: [] });
+  expect(forkAgentsRoster({ foldHelpers: false }, roster)).toBe(roster);
 });
