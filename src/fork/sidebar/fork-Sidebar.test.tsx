@@ -118,5 +118,5 @@ it("opens the agents the Agents list and the inbox keep open, and shows the sele
 it("drops the tab name from an agent row while both are on, keeping it in the row's hover title", async () => {
   await draw({ foldHelpers: true, agentTree: true });
   expect(places("api:lead")).toEqual([]);
-  expect(agentRow("api:lead").findByType("button").props.title).toContain("Tab 1");
+  expect(agentRow("api:lead").find((node) => node.props.className === "workspace-agent-select").props.title).toContain("Tab 1");
 });
