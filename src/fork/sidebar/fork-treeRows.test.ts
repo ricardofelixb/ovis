@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { forkTreeOn, forkTreeRows, forkTreeTab } from "./treeRows.ts";
+import { forkAgentsTab, forkTreeOn, forkTreeRows, forkTreeTab } from "./treeRows.ts";
 
 const entry = (id: string, parent?: string) => ({ pane: { pane_id: id, parent_pane_id: parent } });
 type Entry = ReturnType<typeof entry>;
@@ -48,4 +48,10 @@ test("under a filter the family order stays and nothing folds", () => {
 test("the tree's agent rows drop the tab name only while its folds are on", () => {
   expect(forkTreeTab(true, "Tab 1")).toBeNull();
   expect(forkTreeTab(false, "Tab 1")).toBe("Tab 1");
+});
+
+test("the Agents list's rows drop the tab name while Fold helpers is on, with or without the tree", () => {
+  expect(forkAgentsTab({ foldHelpers: true }, "Tab 1")).toBeNull();
+  expect(forkAgentsTab({ foldHelpers: false }, "Tab 1")).toBe("Tab 1");
+  expect(forkAgentsTab({ foldHelpers: false }, null)).toBeNull();
 });
