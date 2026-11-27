@@ -755,7 +755,7 @@ try {
         await withPage(browser, base, off, "/", block("Inbox at the drawer's foot, and no drawer in the mode"), async (page) => {
           await page.locator(".pane-slot").first().waitFor();
           await openDrawerForMark(page);
-          assert.equal(await page.locator(".app-header #drawer-toggle").getAttribute("aria-label"), "New workspace", "the + at the drawer's head starts a workspace: it is no way into the inbox");
+          assert.equal(await page.locator(".app-header #drawer-toggle.is-mark").getAttribute("aria-label"), "Close workspace list", "the Ovis mark at the drawer's head closes it: it is no way into the inbox");
           const entry = page.locator(FOOT_INBOX);
           assert.equal(await entry.getAttribute("title"), "Inbox", "the drawer's foot holds Inbox beside the gear");
           await shot(page, `inbox-mode-drawer-entry-390-${theme}.png`);
@@ -771,7 +771,7 @@ try {
           await frames(page);
           assert.equal(await page.locator("#workspace-drawer, .scrim.is-open").count(), 0, "a swipe from the edge opens no drawer in the mode");
           await page.locator(".mode-inbox").waitFor();
-          pass(13, "the open drawer's head is a + for a new workspace, and Inbox beside the gear at its foot opens the list; in the mode a swipe from the left edge opens no drawer");
+          pass(13, "the open drawer's head is the Ovis mark, which closes it, and Inbox beside the gear at its foot opens the list; in the mode a swipe from the left edge opens no drawer");
         });
 
         await withPage(browser, base, off, "/?app=inbox", block("New workspace from the list"), async (page) => {

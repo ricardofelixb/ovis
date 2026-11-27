@@ -407,7 +407,7 @@ export function App() {
   const forkOwnsInboxEntry = useForkOwnsInboxEntry();
   // the sidebar's foot, with its Inbox beside the gear, is on screen: More need not offer the way in too
   const footShown = modeOffered && wideScreen && !sidebarCollapsed && !inMode;
-  // a phone's open drawer: the header's toggle is the Ovis mark, and its title the PC and workspace
+  // a phone's open drawer: the header's toggle is the New workspace +, and its title the PC and workspace
   const drawerHead = !wideScreen && drawerOpen && !inMode;
   const newWorkspaceOff = viewOnly(selectedMachineId) || selectedMachine?.state !== "connected";
   const newWorkspaceTitle = viewOnly(selectedMachineId) ? `${t("New workspace")} · ${t("View only")}` : t("New workspace");
