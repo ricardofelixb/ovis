@@ -10,13 +10,13 @@ import "./Rail.css";
 import { setPlace, usePlace } from "./place.ts";
 
 /**
- * Settings → Fork → Navigation as this window draws it. A phone has no rail, so there Rail is drawn as Footer:
- * the places stay in the drawer's foot.
+ * Settings → Fork → Navigation as this window draws it. A phone has no rail (its inbox, Pull requests and Notes are
+ * full-screen pages), so there Rail is drawn as Default: upstream's Inbox entry in the drawer's foot.
  */
 export function useNavigation(): Navigation {
   const { settings } = useSettings();
   const wide = useMediaQuery("(min-width: 769px)");
-  return settings.navigation === "rail" && !wide ? "footer" : settings.navigation;
+  return settings.navigation === "rail" && !wide ? "upstream" : settings.navigation;
 }
 
 /** How the rail beside the workspaces sidebar enters the agent inbox; null in the inbox's own column. */

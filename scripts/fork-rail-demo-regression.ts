@@ -19,7 +19,7 @@ async function open(browser: Browser, origin: string, viewport: { width: number;
   try {
     await context.addInitScript((theme) => {
       localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", alertsOn: false, theme }));
-      localStorage.setItem("ovis:fork-settings", JSON.stringify({ navigation: "rail" }));
+      localStorage.setItem("ovis:fork-settings", JSON.stringify({ navigation: "rail", pullRequests: true, notes: true }));
     }, theme);
     const page = await context.newPage();
     const errors: string[] = [];
@@ -68,6 +68,20 @@ try {
           if (shots) await page.screenshot({ path: join(shots, `rail-landscape-${theme}.png`) });
         });
         console.log(`PASS ${theme}: at 844 by 390 under a ${SAFE_TOP}px top inset the rail beside the workspaces covers the header's top corner, its first button at ${inbox}px as in the inbox`);
+
+        // A phone has no rail: under Rail its drawer is Default's, with upstream's Inbox in the foot.
+        await open(browser, origin, { width: 390, height: 844 }, theme, `?pane=${encodeURIComponent(panes.api)}`, async (page) => {
+          await page.getByRole("button", { name: "Open workspace list", exact: true }).click();
+          const drawer = page.locator("#workspace-drawer.is-open");
+          await drawer.waitFor();
+          await drawer.locator(".sidebar-footer-inbox").waitFor();
+          assert.equal(await page.locator(".inbox-rail").count(), 0, `${theme}: a phone draws no rail`);
+          assert.equal(await drawer.locator(".fork-github-foot-open").count(), 0, `${theme}: the drawer's foot has no place icons`);
+          if (shots) await page.screenshot({ path: join(shots, `rail-phone-drawer-${theme}.png`) });
+          await drawer.locator(".sidebar-footer-inbox").click();
+          for (const name of ["Notes", "Pull requests"]) await page.locator(".mode-inbox .inbox-top").getByRole("button", { name, exact: true }).waitFor();
+        });
+        console.log(`PASS ${theme}: at 390 by 844 under Rail the drawer is Default's, upstream's Inbox in its foot and no rail or place icons, and the inbox's top row opens Notes and Pull requests`);
       }
     } finally { await browser.close(); }
   } finally { await server.stop(true); }
