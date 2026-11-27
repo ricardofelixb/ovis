@@ -7,6 +7,9 @@ export interface ForkPaneFields {
   ovis_hidden?: true;
 }
 
+/** POST `{ machine_id, pane_id, hidden }`: labels one herdr-core terminal `ovis.view=hidden`, or takes that label off (server/fork/pane-view.ts). */
+export const FORK_PANE_VIEW_PATH = "/api/fork/pane/view";
+
 /** The workspace that holds every hidden pane (a tab each), so none rolls up into a workspace the reader sees. */
 export const HIDDEN_WORKSPACE_ID = "ovis-hidden";
 
