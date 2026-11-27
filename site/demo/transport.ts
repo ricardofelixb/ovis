@@ -16,6 +16,7 @@ import { insertTextProblem } from "../../shared/terminal-insert.ts";
 import { encodeOffer } from "../../shared/relay-offer.ts";
 import { searchPattern, searchTurns, MAX_SEARCH_QUERY, type ConversationSearchResponse } from "../../shared/conversation-search.ts";
 import { PANE_SUMMARY_MAX_IDS, summaryOf, type PaneSummaries } from "../../shared/pane-summary.ts";
+import { HIDDEN_WORKSPACE_ID } from "../../shared/fork/pane.ts";
 import { neighborPane } from "../../src/lib/layoutMap.ts";
 import { closeLayoutPane, moveLayoutPane, resizeLayout, setLayoutSplitRatio, splitLayout, swapLayoutPanes } from "../../src/lib/layoutTree.ts";
 import { thisDeviceLabel } from "../../src/lib/phone.ts";
@@ -264,8 +265,7 @@ const newPaneTemplate = structuredClone(snapshot().panes[0]!);
 const newTabTemplate = structuredClone(snapshot().tabs[0]!);
 const newWorkspaceTemplate = structuredClone(snapshot().workspaces[0]!);
 
-function createDemoWorkspace(cwd: string, label: string, agent: string | null, worktree?: NonNullable<WorkspaceInfo["worktree"]>): WorkspaceCreated {
-  const id = `w${(nextWorkspace++).toString(36)}`;
+function createDemoWorkspace(cwd: string, label: string, agent: string | null, worktree?: NonNullable<WorkspaceInfo["worktree"]>, id = `w${(nextWorkspace++).toString(36)}`): WorkspaceCreated {
   const snap = snapshot();
   const pane: Pane = { ...structuredClone(newPaneTemplate), pane_id: `${id}:p1`, tab_id: `${id}:t1`, terminal_id: `${id}:term`, workspace_id: id, label: null, title: null, agent, agent_session: null, agent_status: agent ? "working" : "unknown", cwd, foreground_cwd: cwd, focused: false, terminal_title: null, terminal_title_stripped: null, revision: 1 };
   snap.panes.push(pane);
@@ -2840,8 +2840,8 @@ Object.defineProperty(globalThis, "PushManager", { value: undefined, configurabl
 
 declare const __APP_VERSION__: string;
 
-// fork: one hidden agent, like an hc terminal labelled ovis.view=hidden: only the inbox's Hidden filter lists it (src/fork/hidden/hiddenAgents.ts)
-const hiddenDemo = createDemoWorkspace("/home/demo/assistant", "assistant", null);
+// fork: one hidden agent, like an hc terminal labelled ovis.view=hidden, in the workspace the bridge keeps for them: only the inbox's Hidden filter lists it (src/fork/hidden/hiddenAgents.ts)
+const hiddenDemo = createDemoWorkspace("/home/demo/assistant", "assistant", null, undefined, HIDDEN_WORKSPACE_ID);
 const hiddenPane = snapshot().panes.find((pane) => pane.pane_id === hiddenDemo.pane_id)!;
 Object.assign(hiddenPane, { label: "Personal assistant", agent: "claude", agent_status: "idle", ovis_hidden: true });
 addAgent(hiddenPane);
