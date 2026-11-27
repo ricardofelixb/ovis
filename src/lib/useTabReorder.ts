@@ -19,7 +19,7 @@ export interface TabDragOut {
  * lib/machineContext.tsx AppLayoutContext): no insertion line and no move, as among one tab; a
  * drag can still leave the strip (`outside`).
  */
-export function useTabReorder({ owner, tabs, strip, moveTab, failed, stale, outside, adjacentBoundary, dropBoundary, fixed = false }: {
+export function useTabReorder({ owner, tabs, strip, moveTab, failed, stale, outside, adjacentBoundary, fixed = false }: {
   owner: string;
   tabs: HerdrTab[];
   strip: RefObject<HTMLDivElement | null>;
@@ -29,16 +29,14 @@ export function useTabReorder({ owner, tabs, strip, moveTab, failed, stale, outs
   outside?: TabDragOut;
   /** A folded presentation can skip hidden neighbours without changing the authoritative IDs. */
   adjacentBoundary?: (tabId: string, direction: -1 | 1) => number | null;
-  /** Return undefined to use ordinary tab geometry, or a boundary/null for a folded tab. */
-  dropBoundary?: (tabId: string, x: number) => number | null | undefined;
   fixed?: boolean;
 }) {
   const [drag, setDrag] = useState<Drag | null>(null);
   const [moving, setMoving] = useState(false);
   const ids = tabs.map((tab) => tab.tab_id);
   const key = JSON.stringify(ids);
-  const current = useRef({ owner, key, ids, moveTab, failed, stale, outside, adjacentBoundary, dropBoundary, fixed });
-  current.current = { owner, key, ids, moveTab, failed, stale, outside, adjacentBoundary, dropBoundary, fixed };
+  const current = useRef({ owner, key, ids, moveTab, failed, stale, outside, adjacentBoundary, fixed });
+  current.current = { owner, key, ids, moveTab, failed, stale, outside, adjacentBoundary, fixed };
   const press = useRef<Press | null>(null);
   const operation = useRef<Operation | null>(null);
   const suppressClick = useRef(false);
@@ -116,8 +114,6 @@ export function useTabReorder({ owner, tabs, strip, moveTab, failed, stale, outs
   const boundaryAt = (held: Press): number | null => {
     const row = strip.current;
     if (!row || !overStrip(held) || current.current.ids.length < 2 || current.current.fixed) return null;
-    const folded = current.current.dropBoundary?.(held.tabId, held.x);
-    if (folded !== undefined) return folded;
     const items = [...row.querySelectorAll<HTMLElement>(".tab-strip-item")];
     const shown = tabDropBoundary(items.map((item) => item.getBoundingClientRect()), held.x);
     const places = items.map((item, index) => Number(item.dataset["tabIndex"] ?? index));

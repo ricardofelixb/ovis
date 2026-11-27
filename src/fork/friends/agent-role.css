@@ -1,4 +1,4 @@
-/* A job agent's role icon stands in for its picture, colored by its state like the folded tab chips. */
+/* A job agent's role icon stands in for its picture, colored by its state, as in its parent tab's menu. */
 .fork-role-icon { color: var(--text-dim); stroke-width: 2.25; }
 .fork-role-icon:is([data-status="working"], [data-status="waiting"]) { color: var(--status-working); }
 .fork-role-icon[data-status="blocked"] { color: var(--status-blocked); }
