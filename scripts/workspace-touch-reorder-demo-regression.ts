@@ -781,7 +781,7 @@ try {
       assert.deepEqual((await serverOrder(page)).filter((id) => before.includes(id)), expected, "herdr got the move");
       assert.equal(await page.locator(".workspace.is-lifted, [data-drop]").count(), 0, "nothing stays lifted or marked");
       assert.equal(await page.locator(`.workspace-group[data-workspace="${before[0]}"]`).evaluate((row) => row.style.transform), "", "the dropped row sits in the list");
-      assert.equal(await page.locator('#drawer-toggle').getAttribute("aria-expanded"), "true", "the drag left the drawer open");
+      assert.equal(await page.locator("#workspace-drawer.is-open").count(), 1, "the drag left the drawer open");
       console.log("PASS a long press lifts a workspace row on a touch screen, and a drag drops it where the line shows");
 
       const burstFrom = await centerOf(page, before[0]!);

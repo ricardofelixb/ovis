@@ -407,8 +407,10 @@ export function App() {
   const forkOwnsInboxEntry = useForkOwnsInboxEntry();
   // the sidebar's foot, with its Inbox beside the gear, is on screen: More need not offer the way in too
   const footShown = modeOffered && wideScreen && !sidebarCollapsed && !inMode;
-  // a phone's open drawer: the header's toggle is the Ovis mark, and its title the PC and workspace
+  // a phone's open drawer: the header's toggle is the New workspace +, and its title the PC and workspace
   const drawerHead = !wideScreen && drawerOpen && !inMode;
+  const newWorkspaceOff = viewOnly(selectedMachineId) || selectedMachine?.state !== "connected";
+  const newWorkspaceTitle = viewOnly(selectedMachineId) ? `${t("New workspace")} · ${t("View only")}` : t("New workspace");
   const { enter: enterInbox, leave: leaveMode } = useCountedInboxWays(enterInboxShell, leaveModeShell);
   useShownCount("inbox", modeOffered, LOCAL_MACHINE);
 
@@ -1009,20 +1011,22 @@ export function App() {
           {inboxBack ? <button type="button" id="inbox-back" className="icon-button inbox-back" aria-label={t("Back")} title={t("Back")} onClick={inbox.back}><ChevronLeft /></button> : <button
             type="button"
             id="drawer-toggle"
-            className={`icon-button drawer-toggle${drawerHead ? " is-mark" : ""}`}
-            aria-label={t(drawerOpen ? "Close workspace list" : "Open workspace list")}
+            className="icon-button drawer-toggle"
+            aria-label={drawerHead ? t("New workspace") : t(drawerOpen ? "Close workspace list" : "Open workspace list")}
+            title={drawerHead ? newWorkspaceTitle : undefined}
+            disabled={drawerHead && newWorkspaceOff}
             aria-haspopup="dialog"
-            aria-expanded={drawerOpen}
-            aria-controls="workspace-drawer"
+            aria-expanded={drawerHead ? undefined : drawerOpen}
+            aria-controls={drawerHead ? undefined : "workspace-drawer"}
             onClick={(event) => {
-              // the mark stands where the menu button was: the opening double tap's second half does not close it
+              // the + stands where the menu button was: the opening double tap's second half does not start a workspace
               if (drawerHead && secondTapOfOpening(event.timeStamp)) return;
-              toggleDrawerByButton(event.timeStamp);
+              if (drawerHead) { actions.counted?.("new_workspace", "button"); actions.openNewSession(); } else toggleDrawerByButton(event.timeStamp);
             }}
           >
-            {drawerHead ? <OvisMark width="22" height="22" /> : drawerOpen ? <X /> : <Menu />}
+            {drawerHead ? <Plus aria-hidden="true" /> : drawerOpen ? <X /> : <Menu />}
           </button>}
-          {!inMode && wideScreen && !sidebarCollapsed && settings.sidebarRows !== "two" && <button type="button" className="icon-button new-workspace-button" disabled={viewOnly(selectedMachineId) || selectedMachine?.state !== "connected"} aria-label={t("New workspace")} title={viewOnly(selectedMachineId) ? `${t("New workspace")} · ${t("View only")}` : t("New workspace")} onClick={() => { actions.counted?.("new_workspace", "button"); actions.openNewSession(); }}>
+          {!inMode && wideScreen && !sidebarCollapsed && settings.sidebarRows !== "two" && <button type="button" className="icon-button new-workspace-button" disabled={newWorkspaceOff} aria-label={t("New workspace")} title={newWorkspaceTitle} onClick={() => { actions.counted?.("new_workspace", "button"); actions.openNewSession(); }}>
             <Plus aria-hidden="true" />
           </button>}
           {!inMode && <button type="button" className="icon-button palette-button" aria-label={t("Command palette")} title={shortcutTitle(t("Command palette"), "palette")} onClick={() => openPalette()}>
