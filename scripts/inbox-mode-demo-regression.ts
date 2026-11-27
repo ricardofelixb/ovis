@@ -6,7 +6,6 @@ import { chromium, type Browser, type Page } from "playwright-core";
 import { appFaces } from "./app-faces.ts";
 import { buildDemoApp } from "./demo-build.ts";
 import { chromePath } from "./chrome-path.ts";
-import { SECOND_TAP_MS } from "../src/lib/useSidebarLayout.ts";
 import type { Machine } from "../shared/machines.ts";
 import type { AgentStatus } from "../shared/protocol.ts";
 import { SHEET_HISTORY_KEY } from "../src/lib/historyKeys.ts";
@@ -379,22 +378,6 @@ async function pickFilter(page: Page, choice: "all" | "blocked" | "working" | "d
   await page.locator(`.row-sheet [data-item="${choice}"]`).tap();
   await sheetClosed(page);
 }
-async function openDrawerForMark(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const heard = (event: MouseEvent): void => {
-      if (!(event.target as Element | null)?.closest("#drawer-toggle")) return;
-      document.removeEventListener("click", heard, true);
-      (window as unknown as { drawerOpenedAt: number }).drawerOpenedAt = event.timeStamp;
-    };
-    document.addEventListener("click", heard, true);
-  });
-  await page.locator("#drawer-toggle").tap();
-  await page.locator(".sidebar.is-open").waitFor();
-  await page.waitForFunction((secondTapMs) => {
-    const at = (window as unknown as { drawerOpenedAt?: number }).drawerOpenedAt;
-    return at !== undefined && performance.now() - at >= secondTapMs;
-  }, SECOND_TAP_MS, { timeout: 5_000 });
-}
 const FOOT_INBOX = "#workspace-drawer .sidebar-footer-row > .sidebar-footer-settings + .sidebar-footer-inbox";
 async function enterFromMore(page: Page): Promise<void> {
   await openSheet(page, ".header-more-button");
@@ -531,7 +514,7 @@ try {
           pass(2, "the list: no title and nothing the mode leaves out, two 44px round controls at the top and a round filter and a search pill at the foot on their insets, six 80px rows with a 44px mark, a 16px name and one 15px line, the waiting row first with its question, each state's own mark and none on the ready rows");
 
           await openSheet(page, ".inbox-filter-toggle");
-          assert.equal(await page.locator('.row-sheet [role="menu"] [role="menuitemradio"]').count(), 4, "the four filters are one menu of radio items");
+          assert.equal(await page.locator('.row-sheet [role="menu"] [role="menuitemradio"]').count(), 5, "the five filters, Hidden last, are one menu of radio items");
           assert.equal(await page.locator('.row-sheet [role="menuitemradio"][aria-checked="true"]').getAttribute("data-item"), "all");
           const focusedItem = (want: string | null, why: string): Promise<unknown> => page.waitForFunction((item) => {
             const at = document.activeElement;
@@ -542,16 +525,16 @@ try {
           await focusedItem("blocked", "ArrowDown moves to the next filter");
           await page.keyboard.press("ArrowUp");
           await page.keyboard.press("ArrowUp");
-          await focusedItem("done", "ArrowUp from the first filter goes round to the last");
+          await focusedItem("hidden", "ArrowUp from the first filter goes round to the last");
           assert.equal(await page.locator('.row-sheet [role="menuitemradio"][aria-checked="true"]').getAttribute("data-item"), "all", "the arrows choose nothing");
           await page.keyboard.press("ArrowUp");
-          await focusedItem("working", "ArrowUp moves to the filter before");
+          await focusedItem("done", "ArrowUp moves to the filter before");
           await page.keyboard.press("Tab");
-          await focusedItem(null, "Tab from a middle filter leaves the four for Cancel");
+          await focusedItem(null, "Tab from a middle filter leaves the five for Cancel");
           await page.keyboard.press("Tab");
           await focusedItem("all", "Tab comes back to the filters on the chosen one");
           await page.keyboard.press("Shift+Tab");
-          await focusedItem(null, "Shift+Tab leaves the four filters for Cancel");
+          await focusedItem(null, "Shift+Tab leaves the five filters for Cancel");
           await page.keyboard.press("Shift+Tab");
           await focusedItem("all", "Shift+Tab from Cancel comes back to the chosen filter, not the last one");
           await page.locator('.row-sheet [data-item="working"]').tap();
@@ -754,8 +737,9 @@ try {
 
         await withPage(browser, base, off, "/", block("Inbox at the drawer's foot, and no drawer in the mode"), async (page) => {
           await page.locator(".pane-slot").first().waitFor();
-          await openDrawerForMark(page);
-          assert.equal(await page.locator(".app-header #drawer-toggle.is-mark").getAttribute("aria-label"), "Close workspace list", "the Ovis mark at the drawer's head closes it: it is no way into the inbox");
+          await page.locator("#drawer-toggle").tap();
+          await page.locator("#workspace-drawer.is-open").waitFor();
+          assert.equal(await page.locator(".app-header #drawer-toggle").getAttribute("aria-label"), "New workspace", "the drawer's head is a + for a new workspace: it is no way into the inbox");
           const entry = page.locator(FOOT_INBOX);
           assert.equal(await entry.getAttribute("title"), "Inbox", "the drawer's foot holds Inbox beside the gear");
           await shot(page, `inbox-mode-drawer-entry-390-${theme}.png`);
@@ -771,7 +755,7 @@ try {
           await frames(page);
           assert.equal(await page.locator("#workspace-drawer, .scrim.is-open").count(), 0, "a swipe from the edge opens no drawer in the mode");
           await page.locator(".mode-inbox").waitFor();
-          pass(13, "the open drawer's head is the Ovis mark, which closes it, and Inbox beside the gear at its foot opens the list; in the mode a swipe from the left edge opens no drawer");
+          pass(13, "the open drawer's head is a + for a new workspace, and Inbox beside the gear at its foot opens the list; in the mode a swipe from the left edge opens no drawer");
         });
 
         await withPage(browser, base, off, "/?app=inbox", block("New workspace from the list"), async (page) => {
