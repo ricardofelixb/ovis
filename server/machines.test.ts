@@ -15,7 +15,8 @@ import { createServer } from "./index.ts";
 import { MachineActionRequired, MachineManager, setupStepWords } from "./machines.ts";
 import { detectHost, psQuote, UNSUPPORTED_HOST, windowsBridgeFiles, windowsHost } from "./remote-host.ts";
 import { decodeClixml, SshConnection } from "./ssh.ts";
-import { terminalAttachSupported } from "./herdr/client.ts";
+import { HerdrError, terminalAttachSupported } from "./herdr/client.ts";
+import { HERDR_CORE, serveRuntime } from "./runtime/capabilities.ts";
 import { attachableIdentity, isRealNode, realNode, sidecarAvailable } from "./pty/sidecar.ts";
 import { CompletionTracker } from "./completion.ts";
 import type { PushService } from "./push.ts";
@@ -235,6 +236,26 @@ describe("machine boundaries", () => {
       expect((await ask()).status).toBe(503);
       expect(hits).toBe(before);
     } finally { error.mockRestore(); endpoint.mockRestore(); bridge.stop(true); manager.stop(); rmSync(dir, { recursive: true, force: true }); }
+  });
+  it("names this PC's own runtime once it is connected, and none while it is not", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "herdr-local-runtime-"));
+    let offline = true;
+    const snapshot = { protocol: 22, version: "fixture", workspaces: [], tabs: [], panes: [], layouts: [], agents: [] };
+    const manager = new MachineManager(dir, {} as PushService, new CompletionTracker(null), async () => { if (offline) throw new HerdrError("connect_failed", "fixture offline"); return snapshot; });
+    serveRuntime(HERDR_CORE);
+    const local = (state: string) => new Promise<void>((resolve) => {
+      const check = () => { if (manager.list()[0]?.state === state) { unsubscribe(); resolve(); } };
+      const unsubscribe = manager.subscribe(check);
+      check();
+    });
+    try {
+      await local("error");
+      expect(manager.list()[0]?.runtime).toBeUndefined();
+      offline = false;
+      void manager.refreshLocal();
+      await local("connected");
+      expect(manager.list()[0]).toMatchObject({ kind: "local", state: "connected", runtime: "herdr-core" });
+    } finally { serveRuntime(null); manager.stop(); rmSync(dir, { recursive: true, force: true }); }
   });
   it("tries again on a PC's read only while it waits to reconnect: a connected PC is read, a removed one left alone", async () => {
     const dir = mkdtempSync(join(tmpdir(), "herdr-proxy-retry-"));
