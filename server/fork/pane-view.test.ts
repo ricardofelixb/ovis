@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, spyOn } from "bun:test";
 import { HcConnection } from "../herdr-core/connection.ts";
 import { FakeHcCore } from "../herdr-core/core.fake.ts";
 import * as runtime from "../herdr-core/runtime.ts";
+import { HERDR, HERDR_CORE, serveRuntime } from "../runtime/capabilities.ts";
 import { FORK_PANE_VIEW_PATH } from "../../shared/fork/pane.ts";
 import { handlePaneView } from "./pane-view.ts";
 
@@ -12,9 +13,9 @@ beforeEach(() => {
   fake = new FakeHcCore();
   hc = new HcConnection(() => fake.transport());
   connection = spyOn(runtime, "coreConnection").mockReturnValue(hc);
-  runtime.setRuntime("herdr-core");
+  serveRuntime(HERDR_CORE);
 });
-afterEach(() => { connection.mockRestore(); hc.close(); runtime.setRuntime(null); });
+afterEach(() => { connection.mockRestore(); hc.close(); serveRuntime(null); });
 
 const ask = (body: object, readOnly = false, endpoint: (id: string) => { url: string; token: string } | undefined = () => undefined) =>
   handlePaneView(new Request(`http://ovis${FORK_PANE_VIEW_PATH}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), readOnly, endpoint);
@@ -41,7 +42,7 @@ it("refuses a caller that only watches, and herdr", async () => {
   const watching = await ask({ machine_id: "local", pane_id: pane, hidden: true }, true);
   expect(watching.status).toBe(403);
   expect(((await watching.json()) as { error: { code: string } }).error.code).toBe("read_only");
-  runtime.setRuntime("herdr");
+  serveRuntime(HERDR);
   expect((await ask({ machine_id: "local", pane_id: pane, hidden: true })).status).toBe(409);
   expect(fake.terminal(pane).labels["ovis.view"]).toBeUndefined();
 });

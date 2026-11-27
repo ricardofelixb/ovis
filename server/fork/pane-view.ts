@@ -1,8 +1,9 @@
 import { FORK_PANE_VIEW_PATH } from "../../shared/fork/pane.ts";
 import { HcReplyError } from "../herdr-core/connection.ts";
-import { coreConnection, runtime } from "../herdr-core/runtime.ts";
+import { coreConnection } from "../herdr-core/runtime.ts";
 import { errorResponse, jsonResponse, readJsonObject } from "../http.ts";
 import { readCapped } from "../remote-json.ts";
+import { capabilities } from "../runtime/capabilities.ts";
 
 const VIEW = "ovis.view";
 const refused = (code: string, message: string, status: number) => jsonResponse({ error: { code, message } }, status);
@@ -30,7 +31,8 @@ export async function handlePaneView(request: Request, readOnly: boolean, endpoi
       });
       return new Response(await readCapped(answer, 16 * 1024), { status: answer.status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
     }
-    if (runtime() !== "herdr-core") return refused("unsupported", "Only herdr-core hides agents", 409);
+    // labels on terminals, which herdr has none of: herdr-core writes its seen marks with them too
+    if (capabilities().seen !== "label") return refused("unsupported", "Only herdr-core hides agents", 409);
     const hc = coreConnection();
     const view = (await hc.call("terminal.get", { terminal: paneId })).labels?.[VIEW];
     if (view !== undefined && view !== "hidden") return refused("view_taken", `This terminal is ${VIEW}=${view}`, 409);
