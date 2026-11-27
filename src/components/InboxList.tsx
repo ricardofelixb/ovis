@@ -1,5 +1,5 @@
 import { tally, usageCounters } from "../lib/usageCounters.ts";
-import { useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from "react";
 import { Ellipsis, EyeOff, ListFilter, Monitor, Plus, Search, Terminal, TriangleAlert, X } from "lucide-react";
 import { ForkPlaceOpen } from "../fork/inbox/Places.tsx";
 
@@ -12,7 +12,6 @@ import { stateSince } from "../lib/agentStateSince.ts";
 import { connectionWord as wordFor, type HeaderConnection } from "../lib/headerConnection.ts";
 import { useT, type Translate } from "../lib/i18n.ts";
 import { inboxAsks, inboxRowLine, inboxStateWord } from "../lib/inboxRow.ts";
-import { PanePressContext } from "../lib/paneSubmitContext.ts";
 import { agentName } from "../lib/runtimeMove.ts";
 import { useSettings } from "../lib/settings.ts";
 import { knownStatus } from "../lib/status.ts";
@@ -29,6 +28,7 @@ import { AgentMark } from "./AgentMark.tsx";
 import { ForkInboxAvatar } from "../fork/inbox/InboxAvatar.tsx";
 import { forkInboxFolded, forkInboxRows } from "../fork/inbox/inboxRows.ts";
 import { useForkOpenHelpers } from "../fork/inbox/HelpersFold.tsx";
+import { useForkRowHold } from "../fork/inbox/RowHold.tsx";
 import { ForkFoldCount, ForkHelpersFace } from "../fork/inbox/HelpersFace.tsx";
 import { agentRowTitle, blockedNote, stateAge } from "./AgentSidebar.tsx";
 import { MachineHeader, useMachineFold } from "./MachineHeader.tsx";
@@ -92,7 +92,7 @@ export function InboxAvatar({ mark }: { mark: string | null }) {
 
 export function InboxList({ ref, machines: roster, allMachines, activity, watching, wide, filter, onFilter, query, onQuery, scroll, focus, current = null, onOpen, onNew, questionReads, summaryReads, more, note, connection = null, failure = null }: InboxListProps) {
   const t = useT();
-  const pressPane = useContext(PanePressContext);
+  const forkHold = useForkRowHold(watching);
   const root = useRef<HTMLElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -296,8 +296,8 @@ export function InboxList({ ref, machines: roster, allMachines, activity, watchi
         <button type="button" className="inbox-row" disabled={!row.online} aria-label={spoken} aria-current={open ? "true" : undefined}
           ref={(node) => { if (node) rowNodes.current.set(row.key, node); else rowNodes.current.delete(row.key); }}
           title={wide ? [row.title, row.line, at === null ? null : `${age} · ${at.toLocaleString(resolvedLanguage)}`].filter((part) => part !== null).join("\n") : undefined}
-          onPointerDown={(event) => { if (event.button === 0 && row.online) pressPane?.(row.machine.id, row.pane.pane_id); }}
-          onClick={() => { tally(() => usageCounters.paneUse("inbox_open", row.machine.id)); onOpen(row.machine.id, row.pane.pane_id); }}>
+          {...forkHold.row({ machine: row.machine, pane: row.pane, title: row.title }, row.online)}
+          onClick={() => { if (forkHold.held()) return; tally(() => usageCounters.paneUse("inbox_open", row.machine.id)); onOpen(row.machine.id, row.pane.pane_id); }}>
           <ForkInboxAvatar row={row} />
           <span className="inbox-body">
             <span className="inbox-line">
@@ -380,6 +380,7 @@ export function InboxList({ ref, machines: roster, allMachines, activity, watchi
           ...(value === "hidden" ? { divider: true } : {}),
           ...(value === "all" || value === "hidden" ? {} : { glyph: <span className="inbox-filter-mark" aria-hidden="true"><StatusBadge compact status={value} label={filterWord(value)} /></span> }),
         }))} />}
+      {forkHold.menu}
     </section>
   );
 }
