@@ -78,6 +78,9 @@ try {
           } else {
             assert.equal(await row.getByRole("tab", { name: /^QA (implementer|reviewer|helper)/ }).count(), 0, "job agents have no tab of their own");
             assert.equal(await parent.locator(".workspace-fold-count").textContent(), `+${children}`);
+            const label = (await parent.locator(".tab-strip-label").boundingBox())!;
+            const count = (await parent.locator(".workspace-fold-count").boundingBox())!;
+            assert.ok(count.x >= label.x + label.width - 1, `"+N" follows the tab's name (count at ${count.x}px, name ends at ${label.x + label.width}px)`);
             let menu;
             if (width < 768) {
               await parent.dispatchEvent("pointerdown", { pointerType: "touch", pointerId: 1, clientX: 0, clientY: 0 });
