@@ -69,6 +69,8 @@ export const FORK_FEATURE_I18N = {
     "A pull request from a fork cannot be checked out here yet.": "フォークからのプルリクエストは、まだここではチェックアウトできません。",
     "Hidden|inbox filter": "非表示",
     "No hidden agents": "隠しエージェントはありません",
+    "Hide agent": "エージェントを非表示",
+    "Unhide agent": "エージェントを再表示",
   },
   "ko": {
     "Switch to chat (⌘⇧J)": "채팅으로 전환 (⌘⇧J)",
@@ -139,6 +141,8 @@ export const FORK_FEATURE_I18N = {
     "A pull request from a fork cannot be checked out here yet.": "포크의 풀 리퀘스트는 아직 여기서 체크아웃할 수 없습니다.",
     "Hidden|inbox filter": "숨김",
     "No hidden agents": "숨긴 에이전트가 없습니다",
+    "Hide agent": "에이전트 숨기기",
+    "Unhide agent": "에이전트 숨김 해제",
   },
   "zh": {
     "Switch to chat (⌘⇧J)": "切换到聊天 (⌘⇧J)",
@@ -209,5 +213,7 @@ export const FORK_FEATURE_I18N = {
     "A pull request from a fork cannot be checked out here yet.": "来自复刻的拉取请求暂时无法在此检出。",
     "Hidden|inbox filter": "隐藏",
     "No hidden agents": "没有隐藏的代理",
+    "Hide agent": "隐藏代理",
+    "Unhide agent": "取消隐藏代理",
   }
 };

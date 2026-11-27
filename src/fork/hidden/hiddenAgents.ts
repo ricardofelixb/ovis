@@ -19,6 +19,12 @@ const hold = (next: Held | null): void => {
 };
 const subscribe = (listener: () => void): (() => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 
+/** herdr-core's PCs, as the roster last said: only their agents can be hidden (server/fork/pane-view.ts); herdr has no labels */
+let corePcs: ReadonlySet<string> = new Set();
+export const hidesOn = (machineId: string): boolean => corePcs.has(machineId);
+/** A hidden pane is let go of even while selected, so it leaves the roster as a closed one does. */
+export const releaseHeld = (machineId: string, paneId: string): void => { if (held?.machineId === machineId && held.paneId === paneId) hold(null); };
+
 const mapSnapshots = (machines: readonly Machine[], map: (machine: Machine & { snapshot: NonNullable<Machine["snapshot"]> }) => NonNullable<Machine["snapshot"]>): Machine[] => {
   const next = machines.map((machine) => {
     if (machine.snapshot === null) return machine;
@@ -46,6 +52,7 @@ export function inboxMachines(filter: string, machines: readonly Machine[], all:
 /** The roster the app reads: no hidden agent, except the one open from the Hidden filter. */
 export function useHiddenLens(all: Machine[]): Machine[] {
   const keep = useSyncExternalStore(subscribe, () => held, () => null);
+  useEffect(() => { corePcs = new Set(all.filter((machine) => (machine.runtime ?? machine.herdr?.runtime) === "herdr-core").map((machine) => machine.id)); }, [all]);
   return useMemo(() => shownMachines(all, keep), [all, keep]);
 }
 
