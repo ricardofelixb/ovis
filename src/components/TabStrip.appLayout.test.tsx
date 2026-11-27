@@ -146,6 +146,18 @@ describe("the tab strip on a PC the Herdr app lays out", () => {
     } finally { delete child.parent_pane_id; }
   });
 
+  it("shows no pane position on a split parent while its hidden job agent is the selected pane", async () => {
+    const child = snapshot.panes[1]! as HerdrPane;
+    child.parent_pane_id = snapshot.panes[0]!.pane_id;
+    stored.set("ovis:settings", JSON.stringify({ agentFriends: true }));
+    snapshot.panes.push({ ...pane("w1", "w1:t1"), pane_id: "w1:t1:p2" });
+    try {
+      await draw(TUI, undefined, undefined, { phoneRow: true, selectedPane: child });
+      expect(tab().props["aria-selected"]).toBe(true);
+      expect(renderer!.root.findAllByProps({ className: "tab-strip-position" })).toHaveLength(0);
+    } finally { delete child.parent_pane_id; snapshot.panes.pop(); }
+  });
+
   it("does not move a parent against its own folded child by menu or keys", async () => {
     const child = snapshot.panes[1]! as HerdrPane;
     child.parent_pane_id = snapshot.panes[0]!.pane_id;

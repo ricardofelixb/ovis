@@ -793,7 +793,8 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
                   <ForkFoldCount count={forkJobCount(forkTabs.folded.get(tab.tab_id))} />
                   {(phoneRow || soloPanes) && active && own.length > 1 && (() => {
                     const index = own.findIndex((pane) => pane.pane_id === selectedPane.pane_id) + 1;
-                    return <span className="tab-strip-position"><span aria-hidden="true">{index}/{own.length}</span><span className="visually-hidden">{", "}{t("Pane {index} of {count}", { index, count: own.length })}</span></span>;
+                    // a hidden job agent open under its parent is none of the parent's panes
+                    return index > 0 && <span className="tab-strip-position"><span aria-hidden="true">{index}/{own.length}</span><span className="visually-hidden">{", "}{t("Pane {index} of {count}", { index, count: own.length })}</span></span>;
                   })()}
                 </button>
               )}

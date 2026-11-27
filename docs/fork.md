@@ -31,7 +31,7 @@ Hook footprint (insertions/deletions vs the upstream merge base `70c68e28`, meas
 
 | Upstream file | Before | After | Hooks added here |
 | --- | --- | --- | --- |
-| `src/components/TabStrip.tsx` | +55/-26 | +54/-23 | 3 imports; grouping call, open-parent mapping, "+N" mount, job items in the tab menu, More and sheet |
+| `src/components/TabStrip.tsx` | +55/-26 | +58/-26 | 3 imports; grouping call, open-parent mapping, "+N" mount, no pane position for an open hidden child, job items in the tab menu, More and sheet |
 | `src/components/RowMenu.tsx` | +19/-8 | +10/-3 | none left from this feature (the `trailing` slot is gone) |
 | `src/lib/useTabReorder.ts` | +12/-6 | +8/-6 | optional adjacent-boundary callback, so a parent moves past its hidden children in one step |
 | `shared/protocol.ts` | +15/-1 | +17/-2 | type import + intersection |
