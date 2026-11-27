@@ -25,3 +25,6 @@ export function forkHideItem(machineId: string, pane: HidePane | undefined, t: T
     },
   }];
 }
+
+/** A forkHideItem's id: a split tab's menu drops the selected pane's own, since it would not say which of the tab's panes goes. */
+export const isForkHideItem = (item: RowMenuItem): boolean => /^(?:un)?hide:/.test(item.id);
