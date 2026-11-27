@@ -29,6 +29,7 @@ import { detectHost, HERDR_INSTALL_CMD, installLockOwner, type RemoteHost } from
 import type { FoundHerdrSession, FoundOvis } from "../shared/machines.ts";
 import { DESKTOP_APP_UPDATES, REVISION, type UpdateStatus } from "../shared/update.ts";
 import { discard, readCappedJson, REMOTE_LIMITS } from "./remote-json.ts";
+import { capabilities } from "./runtime/capabilities.ts";
 import { SshConnection, sshClient } from "./ssh.ts";
 import { WAITING_FOR_WINDOWS_LOGIN } from "./windows-herdr-start.ts";
 import { decodeOffer, SERVER_ID_PATTERN, isWssOrigin, type RelayOffer } from "../shared/relay-offer.ts";
@@ -699,6 +700,7 @@ export class MachineManager {
   private runtime(machine: Machine): Runtime { return { machine, attempts: 0, generation: 0, refreshing: false, refreshQueued: false, snapshotRevision: 0, terminals: new Set(), finishes: new FinishEpochLedger(machine.snapshot) }; }
   list(): Machine[] {
     const own = this.serverId?.();
+    this.local.runtime = this.local.state === "connected" ? capabilities().runtime === "herdr-core" ? "herdr-core" : "herdr" : undefined;
     for (const runtime of this.machines.values()) {
       runtime.machine.runtime = runtime.machine.state === "connected" && runtime.machine.herdr ? runtime.machine.herdr.runtime ?? "herdr" : undefined;
       if (runtime.machine.kind !== "hc") runtime.machine.ovis_update = this.updateOffer(runtime);
