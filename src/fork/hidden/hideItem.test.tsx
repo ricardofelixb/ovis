@@ -35,3 +35,8 @@ it("a split tab offers each of its agents by name, and a tab with one agent its 
   expect(items("core", [shell])).toEqual([]);
   expect(items("herdr", [pi])).toEqual([]);
 });
+
+it("two agents of one name in a split tab are told apart by their place in it", () => {
+  const other = { pane_id: "c", agent: "pi", title: "Pi" };
+  expect(items("core", [pi, codex, other])).toEqual([["hide:a", "Hide Pi (1)"], ["unhide:b", "Unhide Codex"], ["hide:c", "Hide Pi (2)"]]);
+});
