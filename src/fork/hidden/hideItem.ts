@@ -12,15 +12,23 @@ type HidePane = Pick<HerdrPane, "pane_id" | "agent"> & { ovis_hidden?: true };
  * An agent pane menu's Hide (or Unhide, for a hidden one), the same in every menu that lists an agent: herdr-core's PCs
  * only, refused to a watching device. The row leaves or joins the lists with the next snapshot.
  */
-export function forkHideItem(machineId: string, pane: HidePane | undefined, t: Translate, watching: boolean): RowMenuItem[] {
+export function forkHideItem(machineId: string, pane: HidePane | undefined, t: Translate, watching: boolean, name?: string): RowMenuItem[] {
   if (!pane || pane.agent == null || !hidesOn(machineId)) return [];
   const hidden = pane.ovis_hidden === true;
+  const label = name === undefined ? t(hidden ? "Unhide agent" : "Hide agent") : t(hidden ? "Unhide {name}" : "Hide {name}", { name });
   return [{
-    id: hidden ? "unhide" : "hide", label: t(hidden ? "Unhide agent" : "Hide agent"), icon: hidden ? Eye : EyeOff, disabled: watching,
+    // keyed by pane: a tab's menu lists its agents' items beside the selected pane's own, which it drops by id (TabStrip pickerItems)
+    id: `${hidden ? "unhide" : "hide"}:${pane.pane_id}`, label, icon: hidden ? Eye : EyeOff, disabled: watching,
     run: () => {
       if (!hidden) releaseHeld(machineId, pane.pane_id);
       // POST FORK_PANE_VIEW_PATH (server/fork/pane-view.ts); a refusal leaves the row where it is
       void sendJson(FORK_PANE_VIEW_PATH, "POST", { machine_id: machineId, pane_id: pane.pane_id, hidden: !hidden }).catch(() => undefined);
     },
   }];
+}
+
+/** A tab's agents, one item each: by name where the tab holds more than one, so a split tab says which agent goes. */
+export function forkHideItems<P extends HidePane>(machineId: string, panes: readonly P[], t: Translate, watching: boolean, nameOf: (pane: P) => string): RowMenuItem[] {
+  const agents = panes.filter((pane) => pane.agent != null);
+  return agents.flatMap((pane) => forkHideItem(machineId, pane, t, watching, agents.length > 1 ? nameOf(pane) : undefined));
 }

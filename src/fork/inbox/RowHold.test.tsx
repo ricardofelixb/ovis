@@ -107,6 +107,6 @@ test("a right click opens the menu; herdr-core offers Hide, and Unhide in the Hi
     await act(async () => renderer?.unmount());
     return shown;
   };
-  expect(await ids({ runtime: "herdr-core" })).toEqual(["hide", "close"]);
-  expect(await ids({ runtime: "herdr-core", hidden: true })).toEqual(["unhide", "close"]);
+  expect(await ids({ runtime: "herdr-core" })).toEqual(["hide:w1C:p1", "close"]);
+  expect(await ids({ runtime: "herdr-core", hidden: true })).toEqual(["unhide:w1C:p1", "close"]);
 });
