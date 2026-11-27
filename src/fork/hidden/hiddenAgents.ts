@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { onlyHidden, withoutHidden } from "../../../shared/fork/pane.ts";
 import type { Machine } from "../../../shared/machines.ts";
+import type { SessionSnapshot } from "../../../shared/protocol.ts";
 import type { Translate } from "../../lib/i18n.ts";
 
 /**
@@ -41,6 +42,9 @@ export const hiddenWords = (t: Translate): { filter: string; none: string } => (
 export function shownMachines(machines: readonly Machine[], keep: Held | null = null): Machine[] {
   return mapSnapshots(machines, (machine) => withoutHidden(machine.snapshot, keep?.machineId === machine.id ? keep.paneId : null));
 }
+
+/** A PC's own session read as the roster shows it, so a selection confirming its pane against it lets go of a pane just hidden. */
+export const shownSession = <T extends SessionSnapshot>(machineId: string, snapshot: T): T => withoutHidden(snapshot, held?.machineId === machineId ? held.paneId : null);
 
 /** What the inbox lists for a filter: the hidden agents alone for Hidden, for any other the shown ones, hidden agents never. */
 export function inboxMachines(filter: string, machines: readonly Machine[], all: readonly Machine[]): Machine[] {
