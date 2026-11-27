@@ -71,8 +71,6 @@ export const FORK_FEATURE_I18N = {
     "No hidden agents": "隠しエージェントはありません",
     "Hide agent": "エージェントを非表示",
     "Unhide agent": "エージェントを再表示",
-    "Hide {name}": "{name} を非表示",
-    "Unhide {name}": "{name} を再表示",
   },
   "ko": {
     "Switch to chat (⌘⇧J)": "채팅으로 전환 (⌘⇧J)",
@@ -145,8 +143,6 @@ export const FORK_FEATURE_I18N = {
     "No hidden agents": "숨긴 에이전트가 없습니다",
     "Hide agent": "에이전트 숨기기",
     "Unhide agent": "에이전트 숨김 해제",
-    "Hide {name}": "{name} 숨기기",
-    "Unhide {name}": "{name} 숨김 해제",
   },
   "zh": {
     "Switch to chat (⌘⇧J)": "切换到聊天 (⌘⇧J)",
@@ -219,7 +215,5 @@ export const FORK_FEATURE_I18N = {
     "No hidden agents": "没有隐藏的代理",
     "Hide agent": "隐藏代理",
     "Unhide agent": "取消隐藏代理",
-    "Hide {name}": "隐藏 {name}",
-    "Unhide {name}": "取消隐藏 {name}",
   }
 };

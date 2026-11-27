@@ -4,7 +4,7 @@ import { create, type ReactTestRenderer } from "react-test-renderer";
 import type { Machine } from "../../../shared/machines.ts";
 import type { Translate } from "../../lib/i18n.ts";
 import { useHiddenLens } from "./hiddenAgents.ts";
-import { forkHideItems } from "./hideItem.ts";
+import { forkHideItem } from "./hideItem.ts";
 
 let saved: PropertyDescriptor | undefined;
 let renderer: ReactTestRenderer | undefined;
@@ -23,24 +23,15 @@ afterEach(async () => {
   else Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
 });
 
-const shell = { pane_id: "s", agent: null, title: "zsh" };
-const pi = { pane_id: "a", agent: "pi", title: "Pi" };
-const codex = { pane_id: "b", agent: "codex", title: "Codex", ovis_hidden: true as const };
-const items = (machineId: string, panes: { pane_id: string; agent: string | null; title: string; ovis_hidden?: true }[]) =>
-  forkHideItems(machineId, panes, t, false, (pane) => pane.title).map((item) => [item.id, item.label]);
+const shell = { pane_id: "s", agent: null };
+const pi = { pane_id: "a", agent: "pi" };
+const codex = { pane_id: "b", agent: "codex", ovis_hidden: true as const };
+const item = (machineId: string, pane: { pane_id: string; agent: string | null; ovis_hidden?: true }, watching = false) =>
+  forkHideItem(machineId, pane, t, watching).map((entry) => [entry.id, entry.label, entry.disabled]);
 
-it("a split tab offers each of its agents by name, and a tab with one agent its plain Hide", () => {
-  expect(items("core", [shell, pi, codex])).toEqual([["hide:a", "Hide Pi"], ["unhide:b", "Unhide Codex"]]);
-  expect(items("core", [shell, pi])).toEqual([["hide:a", "Hide agent"]]);
-  expect(items("core", [shell])).toEqual([]);
-  expect(items("herdr", [pi])).toEqual([]);
-});
-
-it("a split tab offers no Hide for agents its panes cannot tell apart, and never two alike", () => {
-  const other = { pane_id: "c", agent: "pi", title: "Pi" };
-  const numbered = { pane_id: "d", agent: "pi", title: "Pi (1)" };
-  expect(items("core", [pi, codex, other])).toEqual([["unhide:b", "Unhide Codex"]]);
-  expect(items("core", [pi, other, numbered])).toEqual([["hide:d", "Hide Pi (1)"]]);
-  const labels = items("core", [pi, other, numbered, codex]).map(([, label]) => label);
-  expect(new Set(labels).size).toBe(labels.length);
+it("offers Hide or Unhide for an agent on a herdr-core PC, disabled while watching, and nothing else", () => {
+  expect(item("core", pi)).toEqual([["hide:a", "Hide agent", false]]);
+  expect(item("core", codex, true)).toEqual([["unhide:b", "Unhide agent", true]]);
+  expect(item("core", shell)).toEqual([]);
+  expect(item("herdr", pi)).toEqual([]);
 });

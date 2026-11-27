@@ -30,7 +30,7 @@ import { indicatorGlyph, paneStatus, rollupStatus, STATUS_WORD, type KnownStatus
 import { useSettings } from "../lib/settings.ts";
 import { TabFriends } from "../fork/friends/TabFriends.tsx";
 import { groupAgentTabs } from "../fork/tabs/groupAgentTabs.ts";
-import { forkHideItems } from "../fork/hidden/hideItem.ts";
+import { forkHideItem } from "../fork/hidden/hideItem.ts";
 import { ForkTabChips, forkChipBoundary, forkOpenTab } from "../fork/tabs/TabChips.tsx";
 import { forkTabGroupStyle, forkTabsInRow } from "../fork/tabs/tabGroupLayout.ts";
 import { AgentMark } from "./AgentMark.tsx";
@@ -663,7 +663,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       ...(canMoveOut(tab) ? [{ id: "move-workspace", label: t("Move to workspace…"), title: t("Move {tab} to", { tab: name }), icon: FolderInput, disabled: !closable,
         run: () => { if (picker) setPicker({ ...picker, workspaces: true }); } }] : []),
       { id: "new-agent-tab", label: t("New tab with agent…"), icon: Bot, disabled: !closable, run: onNewTab },
-      ...forkHideItems(machineId, panesOf(tab), t, !closable, displayPaneTitle),
+      ...forkHideItem(machineId, panesOf(tab).length === 1 ? paneFor(tab) : undefined, t, !closable),
       ...(!renameOffered ? [] : [{ id: "rename-tab", label: t("Rename tab"), title: about(t("Rename tab")), icon: Pencil, disabled: !closable, run: () => beginRename(tab) }]),
       ...(tabLocked(tab) || !closable ? [] : [{ id: "close-tab", label: t("Close tab"), title: t("Close {tab}", { tab: name }), icon: X, danger: true, run: () => requestClose(tab) }]),
     ];
