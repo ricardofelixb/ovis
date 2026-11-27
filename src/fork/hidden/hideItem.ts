@@ -28,8 +28,8 @@ export function forkHideItem(machineId: string, pane: HidePane | undefined, t: T
 }
 
 /**
- * A tab's agents, one item each: by name where the tab holds more than one, so a split tab says which agent goes, and a
- * name two of them share gets each one's place among them ("Pi (2)").
+ * A tab's agents, one item each: by name where the tab holds more than one, so a split tab says which agent goes. Agents
+ * sharing a name get none here, since nothing on their panes tells them apart: each pane's own menu hides it.
  */
 export function forkHideItems<P extends HidePane>(machineId: string, panes: readonly P[], t: Translate, watching: boolean, nameOf: (pane: P) => string): RowMenuItem[] {
   const agents = panes.filter((pane) => pane.agent != null);
@@ -37,8 +37,6 @@ export function forkHideItems<P extends HidePane>(machineId: string, panes: read
   const names = agents.map(nameOf);
   return agents.flatMap((pane, index) => {
     const name = names[index] ?? "";
-    const shared = names.filter((other) => other === name).length > 1;
-    const place = names.slice(0, index).filter((other) => other === name).length + 1;
-    return forkHideItem(machineId, pane, t, watching, shared ? `${name} (${place})` : name);
+    return names.indexOf(name) === names.lastIndexOf(name) ? forkHideItem(machineId, pane, t, watching, name) : [];
   });
 }

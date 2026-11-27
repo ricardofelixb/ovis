@@ -36,7 +36,11 @@ it("a split tab offers each of its agents by name, and a tab with one agent its 
   expect(items("herdr", [pi])).toEqual([]);
 });
 
-it("two agents of one name in a split tab are told apart by their place in it", () => {
+it("a split tab offers no Hide for agents its panes cannot tell apart, and never two alike", () => {
   const other = { pane_id: "c", agent: "pi", title: "Pi" };
-  expect(items("core", [pi, codex, other])).toEqual([["hide:a", "Hide Pi (1)"], ["unhide:b", "Unhide Codex"], ["hide:c", "Hide Pi (2)"]]);
+  const numbered = { pane_id: "d", agent: "pi", title: "Pi (1)" };
+  expect(items("core", [pi, codex, other])).toEqual([["unhide:b", "Unhide Codex"]]);
+  expect(items("core", [pi, other, numbered])).toEqual([["hide:d", "Hide Pi (1)"]]);
+  const labels = items("core", [pi, other, numbered, codex]).map(([, label]) => label);
+  expect(new Set(labels).size).toBe(labels.length);
 });
