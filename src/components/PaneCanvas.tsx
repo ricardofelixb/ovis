@@ -30,6 +30,7 @@ import { paneLifetimes } from "../lib/paneLifetime.ts";
 import { usePaneLocked } from "../lib/paneLocks.ts";
 import { sidebarPinKey } from "../lib/sidebarPins.ts";
 import { displayPaneTitle } from "./Sidebar.tsx";
+import { forkHideItem } from "../fork/hidden/hideItem.ts";
 import { RowMenu, type RowMenuItem } from "./RowMenu.tsx";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import "./PaneCanvas.css";
@@ -289,6 +290,7 @@ export function PaneCanvas({ snapshot, pane, selectedPaneId, onSelect, onChanged
         icon: mirrorWraps ? MoveHorizontal : TextWrap,
         run: () => updateSettings({ terminalMirrorWrap: !mirrorWraps }) }] : []),
       ...(onRecoverUnsent && paneLifetimes.unsent().length > 0 ? [{ id: "recover-unsent", label: t("Recover unsent text"), icon: ArchiveRestore, run: () => onRecoverUnsent(target) }] : []),
+      ...forkHideItem(machineId, target, t, watching),
       ...(paneLocked(target.pane_id)
         ? [{ id: "unlock", label: t("Unlock agent"), icon: LockOpen, disabled: watching, run: () => {
           const key = sidebarPinKey(machineId, target.pane_id);

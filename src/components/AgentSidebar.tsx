@@ -38,6 +38,7 @@ import { useFriends } from "../lib/friends.ts";
 import { ForkRolePicture } from "../fork/friends/AgentRole.tsx";
 import { ForkFoldCount, ForkHelpersFace } from "../fork/inbox/HelpersFace.tsx";
 import { forkAgentsRoster } from "../fork/sidebar/treeRows.ts";
+import { forkHideItem } from "../fork/hidden/hideItem.ts";
 import { RowMenu } from "./RowMenu.tsx";
 import { BackgroundBadge, compactWorktreeName, ContextBadge, displayPaneTitle, onRowContextMenu, PlanBadge, StatusBadge } from "./Sidebar.tsx";
 import "./AgentSidebar.css";
@@ -754,6 +755,7 @@ export function AgentSidebar({ machines, selectedMachineId, selectedPaneId, stat
         id: "stop-called", label: t("Stop agents it called ({count})", { count: menuCalled }), icon: Pause, disabled: watching || menuRow.machine.view_only === true,
         run: () => stopCalled(menuRow),
       }]),
+      ...forkHideItem(menuRow?.machine.id ?? "", menuRow?.entry.pane, t, watching || menuRow?.machine.view_only === true),
       ...(muted === null || menuRow === undefined ? [] : [{
         id: "mute", label: menuMuted ? t("Unmute alerts") : t("Mute alerts"), icon: menuMuted ? Bell : BellOff, checked: menuMuted, disabled: watching,
         run: () => toggleMute(menuRow.machine.id, menuRow.entry.pane.pane_id),

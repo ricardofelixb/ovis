@@ -415,6 +415,27 @@ describe("the tab strip on a PC the Herdr app lays out", () => {
     expect(marks()).toBe(1);
   });
 
+  it("leaves the selected pane's Hide out of a split tab's tap menu, beside its other pane actions", async () => {
+    const lead = { ...pane("w1", "w1:t1"), agent: "claude" } as PaneInfo;
+    const shell = { ...pane("w1", "w1:t1"), pane_id: "w1:t1:q", terminal_id: "w1:t1:q:term", agent: "pi" } as PaneInfo;
+    const split: SessionSnapshot = { ...snapshot, tabs: snapshot.tabs.map((entry) => entry.tab_id === "w1:t1" ? { ...entry, pane_count: 2 } : entry), panes: [lead, shell, ...snapshot.panes.slice(1)] };
+    const paneActions = (paneId: string) => [{ id: "rename", label: "Rename pane", icon: Pencil, run() {} }, { id: `hide:${paneId}`, label: "Hide agent", icon: Pencil, run() {} }];
+    const menuIds = async (shown: SessionSnapshot, selectedPane: PaneInfo): Promise<string[]> => {
+      const tree = createElement(SettingsProvider, null, createElement(AppLayoutContext.Provider, { value: TUI },
+        createElement(TabStrip, { snapshot: shown, workspace: shown.workspaces[0]!, selectedPane, onSelectPane: () => {}, onNewTab: () => {}, onNewTerminal: async () => {}, paneActions })));
+      await act(async () => { if (renderer) renderer.update(tree); else renderer = create(tree, { createNodeMock: node }); });
+      await act(async () => tab().props.onClick({ currentTarget: node(), detail: 1, ctrlKey: false }));
+      return (renderer!.root.findByType(RowMenu).props.items as { id: string }[]).map((item) => item.id);
+    };
+    const wide = window.matchMedia;
+    window.matchMedia = (query: string) => ({ ...media, matches: query.includes("(max-width: 768px)") && !query.includes("max-height") }) as unknown as MediaQueryList;
+    try {
+      const splitMenu = await menuIds(split, shell);
+      expect(splitMenu).toContain("rename");
+      expect(splitMenu.filter((id) => id.startsWith("hide:"))).toEqual([]);
+    } finally { window.matchMedia = wide; }
+  });
+
   it("leaves a tab's unfinished name behind when the strip moves to another workspace", async () => {
     await draw(TUI);
     const input = () => renderer!.root.findByProps({ className: "input tab-strip-rename" });

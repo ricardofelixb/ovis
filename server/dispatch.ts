@@ -4,6 +4,7 @@ import { handleAlertWebhookRequest } from "./alert-webhook.ts";
 import { connectionData, type createCore, type SocketData } from "./core/index.ts";
 import type { Server } from "bun";
 import { routeForkApi, routeForkScreen } from "./fork/routes.ts";
+import { FORK_PANE_VIEW_PATH } from "../shared/fork/pane.ts";
 import type { PiVoiceSocketData } from "./fork/pi-voice.ts";
 import type { ForkServices, ForkSocketData } from "./fork/services.ts";
 import { PI_VOICE_PATH } from "../shared/pi-voice.ts";
@@ -261,7 +262,7 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
   // the same server runs the move to herdr-core here for the person on its side (docs/runtime-move.md,
   // "On another PC"); each move route still asks for the app's own header and no query (updateRequestAllowed)
   const bridgeMovePath = RUNTIME_MOVE_ROUTE.test(pathname);
-  const bridgePath = pathname === "/api/bridge" || pathname === "/api/session" || pathname === SESSION_HISTORY_PATH || pathname === SESSION_RESUME_PATH || pathname === "/api/agents" || pathname === "/api/agent-catalog" || pathname === INSTALL_PATH || pathname === SIGN_IN_PATH || pathname === "/api/agent/rename" || pathname === "/api/agent/commands" || pathname === "/api/integrations" || (pathname === "/api/system" && request.method === "GET") || pathname === "/api/usage/statusline" || pathname === "/api/plugins/actions" || pathname === "/api/plugin/action" || pathname.startsWith("/api/pane/") || pathname.startsWith("/api/workspace/") || pathname.startsWith("/api/worktree/") || pathname.startsWith("/api/tab/") || pathname === "/api/layout/ratio" || pathname.startsWith("/api/fs/") || pathname === "/ws" || bridgeUpdatePath || bridgeMovePath;
+  const bridgePath = pathname === "/api/bridge" || pathname === "/api/session" || pathname === SESSION_HISTORY_PATH || pathname === SESSION_RESUME_PATH || pathname === "/api/agents" || pathname === "/api/agent-catalog" || pathname === INSTALL_PATH || pathname === SIGN_IN_PATH || pathname === "/api/agent/rename" || pathname === "/api/agent/commands" || pathname === "/api/integrations" || (pathname === "/api/system" && request.method === "GET") || pathname === "/api/usage/statusline" || pathname === "/api/plugins/actions" || pathname === "/api/plugin/action" || pathname.startsWith("/api/pane/") || pathname.startsWith("/api/workspace/") || pathname.startsWith("/api/worktree/") || pathname.startsWith("/api/tab/") || pathname === "/api/layout/ratio" || pathname.startsWith("/api/fs/") || pathname === FORK_PANE_VIEW_PATH || pathname === "/ws" || bridgeUpdatePath || bridgeMovePath;
   const ip = relayPeer === undefined ? ctx.requestIP(request) : null;
   const loopback = ip !== null && isLoopbackAddress(ip.address);
   const forwarded = relayPeer === undefined && cameThroughProxy(request.headers);

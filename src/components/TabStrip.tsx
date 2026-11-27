@@ -30,6 +30,7 @@ import { indicatorGlyph, paneStatus, rollupStatus, STATUS_WORD, type KnownStatus
 import { useSettings } from "../lib/settings.ts";
 import { TabFriends } from "../fork/friends/TabFriends.tsx";
 import { groupAgentTabs } from "../fork/tabs/groupAgentTabs.ts";
+import { forkHideItem, isForkHideItem } from "../fork/hidden/hideItem.ts";
 import { ForkTabChips, forkChipBoundary, forkOpenTab } from "../fork/tabs/TabChips.tsx";
 import { forkTabGroupStyle, forkTabsInRow } from "../fork/tabs/tabGroupLayout.ts";
 import { AgentMark } from "./AgentMark.tsx";
@@ -636,7 +637,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     // the pane's actions list the tab's panes too where the tab row counts as hidden (the header's tabs): once is enough
     const listed = [...tabItems, ...paneList];
     const paneItems = touch && tab.tab_id === selectedPane.tab_id
-      ? (paneActions?.(selectedPane.pane_id) ?? []).filter((item) => !listed.some((own) => own.id === item.id) && (!soloPanes
+      ? (paneActions?.(selectedPane.pane_id) ?? []).filter((item) => !listed.some((own) => own.id === item.id) && (panesOf(tab).length < 2 || !isForkHideItem(item)) && (!soloPanes
         || (item.id === "zoom" ? layout?.zoomed : item.id !== "split-right" && item.id !== "split-down"))) : [];
     const groups: RowMenuItem[][] = [
       paneList,
@@ -662,6 +663,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
       ...(canMoveOut(tab) ? [{ id: "move-workspace", label: t("Move to workspace…"), title: t("Move {tab} to", { tab: name }), icon: FolderInput, disabled: !closable,
         run: () => { if (picker) setPicker({ ...picker, workspaces: true }); } }] : []),
       { id: "new-agent-tab", label: t("New tab with agent…"), icon: Bot, disabled: !closable, run: onNewTab },
+      ...forkHideItem(machineId, panesOf(tab).length === 1 ? paneFor(tab) : undefined, t, !closable),
       ...(!renameOffered ? [] : [{ id: "rename-tab", label: t("Rename tab"), title: about(t("Rename tab")), icon: Pencil, disabled: !closable, run: () => beginRename(tab) }]),
       ...(tabLocked(tab) || !closable ? [] : [{ id: "close-tab", label: t("Close tab"), title: t("Close {tab}", { tab: name }), icon: X, danger: true, run: () => requestClose(tab) }]),
     ];

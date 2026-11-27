@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { onlyHidden, withoutHidden } from "../../../shared/fork/pane.ts";
 import type { Machine } from "../../../shared/machines.ts";
+import type { SessionSnapshot } from "../../../shared/protocol.ts";
 import type { Translate } from "../../lib/i18n.ts";
 
 /**
@@ -19,6 +20,12 @@ const hold = (next: Held | null): void => {
 };
 const subscribe = (listener: () => void): (() => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
 
+/** herdr-core's PCs, as the roster last said: only their agents can be hidden (server/fork/pane-view.ts); herdr has no labels */
+let corePcs: ReadonlySet<string> = new Set();
+export const hidesOn = (machineId: string): boolean => corePcs.has(machineId);
+/** A hidden pane is let go of even while selected, so it leaves the roster as a closed one does. */
+export const releaseHeld = (machineId: string, paneId: string): void => { if (held?.machineId === machineId && held.paneId === paneId) hold(null); };
+
 const mapSnapshots = (machines: readonly Machine[], map: (machine: Machine & { snapshot: NonNullable<Machine["snapshot"]> }) => NonNullable<Machine["snapshot"]>): Machine[] => {
   const next = machines.map((machine) => {
     if (machine.snapshot === null) return machine;
@@ -36,6 +43,9 @@ export function shownMachines(machines: readonly Machine[], keep: Held | null = 
   return mapSnapshots(machines, (machine) => withoutHidden(machine.snapshot, keep?.machineId === machine.id ? keep.paneId : null));
 }
 
+/** A PC's own session read as the roster shows it, so a selection confirming its pane against it lets go of a pane just hidden. */
+export const shownSession = <T extends SessionSnapshot>(machineId: string, snapshot: T): T => withoutHidden(snapshot, held?.machineId === machineId ? held.paneId : null);
+
 /** What the inbox lists for a filter: the hidden agents alone for Hidden, for any other the shown ones, hidden agents never. */
 export function inboxMachines(filter: string, machines: readonly Machine[], all: readonly Machine[]): Machine[] {
   if (filter !== "hidden") return shownMachines(machines);
@@ -46,6 +56,7 @@ export function inboxMachines(filter: string, machines: readonly Machine[], all:
 /** The roster the app reads: no hidden agent, except the one open from the Hidden filter. */
 export function useHiddenLens(all: Machine[]): Machine[] {
   const keep = useSyncExternalStore(subscribe, () => held, () => null);
+  useEffect(() => { corePcs = new Set(all.filter((machine) => (machine.runtime ?? machine.herdr?.runtime) === "herdr-core").map((machine) => machine.id)); }, [all]);
   return useMemo(() => shownMachines(all, keep), [all, keep]);
 }
 

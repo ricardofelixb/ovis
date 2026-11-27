@@ -11,7 +11,7 @@ import { lastViewedPane } from "./lastViewedPane.ts";
 import type { PaneView } from "./actions.ts";
 import type { Translate } from "./i18n.ts";
 import { storedSelection, storeSelection } from "./useSplitView.ts";
-import { holdSelected } from "../fork/hidden/hiddenAgents.ts";
+import { holdSelected, shownSession } from "../fork/hidden/hiddenAgents.ts";
 import { pcHeld, usePcNewness } from "./relay/newPcHere.ts";
 
 type SelectionHint = { machine: string; pane: string; workspace: string } | null;
@@ -221,7 +221,7 @@ export function useSelectTarget({ selectedMachineId, setConnected, setConnectedB
     // The combined roster is cached: a newly created pane can be selected before it
     // appears there. Confirm absence against this PC before discarding the selection.
     let cancelled = false;
-    void fetchSession(selectedMachineId).then((current) => {
+    void fetchSession(selectedMachineId).then((read) => shownSession(selectedMachineId, read)).then((current) => {
       if (cancelled || moving() || current.panes.some((pane) => pane.pane_id === selectedPaneId)) return;
       const hint = selectionHint.current;
       selectionHint.current = null;
