@@ -70,7 +70,7 @@ try {
             await row.getByRole("tab", { name: "QA unrelated 0", exact: true }).click();
             await page.locator(".header-tabs .tab-strip-more").click();
             const more = page.getByRole("menu", { name: "More tabs", exact: true });
-            await more.getByRole("menuitem", { name: "QA implementer", exact: true }).click();
+            await more.getByRole("menuitem", { name: /^QA implementer/ }).click();
             await page.locator(`[data-layout-pane=${JSON.stringify(panes.web)}]`).waitFor({ state: "visible" });
           } else if (!enabled) {
             assert.equal(await row.locator(".workspace-fold-count").count(), 0);
