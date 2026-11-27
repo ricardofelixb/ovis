@@ -3,8 +3,8 @@ import { SPEECH_DEFAULT_VOICE, SPEECH_VOICES, type SpeechVoice } from "../../../
 
 import { DEFAULT_KEY_BAR_ITEMS, type KeyBarItem } from "../../lib/keyBar.ts";
 
-/** How the wide app moves between its places: upstream's inbox rail and sidebar row, one footer in both, or the rail in both. */
-export const NAVIGATIONS = ["upstream", "footer", "rail"] as const;
+/** How the wide app moves between its places: upstream's inbox rail and sidebar row, or the rail in both. */
+export const NAVIGATIONS = ["upstream", "rail"] as const;
 export type Navigation = typeof NAVIGATIONS[number];
 
 const legacyKeyBarItems: KeyBarItem[] = DEFAULT_KEY_BAR_ITEMS.flatMap((item): KeyBarItem[] =>
@@ -59,11 +59,12 @@ export function sanitizeForkSettings(record: Record<string, unknown>): ForkSetti
   return settings;
 }
 
-/** Inbox footer was a switch before Navigation had its third choice, the rail: a record that has only the switch keeps what it said. */
+/** Inbox footer was a switch before Navigation, and Footer a Navigation choice until it was dropped: both are the rail now. */
 function withNavigation(record: Record<string, unknown>): Record<string, unknown> {
+  if (record["navigation"] === "footer") return { ...record, navigation: "rail" };
   if (Object.hasOwn(record, "navigation") || typeof record["inboxFooter"] !== "boolean") return record;
   const { inboxFooter, ...rest } = record;
-  return { ...rest, navigation: inboxFooter ? "footer" : "upstream" };
+  return { ...rest, navigation: inboxFooter ? "rail" : "upstream" };
 }
 
 /** Only fork releases wrote these fields. Do not mistake an upstream record for a fork install. */
@@ -76,7 +77,7 @@ export function migrateForkSettings(raw: unknown): unknown {
   // Once a new setting is explicit it always wins, including false and a reset to upstream defaults.
   return { phoneTabs: "header", ...keyBarDefaults, squareCorners: true, moreViewToggle: true,
     agentFriends: true, piModelPicker: true, chatMotion: true,
-    piLiveVoice: true, computerView: true, pullRequests: true, navigation: "footer", readAloud: true, notes: true, ...withNavigation(record) };
+    piLiveVoice: true, computerView: true, pullRequests: true, navigation: "rail", readAloud: true, notes: true, ...withNavigation(record) };
 }
 
 /** Kept apart from the main record: an older upstream tab must not erase fork choices on save. */

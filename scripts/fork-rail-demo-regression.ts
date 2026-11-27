@@ -76,7 +76,8 @@ try {
           await drawer.waitFor();
           await drawer.locator(".sidebar-footer-inbox").waitFor();
           assert.equal(await page.locator(".inbox-rail").count(), 0, `${theme}: a phone draws no rail`);
-          assert.equal(await drawer.locator(".fork-github-foot-open").count(), 0, `${theme}: the drawer's foot has no place icons`);
+          for (const name of ["Workspace list", "Agent inbox", "Pull requests", "Notes"]) assert.equal(await drawer.locator(".sidebar-footer").getByRole("button", { name, exact: true }).count(), 0, `${theme}: the drawer's foot has no ${name} place`);
+          await drawer.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
           if (shots) await page.screenshot({ path: join(shots, `rail-phone-drawer-${theme}.png`) });
           await drawer.locator(".sidebar-footer-inbox").click();
           for (const name of ["Notes", "Pull requests"]) await page.locator(".mode-inbox .inbox-top").getByRole("button", { name, exact: true }).waitFor();

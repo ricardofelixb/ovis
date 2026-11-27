@@ -19,6 +19,9 @@ export function useNavigation(): Navigation {
   return settings.navigation === "rail" && !wide ? "upstream" : settings.navigation;
 }
 
+/** Under Rail the places are the rail's, not upstream's Inbox beside the gear (App.tsx passes MachineSidebar no `inbox` then). */
+export const useForkOwnsInboxEntry = (): boolean => useNavigation() === "rail";
+
 /** How the rail beside the workspaces sidebar enters the agent inbox; null in the inbox's own column. */
 const EnterInbox = createContext<(() => void) | null>(null);
 export const useRailEnter = (): (() => void) | null => useContext(EnterInbox);

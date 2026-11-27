@@ -178,8 +178,7 @@ import { layoutCells } from "./lib/layoutMap.ts";
 import { pageStartsInInbox, useInboxMode } from "./lib/inboxMode.ts";
 import { InboxList } from "./components/InboxList.tsx";
 import { ForkPlacePane, ForkPlaceSection } from "./fork/inbox/Places.tsx";
-import { ForkInboxFoot, ForkSidebarFoot, useForkInboxStatusBar, useForkOwnsInboxEntry } from "./fork/inbox/SidebarFoot.tsx";
-import { ForkWorkspaceRail } from "./fork/inbox/Rail.tsx";
+import { ForkWorkspaceRail, useForkOwnsInboxEntry } from "./fork/inbox/Rail.tsx";
 import { InboxConnecting, InboxUnchosen, ThreadTitle, ThreadTop } from "./components/InboxMode.tsx";
 import { InboxRail } from "./components/InboxRail.tsx";
 import { OvisMark } from "./components/OvisMark.tsx";
@@ -912,8 +911,7 @@ export function App() {
   const stripInHeader = classicStripInHeader && !inMode && screenMachineId === null;
   // from 769px with a mouse the pane column ends in the Herdr app's status bar: where the pane is, its branch,
   // the connection.
-  const forkInboxStatusBar = useForkInboxStatusBar(inMode && !inbox.shown);
-  const statusBarShown = wideScreen && keyboardLikely && selectedPane !== null && crumb !== null && !guideShown && (!inMode || forkInboxStatusBar);
+  const statusBarShown = wideScreen && keyboardLikely && selectedPane !== null && crumb !== null && !guideShown && !inMode;
   const waitingDot = waitingInMore && !statusBarShown && !inboxWide;
   const openNewOn = (id: string): void => { setNewSessionMachineId(id); setNewTab(null); setNewSessionOpen(true); setDrawerOpen(false); };
   const threadDrawn = inMode && !inbox.shown;
@@ -1166,7 +1164,7 @@ export function App() {
       <PanePressContext.Provider value={pressPane}>
       <div className="app-body">
         {inMode ? (inboxWide && <aside className="sidebar inbox-column">
-          <ForkInboxFoot watching={auth?.role === "watch"} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }}>{inboxRail}</ForkInboxFoot>
+          {inboxRail}
           {modeList(true)}
           <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
         </aside>) : <aside id="workspace-drawer" className={`sidebar${drawerOpen ? " is-open" : ""}${sidebarPeeking ? " is-peek" : ""}`} role={drawerModal ? "dialog" : undefined} aria-modal={drawerModal ? true : undefined} tabIndex={drawerModal ? -1 : undefined} aria-label={drawerModal ? t("Workspace list") : undefined}
@@ -1178,7 +1176,7 @@ export function App() {
             <CrashProbe region="sidebar" />
             <ReorderContext.Provider value={reorderCoordinator}><MachineSidebar machines={sidebarMachines} allMachines={machines} watching={auth?.role === "watch"} appLayout={appLayoutOn} drawerOpen={drawerOpen} filterRequest={sidebarFilterRequest} selectedMachineId={screenMachineId ?? selectedMachineId} selectedPaneId={screenMachineId === null ? selectedPaneId : null} screenMachineId={screenMachineId} onScreen={(id) => { setScreenMachineId((open) => open === id ? null : id); setDrawerOpen(false); }} activity={activity} actions={actions} onSelect={selectTarget} onUsageLogin={(paneId) => { selectTarget("local", paneId, "terminal"); void load(); }} onSetup={(machine, update = false) => { setUpdateRemote(update); setMachineDialog(machine); }} onNew={openNewOn}
               afterPcs={browserTabs !== null && filePanelAvailable ? <BrowserTabsGroup tabs={browserTabs} selected={browserTab} onSelect={openBrowserTab} /> : undefined}
-              footerStart={<>{setupRow}{modeOffered && <ForkSidebarFoot onOpen={() => { actions.counted?.("inbox", "button"); enterInbox(); }} />}</>} inbox={modeOffered && !inMode && !forkOwnsInboxEntry ? { waiting: sessionTally.waiting, open: () => { actions.counted?.("inbox", "button"); enterInbox(); } } : null} /></ReorderContext.Provider>
+              footerStart={setupRow} inbox={modeOffered && !inMode && !forkOwnsInboxEntry ? { waiting: sessionTally.waiting, open: () => { actions.counted?.("inbox", "button"); enterInbox(); } } : null} /></ReorderContext.Provider>
           </RenderBoundary>
           <SidebarResizer width={sidebarWidth} onResize={setSidebarWidth} />
         </aside>}
