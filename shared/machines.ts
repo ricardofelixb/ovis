@@ -59,7 +59,7 @@ export interface Machine {
   /** herdr daemons found on the PC before this bridge was started */
   found_herdr_sessions?: FoundHerdrSession[];
   found_ovis?: FoundOvis[];
-  /** Runtime proved by the server's HerdrIdentity, absent until it answers. */
+  /** Runtime proved by the server's HerdrIdentity, absent until it answers; this PC names the runtime it serves, absent while it is not connected. */
   runtime?: "herdr" | "herdr-core";
   /** a bridge update running for this PC right now (in the background, or from its dialog) */
   updating?: MachineUpdate | null;
