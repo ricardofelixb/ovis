@@ -26,11 +26,14 @@
 /* The rail runs the window's full height, as it does in the inbox, so its buttons stand where they stand there and
    nothing moves between the two: it climbs over the header's start, and the sidebar's own top row (.header-side,
    styles.css: New workspace, the palette and the sidebar's toggle) starts after it, as the inbox's top row does.
-   Not over a folded sidebar: there the header's start holds the toggle, and the peeked sidebar starts under it. */
+   Not over a folded sidebar: there the header's start holds the toggle, and the peeked sidebar starts under it.
+   The header is the top inset taller (styles.css): the rail climbs over that too and gives it back in its own
+   surface, a border, so no strip of the header's shows above it and upstream's paddings (InboxRail.css) still hold. */
 @media (min-width: 769px) {
   .app:not(.sidebar-collapsed) .sidebar:not(.inbox-column) > .inbox-rail {
     position: relative;
-    margin-top: calc(-1 * var(--header-h));
+    margin-top: calc(-1 * (var(--header-h) + env(safe-area-inset-top, 0px)));
+    border-top: env(safe-area-inset-top, 0px) solid var(--bg-nav);
   }
 
   .app:not(.sidebar-collapsed):has(.sidebar:not(.inbox-column) > .inbox-rail) .header-side {
