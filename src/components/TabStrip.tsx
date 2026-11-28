@@ -819,7 +819,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
         {error && popup !== "dialog" && <span className="tab-strip-error" role="alert">{error}</span>}
       </div>
   );
-  const openTab = tabs.find((tab) => tab.tab_id === selectedPane.tab_id);
+  const openTab = tabs.find((tab) => tab.tab_id === openTabId);
   // a menu left open draws the tab as it is now: a rename from elsewhere is not sent back over
   const pickedTab = picker ? tabs.find((tab) => tab.tab_id === picker.tab.tab_id) ?? picker.tab : null;
   const tabItem = (tab: HerdrTab): RowMenuItem => {

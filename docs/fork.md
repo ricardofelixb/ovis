@@ -17,7 +17,8 @@ agent with a Bot icon in its state colour (`RoleIcon`), its pane name and its hc
 pane sharing its tab as a plain terminal, so none is out of reach. While a hidden child is open, its
 parent's touch menu keeps that pane's own actions, as the open tab's menu has them. The desktop row, the phone header row, the desktop More
 overflow and the phone tabs sheet all list them under their parent. While a hidden child is the
-selected pane its parent tab shows selected, and the header/pane title keeps naming the child.
+selected pane, its parent tab shows selected and the sheet offers to move that parent. The
+header/pane title keeps naming the child.
 This replaced the Bot chips on the parent tab (`TabChips.tsx`, `tabGroupLayout.ts`, `tab-chips.css`,
 RowMenu's `trailing` slot and useTabReorder's `dropBoundary`, all removed): one marker and the menu
 the tab already has, as the sidebar folds helpers. Fork-only role metadata lives
@@ -31,7 +32,7 @@ Before is `dbb59cd8` vs `70c68e28`; after is this branch vs `211b76579`:
 
 | Upstream file | Before | After | Hooks added here |
 | --- | --- | --- | --- |
-| `src/components/TabStrip.tsx` | +55/-26 | +58/-26 | 3 imports; grouping call, open-parent mapping, "+N" mount, no pane position for an open hidden child, job items in the tab menu, More and sheet |
+| `src/components/TabStrip.tsx` | +55/-26 | +59/-27 | 3 imports; grouping call, open-parent mapping (including sheet moves), "+N" mount, no pane position for an open hidden child, job items in the tab menu, More and sheet |
 | `src/components/RowMenu.tsx` | +19/-8 | +10/-3 | none left from this feature (the `trailing` slot is gone) |
 | `src/lib/useTabReorder.ts` | +12/-6 | +8/-6 | optional adjacent-boundary callback, so a parent moves past its hidden children in one step |
 | `shared/protocol.ts` | +15/-1 | +17/-2 | type import + intersection |
@@ -40,11 +41,11 @@ Before is `dbb59cd8` vs `70c68e28`; after is this branch vs `211b76579`:
 
 Regression coverage: `src/fork/tabs/groupAgentTabs.test.ts`, `src/fork/tabs/jobMenu.test.tsx`,
 `server/fork/fork-pane-role.test.ts` and the opt-in cases in `src/fork/tabs/fork-TabStrip.test.tsx`
-(hidden child, "+N", the job items in the tab menu and sheet, selection through them, a parent's
-moves past its hidden child). `scripts/fork-grouped-tabs-demo-regression.ts` uses synthetic
-demo-only parents and hc roles to check desktop/phone "+N", the right-click and touch-hold menus,
-the phone sheet, the More overflow, a child's selection and title, and the setting disabled. No real
-session or user state is used.
+(hidden child, "+N", job items in the tab menu and sheet, selection through them, and moves
+for the visible parent, including from the sheet while its child is selected).
+`scripts/fork-grouped-tabs-demo-regression.ts` uses synthetic demo-only parents and hc roles to check
+desktop/phone "+N", the right-click and touch-hold menus, the phone sheet, the More overflow, a
+child's selection and title, and the setting disabled. No real session or user state is used.
 
 ## Project friends and inbox clarity
 
