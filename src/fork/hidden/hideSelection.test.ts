@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, expect, it, spyOn } from "bun:test";
 import { createElement, useRef } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { HIDDEN_WORKSPACE_ID } from "../../../shared/fork/pane.ts";
 import type { Machine } from "../../../shared/machines.ts";
 import * as api from "../../lib/api.ts";
+import { openPage, type Page } from "../../lib/page.fixture.ts";
 import { useSelectTarget } from "../../lib/useSelection.ts";
 import { shownMachines } from "./hiddenAgents.ts";
 
-let saved: PropertyDescriptor | undefined;
-let renderer: ReactTestRenderer | undefined;
+let page: Page;
 let picked: (string | null)[];
 let session: ReturnType<typeof spyOn>;
 
@@ -22,18 +21,14 @@ const full = {
 const machine = shownMachines([{ id: "local", state: "connected", snapshot: full } as unknown as Machine])[0]!;
 
 beforeEach(() => {
-  saved = Object.getOwnPropertyDescriptor(globalThis, "IS_REACT_ACT_ENVIRONMENT");
-  Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
+  page = openPage();
   picked = [];
   session = spyOn(api, "fetchSession").mockResolvedValue(full as never);
 });
 
 afterEach(async () => {
-  await act(async () => { renderer?.unmount(); });
-  renderer = undefined;
+  await page.close();
   session.mockRestore();
-  if (saved) Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", saved);
-  else Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
 });
 
 function Probe() {
@@ -49,7 +44,7 @@ function Probe() {
 }
 
 it("a selected pane just hidden leaves the selection as a closed one does, for a shown pane", async () => {
-  await act(async () => { renderer = create(createElement(Probe)); });
+  await page.render(createElement(Probe));
   expect(session).toHaveBeenCalled();
   expect(picked).toEqual(["p1"]);
 });

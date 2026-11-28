@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, expect, it, spyOn } from "bun:test";
 import { act, createElement } from "react";
-import { create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
 
 import type { HerdrPane, SessionSnapshot, WorkspaceInfo } from "../../../shared/protocol.ts";
 import { HELPERS_OPEN_KEY } from "../../components/AgentSidebar.tsx";
 import { Sidebar } from "../../components/Sidebar.tsx";
 import type { AppActions } from "../../lib/actions.ts";
+import { openPage, type Page } from "../../lib/page.fixture.ts";
 import { FOLD_HELPERS_STORAGE_KEY, SettingsProvider, SIDEBAR_AGENT_TREE_STORAGE_KEY, useSettings, type Settings } from "../../lib/settings.ts";
 import { inactiveSidebarFilter } from "../../lib/sidebarFilter.ts";
 import { SidebarFilterProvider } from "../../lib/sidebarFilterContext.ts";
@@ -34,33 +34,28 @@ const snapshot: SessionSnapshot = {
 };
 
 const descriptors = new Map<string, PropertyDescriptor | undefined>();
-const stored = new Map<string, string>();
-let renderer: ReactTestRenderer | undefined;
+let page: Page;
 let pinsBefore: string[];
 let fetchSpy: { mockRestore(): void } | undefined;
 const actions = new Proxy({}, { get: () => () => {} }) as AppActions;
+const stored = { get: (key: string) => localStorage.getItem(key), set: (key: string, value: string) => localStorage.setItem(key, value), delete: (key: string) => localStorage.removeItem(key) };
 
 beforeEach(() => {
-  for (const key of ["window", "document", "navigator", "getComputedStyle", "localStorage", "IS_REACT_ACT_ENVIRONMENT"]) descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-  stored.clear();
-  const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => { stored.set(key, value); }, removeItem: (key: string) => { stored.delete(key); } };
-  const events = new EventTarget();
-  const media = { matches: false, addEventListener() {}, removeEventListener() {} };
-  const define = (key: string, value: unknown) => Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  define("IS_REACT_ACT_ENVIRONMENT", true);
-  define("localStorage", storage);
-  define("navigator", { languages: ["en-US"], platform: "Linux" });
-  define("window", { localStorage: storage, matchMedia: () => media, addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), requestAnimationFrame: () => 1, cancelAnimationFrame() {}, setTimeout, clearTimeout });
-  define("document", { visibilityState: "visible", activeElement: null, documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } }, querySelector: () => null, addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events) });
-  define("getComputedStyle", () => ({ getPropertyValue: () => "" }));
+  page = openPage();
+  Object.defineProperty(page.window.navigator, "platform", { configurable: true, value: "Linux" });
+  Object.defineProperty(page.window.document, "visibilityState", { configurable: true, value: "visible" });
+  Object.defineProperty(page.window, "matchMedia", { configurable: true, writable: true, value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) });
+  Object.defineProperty(page.window, "requestAnimationFrame", { configurable: true, value: () => 1 });
+  Object.defineProperty(page.window, "cancelAnimationFrame", { configurable: true, value: () => {} });
+  descriptors.set("localStorage", Object.getOwnPropertyDescriptor(globalThis, "localStorage"));
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: page.window.localStorage });
   pinsBefore = currentSidebarPins();
   setSidebarPins([]);
   fetchSpy = spyOn(globalThis, "fetch").mockImplementation(Object.assign(async () => Response.json({ error: "not a repository" }, { status: 404 }), { preconnect: globalThis.fetch.preconnect }));
 });
 
 afterEach(async () => {
-  await act(async () => renderer?.unmount());
-  renderer = undefined;
+  await page.close();
   fetchSpy?.mockRestore();
   setSidebarPins(pinsBefore);
   for (const [key, descriptor] of descriptors) {
@@ -72,49 +67,46 @@ afterEach(async () => {
 async function draw(settings: { foldHelpers: boolean; agentTree: boolean }, selectedPaneId = "web:pi"): Promise<void> {
   stored.set(SIDEBAR_AGENT_TREE_STORAGE_KEY, String(settings.agentTree));
   stored.set(FOLD_HELPERS_STORAGE_KEY, String(settings.foldHelpers));
-  await act(async () => {
-    renderer = create(createElement(SettingsProvider, null, createElement(SidebarFilterProvider, { value: { filter: inactiveSidebarFilter(), reportBranches: () => {} } },
-      createElement(SettingsHandle), createElement(Sidebar, { snapshot, online: true, selectedPaneId, actions }))));
-  });
+  await page.render(createElement(SettingsProvider, null, createElement(SidebarFilterProvider, { value: { filter: inactiveSidebarFilter(), reportBranches: () => {} } },
+    createElement(SettingsHandle), createElement(Sidebar, { snapshot, online: true, selectedPaneId, actions }))));
 }
 let updateSettings: (patch: Partial<Settings>) => void = () => {};
 function SettingsHandle() {
   updateSettings = useSettings().update;
   return null;
 }
-const tree = () => renderer!.root.findAll((node) => node.type === "li" && typeof node.props["data-workspace"] === "string").map((row) =>
-  [row.props["data-workspace"] as string, ...row.findAll((node) => node.type === "li" && typeof node.props["data-agent-pane"] === "string").map((agent) => agent.props["data-agent-pane"] as string)]);
-const agentRow = (paneId: string): ReactTestInstance => renderer!.root.find((node) => node.type === "li" && node.props["data-agent-pane"] === paneId);
-const text = (node: ReactTestInstance): string => node.children.map((child) => typeof child === "string" ? child : text(child)).join("");
-const places = (paneId: string) => agentRow(paneId).findAll((node) => node.props.className === "workspace-agent-place").map(text);
+const tree = () => [...page.container.querySelectorAll("li[data-workspace]")].map((row) =>
+  [row.getAttribute("data-workspace")!, ...[...row.querySelectorAll("li[data-agent-pane]")].map((agent) => agent.getAttribute("data-agent-pane")!)]);
+const agentRow = (paneId: string): HTMLElement => page.one(`li[data-agent-pane="${paneId}"]`);
+const face = (paneId: string): HTMLButtonElement => agentRow(paneId).querySelector(".fork-helpers-face")!;
+const places = (paneId: string) => [...agentRow(paneId).querySelectorAll(".workspace-agent-place")].map((node) => node.textContent);
 
 it("keeps upstream's flat rows, tab names and no fold while either setting is off", async () => {
   await draw({ foldHelpers: false, agentTree: true });
   expect(tree()).toEqual([["api", "api:helper", "api:lead", "api:asking"], ["web", "web:pi", "web:stray"]]);
-  expect(renderer!.root.findAll((node) => node.props.className === "fork-helpers-face")).toEqual([]);
-  expect(agentRow("api:helper").props["data-depth"]).toBeUndefined();
+  expect(page.container.querySelectorAll(".fork-helpers-face")).toHaveLength(0);
+  expect(agentRow("api:helper").getAttribute("data-depth")).toBeNull();
   expect(places("api:lead")).toEqual(["Tab 1"]);
 });
 
 it("folds an agent's helpers under it, keeping the one that needs the person in sight", async () => {
   await draw({ foldHelpers: true, agentTree: true });
   expect(tree()).toEqual([["api", "api:lead", "api:asking"], ["web", "web:pi", "web:stray"]]);
-  expect(agentRow("api:asking").props["data-depth"]).toBe(1);
-  expect(agentRow("web:stray").props["data-depth"]).toBeUndefined();
-  expect(agentRow("api:lead").findAll((node) => node.props.className === "workspace-fold-count").map(text)).toEqual(["+1"]);
-  const face = agentRow("api:lead").find((node) => node.props.className === "fork-helpers-face");
-  expect(face.props["aria-expanded"]).toBe(false);
-  await act(async () => face.props.onClick());
+  expect(agentRow("api:asking").getAttribute("data-depth")).toBe("1");
+  expect(agentRow("web:stray").getAttribute("data-depth")).toBeNull();
+  expect([...agentRow("api:lead").querySelectorAll(".workspace-fold-count")].map((node) => node.textContent)).toEqual(["+1"]);
+  expect(face("api:lead").getAttribute("aria-expanded")).toBe("false");
+  await act(async () => face("api:lead").click());
   expect(JSON.parse(stored.get(HELPERS_OPEN_KEY)!)).toEqual(["local:api:lead"]);
   expect(tree()[0]).toEqual(["api", "api:lead", "api:helper", "api:asking"]);
-  expect(agentRow("api:helper").props["data-more"]).toBe("");
+  expect(agentRow("api:helper").getAttribute("data-more")).toBe("");
 });
 
 it("opens the agents the Agents list and the inbox keep open, and shows the selected helper while folded", async () => {
   stored.set(HELPERS_OPEN_KEY, JSON.stringify(["local:api:lead"]));
   await draw({ foldHelpers: true, agentTree: true });
   expect(tree()[0]).toEqual(["api", "api:lead", "api:helper", "api:asking"]);
-  await act(async () => renderer!.unmount());
+  await page.render(null);
   stored.delete(HELPERS_OPEN_KEY);
   await draw({ foldHelpers: true, agentTree: true }, "api:helper");
   expect(tree()[0]).toEqual(["api", "api:lead", "api:helper", "api:asking"]);
@@ -126,9 +118,8 @@ it("takes the agents the Agents list opened while the tree was off, and its firs
   stored.set(HELPERS_OPEN_KEY, JSON.stringify(["local:api:lead"]));
   await act(async () => updateSettings({ sidebarAgentTree: true }));
   expect(tree()[0]).toEqual(["api", "api:lead", "api:helper", "api:asking"]);
-  const face = agentRow("api:lead").find((node) => node.props.className === "fork-helpers-face");
-  expect(face.props["aria-expanded"]).toBe(true);
-  await act(async () => face.props.onClick());
+  expect(face("api:lead").getAttribute("aria-expanded")).toBe("true");
+  await act(async () => face("api:lead").click());
   expect(JSON.parse(stored.get(HELPERS_OPEN_KEY)!)).toEqual([]);
   expect(tree()[0]).toEqual(["api", "api:lead", "api:asking"]);
 });
@@ -136,5 +127,5 @@ it("takes the agents the Agents list opened while the tree was off, and its firs
 it("drops the tab name from an agent row while both are on, keeping it in the row's hover title", async () => {
   await draw({ foldHelpers: true, agentTree: true });
   expect(places("api:lead")).toEqual([]);
-  expect(agentRow("api:lead").find((node) => node.props.className === "workspace-agent-select").props.title).toContain("Tab 1");
+  expect(agentRow("api:lead").querySelector<HTMLElement>(".workspace-agent-select")!.title).toContain("Tab 1");
 });

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { act } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
 
 import type { Machine } from "../../../shared/machines.ts";
+import { openPage, type Page } from "../../lib/page.fixture.ts";
 import { SettingsProvider } from "../../lib/settings.ts";
 import { showPaneEndedNotification, showPaneStatusNotification } from "../../lib/notifications.ts";
 import { AgentAvatar, friendMood } from "./AgentAvatar.tsx";
@@ -17,8 +17,7 @@ const asks = { started: 0, answered: 0 };
 function device(agentFriends: boolean, friends: Record<string, string>) {
   asks.started = 0;
   asks.answered = 0;
-  const win = globalThis.window as unknown as { localStorage: Pick<Storage, "getItem" | "setItem" | "removeItem"> };
-  win.localStorage = { getItem: (key) => key === "ovis:settings" ? JSON.stringify({ agentFriends }) : null, setItem() {}, removeItem() {} };
+  window.localStorage.setItem("ovis:settings", JSON.stringify({ agentFriends }));
   globalThis.fetch = (async () => {
     asks.started += 1;
     const answer = new Response(JSON.stringify({ friends }), { headers: { "content-type": "application/json" } });
@@ -35,37 +34,16 @@ function Asking({ children }: { children: React.ReactNode }) {
 
 describe("AgentAvatar", () => {
   const realFetch = globalThis.fetch;
-  const descriptors = new Map<string, PropertyDescriptor | undefined>();
-  let renderer: ReactTestRenderer | undefined;
-  beforeEach(() => {
-    for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    const events = new EventTarget();
-    const media = { matches: true, addEventListener() {}, removeEventListener() {} };
-    Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
-    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["en-US"] } });
-    Object.defineProperty(globalThis, "window", { configurable: true, value: {
-      matchMedia: () => media, addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
-      requestAnimationFrame: () => 1, cancelAnimationFrame() {}, location: { href: "http://localhost/" },
-    } });
-    Object.defineProperty(globalThis, "document", { configurable: true, value: {
-      body: { nodeType: 1, children: [] }, documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } },
-      querySelector: () => null, addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
-    } });
-    Object.defineProperty(globalThis, "getComputedStyle", { configurable: true, value: () => ({ getPropertyValue: () => "" }) });
-  });
+  let page: Page;
+  beforeEach(() => { page = openPage(); });
   afterEach(async () => {
-    await act(async () => { renderer?.unmount(); });
-    renderer = undefined;
+    await page.close();
     globalThis.fetch = realFetch;
-    for (const [key, descriptor] of descriptors) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
-    descriptors.clear();
   });
+  const reopen = async () => { await page.close(); page = openPage(); };
 
   const draw = async (avatar: React.ReactNode): Promise<string> => {
-    await act(async () => { renderer = create(<SettingsProvider><Asking>{avatar}</Asking></SettingsProvider>); });
+    await page.render(<SettingsProvider><Asking>{avatar}</Asking></SettingsProvider>);
     // the answer to /api/friends lands after the first paint: wait for it, bounded
     const deadline = Date.now() + 2_000;
     while (asks.answered < asks.started) {
@@ -74,21 +52,21 @@ describe("AgentAvatar", () => {
     }
     await act(async () => { await Promise.resolve(); });
     await act(async () => { await Promise.resolve(); });
-    return JSON.stringify(renderer!.toJSON());
+    return page.container.innerHTML;
   };
 
   it("draws the friend alone, with no harness logo, when Agent friends is on and the pane has one", async () => {
     device(true, { "m1:p1": "neko" });
     const out = await draw(<AgentAvatar agent="claude" size={18} machineId="m1" paneId="p1" status="working" />);
     expect(out).toContain("agent-friend is-working");
-    expect(out).toContain('"width":22');
+    expect(out).toContain("width: 22px");
     expect(out).not.toContain("agent-mark");
   });
 
   it("draws the agent's mark when friends are off, the pane has none, or no pane is named", async () => {
     device(false, { "m1:p1": "neko" });
     expect(await draw(<AgentAvatar agent="claude" size={18} machineId="m1" paneId="p1" />)).toContain("agent-mark");
-    await act(async () => renderer?.unmount());
+    await reopen();
     device(true, { "m1:p1": "neko" });
     const none = await draw(<><AgentAvatar agent="codex" machineId="m1" paneId="p2" /><AgentAvatar agent="claude" machineId="m1" /></>);
     expect(none).not.toContain("agent-friend");
@@ -104,12 +82,12 @@ describe("AgentAvatar", () => {
       await draw(<AgentAvatar agent="claude" machineId="m1" paneId="p1" />);
       const shown: NotificationOptions[] = [];
       Object.defineProperty(globalThis, "Notification", { configurable: true, value: { permission: "granted" } });
-      Object.assign(document, { hidden: true });
+      Object.defineProperty(document, "hidden", { configurable: true, value: true });
       Object.defineProperty(globalThis, "navigator", { configurable: true, value: { serviceWorker: { getRegistration: async () => ({ active: {}, showNotification: async (_title: string, options: NotificationOptions) => { shown.push(options); } }) } } });
       await showPaneStatusNotification("p1", "Pi", "done", undefined, "m1");
       await showPaneEndedNotification("p1", "Pi", undefined, "another-pc");
       pane.agent = null;
-      await act(async () => { renderer!.update(<SettingsProvider><Asking><span /></Asking></SettingsProvider>); });
+      await page.render(<SettingsProvider><Asking><span /></Asking></SettingsProvider>);
       await showPaneEndedNotification("p1", "Terminal", undefined, "m1");
       device(false, {});
       await showPaneStatusNotification("p1", "Pi", "done", undefined, "m1");
@@ -127,7 +105,7 @@ describe("AgentAvatar", () => {
     const original = await draw(<ForkInboxAvatar row={row} />);
     expect(original).toContain("inbox-avatar-face");
     expect(original).not.toContain("agent-friend");
-    await act(async () => renderer?.unmount());
+    await reopen();
     device(true, { "m1:p1": "neko" });
     const friend = await draw(<ForkInboxAvatar row={row} />);
     expect(friend).toContain("agent-friend");
@@ -154,12 +132,12 @@ describe("AgentAvatar", () => {
     }
     const view = (machines: Machine[]) => <SettingsProvider><Reading machines={machines} /></SettingsProvider>;
     const update = async (machines: Machine[], pick: string, count: number) => {
-      await act(async () => { renderer!.update(view(machines)); });
+      await page.render(view(machines));
       expect(requests).toHaveLength(count);
-      expect(renderer!.root.findByType("output").children).toEqual([pick]);
+      expect(page.one("output").textContent).toBe(pick);
     };
-    await act(async () => { renderer = create(view(roster("project-a"))); });
-    expect(renderer!.root.findByType("output").children).toEqual(["neko"]);
+    await page.render(view(roster("project-a")));
+    expect(page.one("output").textContent).toBe("neko");
     await update(roster("project-b"), "kuma", 2);
     await update(roster("project-b", "p2"), "hoshi", 3);
     await update(roster("project-b", "p2", "parent-moved"), "mikan", 4);
@@ -192,16 +170,16 @@ describe("AgentAvatar", () => {
       return <output>{friends[`${id}:p1`] ?? ""}</output>;
     }
     const view = (workspace: string) => <SettingsProvider><Reading workspace={workspace} /></SettingsProvider>;
-    await act(async () => { renderer = create(view("project-a")); });
+    await page.render(view("project-a"));
     expect(requests).toBe(1);
-    await act(async () => { renderer!.update(view("project-b")); });
+    await page.render(view("project-b"));
     expect(requests).toBe(2);
-    expect(renderer!.root.findByType("output").children).toEqual(["kuma"]);
+    expect(page.one("output").textContent).toBe("kuma");
     await act(async () => {
       oldBody.resolve(JSON.stringify({ friends: { [`${id}:p1`]: "neko" } }));
       oldFetch.resolve(oldResponse);
     });
-    expect(renderer!.root.findByType("output").children).toEqual(["kuma"]);
+    expect(page.one("output").textContent).toBe("kuma");
     expect(requests).toBe(2);
   });
 
