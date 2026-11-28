@@ -271,7 +271,11 @@ function createDemoWorkspace(cwd: string, label: string, agent: string | null, w
   snap.panes.push(pane);
   addAgent(pane);
   snap.tabs.push({ ...structuredClone(newTabTemplate), tab_id: `${id}:t1`, workspace_id: id, label, number: 1, agent_status: pane.agent_status, focused: false, pane_count: 1 });
-  snap.workspaces.push({ ...structuredClone(newWorkspaceTemplate), workspace_id: id, label, number: snap.workspaces.length + 1, active_tab_id: `${id}:t1`, agent_status: pane.agent_status, focused: false, pane_count: 1, tab_count: 1, worktree: worktree ?? worktreeMetadata(repositoryAt(cwd)) });
+  // Like the herdr-core projection, the hidden workspace stays last, outside the visible move indices.
+  const hidden = snap.workspaces.findIndex((workspace) => workspace.workspace_id === HIDDEN_WORKSPACE_ID);
+  const index = hidden === -1 ? snap.workspaces.length : hidden;
+  snap.workspaces.splice(index, 0, { ...structuredClone(newWorkspaceTemplate), workspace_id: id, label, number: index + 1, active_tab_id: `${id}:t1`, agent_status: pane.agent_status, focused: false, pane_count: 1, tab_count: 1, worktree: worktree ?? worktreeMetadata(repositoryAt(cwd)) });
+  if (hidden !== -1) snap.workspaces.forEach((workspace, at) => { workspace.number = at + 1; });
   addDemoLayout(id, `${id}:t1`, pane.pane_id);
   if (agent) {
     keyOfPane.set(pane.pane_id, pane.pane_id);
