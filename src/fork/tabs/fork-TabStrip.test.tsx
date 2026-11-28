@@ -88,6 +88,15 @@ describe("the tab strip folds job agents into their parent's tab (Agent friends)
     expect(selected).toBe(child.pane_id);
   });
 
+  it("offers to move the visible parent in the tabs sheet while its hidden job is selected", async () => {
+    const sheet = document.createElement("div");
+    document.body.appendChild(sheet);
+    const snapshot = snapshotOf([parent, child, pane("w1:t3")]);
+    snapshot.tabs.push(tabOf("w1:t3", 3));
+    await draw(OVIS_CORE, { phoneRow: true, sheet, onSheetClose() {}, selectedPane: child }, snapshot);
+    expect(menus()[0]).toEqual(expect.arrayContaining(["tab:w1:t1", `job:${child.pane_id}`, "tab:w1:t3", "move-right"]));
+  });
+
   it("keeps the open parent's touch menu while its hidden job agent is the selected pane", async () => {
     hover = true;
     const paneActions = (paneId: string) => [{ id: `rename-pane:${paneId}`, label: "Rename pane", icon: Terminal, run() {} }];
