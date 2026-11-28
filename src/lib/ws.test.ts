@@ -895,6 +895,91 @@ it("attaches a grid the chat lens covers without resizing the shared pty, on a r
   client.close();
 });
 
+it("offers the current local grid immediately before explicit Windows fit takeover", () => {
+  const client = new HerdrSocket("ws://test/ws");
+  client.connect();
+  const socket = FakeSocket.last;
+  socket.open();
+  try {
+    const pane = "w1:p1";
+    socket.receive(snapshot(["input-ready", "take-over"]));
+    client.attach(pane, 76, 24, false, true);
+    socket.receive({ type: "pane-geometry", pane_id: pane, cols: 120, rows: 40, fixed: true, windows_fit: true });
+    socket.receive({ type: "error", pane_id: pane, code: "attach_held", message: "held" });
+    const before = socket.sent.length;
+    expect(client.takeOver(pane, { cols: 44, rows: 15 })).toBe(true);
+    expect(socket.sent.slice(before)).toEqual([
+      { type: "resize", pane_id: pane, cols: 44, rows: 15 },
+      { type: "take-over", pane_id: pane },
+    ]);
+  } finally { client.close(); }
+});
+
+it("reattaches a newly shown pane at its own size before the server offers Windows fit", () => {
+  const client = new HerdrSocket("ws://test/ws");
+  client.connect();
+  const socket = FakeSocket.last;
+  socket.open();
+  try {
+    const pane = "w1:p1";
+    client.attach(pane, 120, 40, true, true);
+    client.resize(pane, 44, 15);
+    const before = socket.sent.length;
+    socket.open();
+    expect(socket.sent.slice(before).filter(frame => frame.type === "attach" || frame.type === "resize")).toEqual([
+      { type: "attach", pane_id: pane, cols: 44, rows: 15, flow_control: "ack", receipt_resume_id: expect.any(String), windows_fit: true },
+    ]);
+    const beforeOffer = socket.sent.length;
+    socket.receive({ type: "pane-geometry", pane_id: pane, cols: 120, rows: 40, fixed: true, windows_fit: true });
+    expect(socket.sent).toHaveLength(beforeOffer);
+  } finally { client.close(); }
+});
+
+it("requests a fresh native fit after release, never by an observer or a replayed takeover", () => {
+  const client = new HerdrSocket("ws://test/ws");
+  client.connect();
+  const socket = FakeSocket.last;
+  socket.open();
+  try {
+    const pane = "w1:p1";
+    client.attach(pane, 40, 15, true, true);
+    client.resize(pane, 51, 18);
+    expect(socket.sent.at(-1)).toMatchObject({ type: "resize", cols: 51, rows: 18 });
+    const fixed = { type: "pane-geometry", pane_id: pane, cols: 120, rows: 40, fixed: true, windows_fit: true };
+    const beforeOffer = socket.sent.length;
+    socket.receive(fixed);
+    socket.receive(fixed);
+    expect(socket.sent.slice(beforeOffer)).toEqual([
+      expect.objectContaining({ type: "attach", pane_id: pane, cols: 51, rows: 18, windows_fit: true }),
+    ]);
+    socket.receive({ type: "pane-geometry", pane_id: pane, cols: 51, rows: 18, fixed: false, windows_fit: true });
+    socket.receive({ type: "role-ack", mode: "observe" });
+    const count = socket.sent.length;
+    client.resize(pane, 70, 24);
+    expect(socket.sent).toHaveLength(count);
+    socket.open();
+    expect(socket.sent.at(-1)).toMatchObject({ type: "attach", keep_size: true, windows_fit: true });
+    expect(socket.sent.some(frame => frame.type === "take-over")).toBe(false);
+  } finally { client.close(); }
+});
+
+it("does not reclaim native fit on a late offer after the terminal releases its grid again", () => {
+  const client = new HerdrSocket("ws://test/ws");
+  client.connect();
+  const socket = FakeSocket.last;
+  socket.open();
+  try {
+    const pane = "w1:p1";
+    client.attach(pane, 40, 15, true, true);
+    client.resize(pane, 51, 18);
+    client.releaseSize(pane);
+    const count = socket.sent.length;
+    socket.receive({ type: "pane-geometry", pane_id: pane, cols: 120, rows: 40, fixed: true, windows_fit: true });
+    expect(socket.sent).toHaveLength(count);
+    expect(client.canRequestWindowsFit(pane)).toBe(true);
+  } finally { client.close(); }
+});
+
 it("releases the shared grid once when the chat lens covers a terminal this tab sized, never replayed", () => {
   const client = new HerdrSocket("ws://test/ws");
   client.connect();
@@ -1359,7 +1444,7 @@ it("asks again for a visible chat's conversation pushes when its pane is attache
   client.watchConversation("w1:p1", true);
   expect(watches()).toEqual([]);
   client.attach("w1:p1", 80, 24, true);
-  expect(watches()).toEqual([{ type: "conversation-watch", pane_id: "w1:p1", enabled: true }]);
+  expect(watches()).toEqual([{ type: "conversation-watch", pane_id: "w1:p1", enabled: true, visible_cards: true }]);
   client.detach("w1:p1");
   client.attach("w1:p1", 80, 24, true);
   expect(watches()).toHaveLength(2);
@@ -1367,8 +1452,8 @@ it("asks again for a visible chat's conversation pushes when its pane is attache
   client.detach("w1:p1");
   client.attach("w1:p1", 80, 24, true);
   expect(watches()).toEqual([
-    { type: "conversation-watch", pane_id: "w1:p1", enabled: true },
-    { type: "conversation-watch", pane_id: "w1:p1", enabled: true },
+    { type: "conversation-watch", pane_id: "w1:p1", enabled: true, visible_cards: true },
+    { type: "conversation-watch", pane_id: "w1:p1", enabled: true, visible_cards: true },
     { type: "conversation-watch", pane_id: "w1:p1", enabled: false },
   ]);
   client.close();
@@ -1902,7 +1987,7 @@ it("keeps what is typed while the network is gone out of the socket, which would
   }
 });
 
-it("takes no typing while the network is gone over a remote connection, whatever it answers, on any bridge; a server on this device does", () => {
+it("takes no typing while the network is gone over a remote connection until it answers a ping sent since, never on a bridge without ping; a server on this device does", () => {
   jest.useFakeTimers();
   const network = networkSwitch();
   const { client, socket } = liveClient(["submit", "ping"]);
@@ -1912,8 +1997,13 @@ it("takes no typing while the network is gone over a remote connection, whatever
     network.set(false);
     expect(client.canInput("w1:p1")).toBe(false);
     expect(pings(socket)).toEqual([{ type: "ping", id: 1 }]);
+    const held = markTyped();
+    expect(client.sendInput("w1:p1", "held", false, false, false, held)).toBe(false);
+    // its pong crossed the network after the browser said it was gone: what is typed from then on goes, never what
+    // was typed before
     socket.receive({ type: "pong", id: 1 });
-    expect(client.sendInput("w1:p1", "ls")).toBe(false);
+    expect(client.sendInput("w1:p1", "held", false, false, false, held)).toBe(false);
+    expect(client.sendInput("w1:p1", "ls")).toBe(true);
     // a bridge without "ping" is not asked, and not trusted while the browser reports no network
     expect(legacy.client.sendInput("w1:p1", "ls")).toBe(false);
     local.attach("w1:p1", 100, 30);
@@ -1923,7 +2013,7 @@ it("takes no typing while the network is gone over a remote connection, whatever
     near.receive(snapshot(["input-ready", "submit", "ping"]));
     near.receive({ type: "input-ready", pane_id: "w1:p1" });
     expect(local.sendInput("w1:p1", "ls")).toBe(true);
-    expect(submissions(socket)).toEqual([]);
+    expect(submissions(socket)).toEqual([{ type: "input", pane_id: "w1:p1", text: "ls" }]);
     expect(submissions(legacy.socket)).toEqual([]);
     expect(submissions(near)).toEqual([{ type: "input", pane_id: "w1:p1", text: "ls" }]);
     // the same loopback address for another PC, or reached through the relay, crosses the network
@@ -2095,6 +2185,31 @@ it("holds keys an idle pane queued for its attach while the network was gone, af
     expect(client.sendInput("w1:p1", "ls", false, false, false, before)).toBe(false);
     expect(submissions(socket)).toEqual([]);
     expect(client.sendInput("w1:p1", "pwd", false, false, false, markTyped())).toBe(true);
+  } finally {
+    client.close();
+    network.restore();
+    jest.useRealTimers();
+  }
+});
+
+it("takes typing once a pong answers while the browser says offline all along, as a Galaxy Z Flip6's WebView did on Wi-Fi", () => {
+  jest.useFakeTimers();
+  const network = networkSwitch();
+  network.set(false);
+  const { client, socket } = liveClient(["submit", "ping", "input-ready"]);
+  try {
+    socket.receive({ type: "input-ready", pane_id: "w1:p1" });
+    // the flag alone holds the keys and probes the connection
+    expect(client.canInput("w1:p1")).toBe(false);
+    for (const { id } of pings(socket)) socket.receive({ type: "pong", id });
+    // the pong to a ping sent while the flag said offline proves the link: keys go, and stay going
+    expect(client.canInput("w1:p1")).toBe(true);
+    expect(client.sendInput("w1:p1", "ls")).toBe(true);
+    expect(client.canInput("w1:p1")).toBe(true);
+    expect(submissions(socket)).toEqual([{ type: "input", pane_id: "w1:p1", text: "ls" }]);
+    // an offline event is a loss again: held until another pong
+    globalThis.dispatchEvent(new Event("offline"));
+    expect(client.canInput("w1:p1")).toBe(false);
   } finally {
     client.close();
     network.restore();

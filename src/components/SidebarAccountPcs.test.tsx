@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, jest, mock, spyOn } from "bun:test";
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
+import { act } from "react";
+import { openPage, type Page } from "../lib/page.fixture.ts";
 
 import type { Machine } from "../../shared/machines.ts";
+import { generateKeyPair } from "../../shared/relay-e2ee.ts";
+import { deriveServerId } from "../../shared/relay-server-proof.ts";
 import type { AccountPcEntry } from "../lib/api.ts";
+import { addListPc, listWorld } from "../lib/account/accountList.test-helpers.ts";
+import { setPageAccountList } from "../lib/account/pageList.ts";
 import { ACCOUNT_SESSION_EVENT } from "../lib/account/store.ts";
 import { SignedOutError } from "../lib/account/service.ts";
 import { SettingsProvider } from "../lib/settings.ts";
-import type { AccountPcsSource } from "../lib/account/useAccountPcs.ts";
+import { signedInAccount, type AccountPcsSource } from "../lib/account/useAccountPcs.ts";
 import { SidebarAccountPcs } from "./SidebarAccountPcs.tsx";
 
 const pc = (id: string, name: string): AccountPcEntry => ({ server_id: id.repeat(32).slice(0, 32), server_public_key: "key", relay: "wss://relay.ovis.example", name });
@@ -20,8 +25,7 @@ const lab = { id: "lab-id", name: "Lab", kind: "relay", relay: { server_id: LAB.
 const desk = { id: "desk-id", name: "Desk", kind: "relay", relay: { server_id: DESK.server_id, relay: DESK.relay } } as unknown as Machine;
 
 describe("the account's PCs in the sidebar", () => {
-  const descriptors = new Map<string, PropertyDescriptor | undefined>();
-  let renderer: ReactTestRenderer | undefined;
+  let page: Page;
   let requests: { path: string; body: unknown }[];
   let pairLines: ReadableStreamDefaultController<Uint8Array> | undefined;
   let pairSignal: AbortSignal | null;
@@ -37,10 +41,8 @@ describe("the account's PCs in the sidebar", () => {
   let awayHold: Promise<void> | null;
   let statusFails: boolean;
   let invalidAway: boolean;
-  let events: EventTarget;
-  let documentEvents: EventTarget;
-  // this browser's storage, kept across a page load within a test (mount again) and cleared between tests
-  const stored = new Map<string, string>();
+  let extraReady: ReadonlySet<string>;
+  let savedStorage: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     requests = [];
@@ -57,30 +59,17 @@ describe("the account's PCs in the sidebar", () => {
     awayHold = null;
     statusFails = false;
     invalidAway = false;
+    extraReady = new Set();
     source = {
       account: async () => mine,
       list: async () => { lists += 1; const who = listAccount ?? mine; return who === null ? null : { account: who, pcs: [OWN, DESK, LAB, OLD, AWAY] }; },
       admit: async (serverId) => { admitted.push(serverId); },
     };
-    for (const key of ["window", "document", "navigator", "getComputedStyle", "localStorage", "IS_REACT_ACT_ENVIRONMENT"]) descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-    stored.clear();
-    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => { stored.set(key, value); }, removeItem: (key: string) => { stored.delete(key); } } });
-    Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
-    Object.defineProperty(globalThis, "getComputedStyle", { configurable: true, value: () => ({ getPropertyValue: () => "" }) });
-    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["en"], userAgent: "Mozilla/5.0 (X11; Linux x86_64)", maxTouchPoints: 0 } });
-    events = new EventTarget();
-    documentEvents = new EventTarget();
-    Object.defineProperty(globalThis, "window", { configurable: true, value: {
-      location: { href: "http://127.0.0.1:7318/", origin: "http://127.0.0.1:7318" },
-      addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
-      dispatchEvent: events.dispatchEvent.bind(events),
-      setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout,
-    } });
-    Object.defineProperty(globalThis, "document", { configurable: true, value: {
-      hidden: false, visibilityState: "visible",
-      addEventListener: documentEvents.addEventListener.bind(documentEvents), removeEventListener: documentEvents.removeEventListener.bind(documentEvents),
-      documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } }, querySelector: () => null,
-    } });
+    page = openPage("http://127.0.0.1:7318/");
+    savedStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: page.window.localStorage });
+    Object.defineProperty(page.window, "setTimeout", { configurable: true, value: (...args: Parameters<typeof setTimeout>) => setTimeout(...args) });
+    Object.defineProperty(page.window, "clearTimeout", { configurable: true, value: (...args: Parameters<typeof clearTimeout>) => clearTimeout(...args) });
     const fetch = async (input: string | URL | Request, init?: RequestInit) => {
       const path = new URL(String(input instanceof Request ? input.url : input), "http://127.0.0.1:7318").pathname;
       const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
@@ -100,7 +89,7 @@ describe("the account's PCs in the sidebar", () => {
           if (hold !== null) await hold;
           return Response.json({ pcs: [{ server_id: AWAY.server_id, state: answer }] });
         }
-        return Response.json({ pcs: asked.map((entry) => ({ server_id: entry.server_id, state: states[entry.server_id] })) });
+        return Response.json({ pcs: asked.map((entry) => ({ server_id: entry.server_id, state: extraReady.has(entry.server_id) ? "ready" : states[entry.server_id] })) });
       }
       if (path === "/api/machines/relay/account/start") return Response.json({ ticket: "ticket-1", key: "a-key", label: "Ovis on here" });
       if (path === "/api/machines/relay/account/pair") pairSignal = init?.signal ?? null;
@@ -112,37 +101,35 @@ describe("the account's PCs in the sidebar", () => {
 
   afterEach(async () => {
     jest.useRealTimers();
-    await act(async () => { renderer?.unmount(); });
-    renderer = undefined;
+    setPageAccountList(null);
+    await page.close();
     mock.restore();
-    for (const [key, descriptor] of descriptors) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else Reflect.deleteProperty(globalThis, key);
-    }
-    descriptors.clear();
+    if (savedStorage) Object.defineProperty(globalThis, "localStorage", savedStorage);
+    else Reflect.deleteProperty(globalThis, "localStorage");
   });
 
-  const text = (node: ReactTestInstance): string => node.children.map((child) => typeof child === "string" ? child : text(child)).join("");
-  const groups = () => renderer!.root.findAll((node) => node.type === "section").map((group) => [
-    group.props["aria-label"], group.props["data-pc-state"],
-    group.findAll((node) => node.type === "button").map((button) => text(button)).join(","),
+  const text = (node: Element): string => node.textContent ?? "";
+  const sections = () => [...page.container.querySelectorAll("section")];
+  const groups = () => sections().map((group) => [
+    group.getAttribute("aria-label"), group.getAttribute("data-pc-state"),
+    [...group.querySelectorAll("button")].map(text).join(","),
   ]);
-  const row = (name: string) => renderer!.root.find((node) => node.type === "section" && node.props["aria-label"] === `PC ${name}`);
+  const row = (name: string) => page.one(`section[aria-label="PC ${name}"]`);
   const starts = () => requests.filter((request) => request.path.endsWith("/start")).length;
   const line = (value: unknown) => new TextEncoder().encode(`${JSON.stringify(value)}\n`);
   /** the window is left and comes back, as a tab switch does: blur, then focus and visibilitychange together */
   const comeBack = async () => {
     await act(async () => {
-      events.dispatchEvent(new Event("blur"));
-      events.dispatchEvent(new Event("focus"));
-      documentEvents.dispatchEvent(new Event("visibilitychange"));
+      page.window.dispatchEvent(new page.window.Event("blur"));
+      page.window.dispatchEvent(new page.window.Event("focus"));
+      page.window.document.dispatchEvent(new page.window.Event("visibilitychange"));
     });
     await settle();
   };
   const settle = async () => { for (let round = 0; round < 6; round += 1) await act(async () => {}); };
   const tree = (onAdded: (machine: Machine) => void, machines: readonly Machine[], hidden = false) => <SettingsProvider><SidebarAccountPcs machines={machines} onAdded={onAdded} source={source} hidden={hidden} /></SettingsProvider>;
   const mount = async (onAdded: (machine: Machine) => void = () => {}, machines: readonly Machine[] = [local, lab]) => {
-    await act(async () => { renderer = create(tree(onAdded, machines)); });
+    await page.render(tree(onAdded, machines));
     await settle();
   };
 
@@ -152,9 +139,9 @@ describe("the account's PCs in the sidebar", () => {
     expect(admitted).toEqual([DESK.server_id]);
     expect(text(row("Desk"))).toContain("Connecting…");
     // nothing answered through the relay in time: that is all the check knows, so it never says the PC is switched off
-    expect(text(row("Away"))).toContain("Can't reach the PC: it may be off");
+    expect(text(row("Away"))).toContain("The PC is not answering");
     expect(text(row("Away"))).not.toContain("Switched off");
-    expect(renderer!.root.findAll((node) => node.type === "button")).toHaveLength(0);
+    expect(page.container.querySelectorAll("button")).toHaveLength(0);
   });
 
   it("says the PC may be off only where nothing answered in time, and only that it cannot reach a PC whose answer was kept away otherwise", async () => {
@@ -171,7 +158,7 @@ describe("the account's PCs in the sidebar", () => {
       { ...DESK, outside: true as const },
       { ...AWAY, server_public_key: "", relay: "", unreachable: true as const },
     ] });
-    await act(async () => { renderer = create(tree(() => {}, [local])); });
+    await page.render(tree(() => {}, [local]));
     await settle();
     expect(groups().map(([label]) => label)).toEqual(["PC Desk", "PC Away"]);
     expect(text(row("Desk"))).toContain("Not in your account's list yet");
@@ -184,10 +171,42 @@ describe("the account's PCs in the sidebar", () => {
     expect(requests.filter(({ path }) => path === "/api/machines/relay/account/start")).toEqual([]);
   });
 
+  it("keeps signed and outside rows visible but waits for the signed PC to check in before pairing", async () => {
+    const world = listWorld("acct", Date.now());
+    const member = await world.device();
+    const target = await addListPc(world, member, "Signed PC");
+    await addListPc(world, member, "No route");
+    const key = generateKeyPair().publicKey;
+    const outside = { server_id: deriveServerId(key), endpoint: Buffer.from(key).toString("hex") };
+    const at = new Date(world.clock.now).toISOString();
+    const route = (pc: { server_id: string; endpoint: string }, label: string, completed_at: string | null) => ({
+      server_id: pc.server_id, public_key: pc.endpoint, relay: "wss://relay.test",
+      label, added_at: at, last_seen_at: null, completed_at,
+    });
+    let completed: string | null = null;
+    member.wire.answer = (request) => new URL(request.url).pathname === "/v1/pcs"
+      ? Response.json({ pcs: [route(target, "Directory name", completed), route(outside, "Outside PC", null)] })
+      : null;
+    setPageAccountList(member.list);
+    source = { ...signedInAccount(member.service), admit: source.admit };
+    extraReady = new Set([target.server_id, outside.server_id]);
+
+    await mount();
+    expect(groups().map(([label]) => label).sort()).toEqual(["PC No route", "PC Outside PC", "PC Signed PC"]);
+    expect(text(row("No route"))).toContain("Can't reach the PC");
+    expect(text(row("Outside PC"))).toContain("Not in your account's list yet");
+    expect(starts()).toBe(0);
+
+    completed = at;
+    await comeBack();
+    expect(starts()).toBe(1);
+    expect(admitted).toEqual([target.server_id]);
+  });
+
   it("adds by itself no PC of the list that is still new to this device: it waits for a person, as it does on My PCs", async () => {
     const soon = new Date(Date.now() + 3_600_000).toISOString();
     source.list = async () => ({ account: "acct", pcs: [{ ...DESK, byList: true as const, new_until: soon }] });
-    await act(async () => { renderer = create(tree(() => {}, [local])); });
+    await page.render(tree(() => {}, [local]));
     await settle();
     expect(groups().map(([label, state]) => [label, state])).toEqual([["PC Desk", "ready"]]);
     expect(admitted).toEqual([]);
@@ -202,9 +221,9 @@ describe("the account's PCs in the sidebar", () => {
       { ...OLD, new_until: null },
       { ...AWAY, new_until: new Date(now - 1).toISOString() },
     ] });
-    await act(async () => { renderer = create(tree(() => {}, [local])); });
-    const marks = () => renderer?.root.findAllByType("section").filter((group) => group.findAll((node) => node.type === "span" && node.children.includes("New PC")).length > 0);
-    expect(marks()?.map((group) => group.props["aria-label"])).toEqual(["PC Desk"]);
+    await page.render(tree(() => {}, [local]));
+    const marks = () => sections().filter((group) => [...group.querySelectorAll("span")].some((node) => [...node.childNodes].some((child) => child.nodeName === "#text" && child.textContent === "New PC")));
+    expect(marks()?.map((group) => group.getAttribute("aria-label"))).toEqual(["PC Desk"]);
     await act(async () => { jest.advanceTimersByTime(1_000); });
     expect(marks()).toHaveLength(0);
   });
@@ -217,7 +236,7 @@ describe("the account's PCs in the sidebar", () => {
     expect(starts()).toBe(1);
     await act(async () => { pairLines!.enqueue(line({ machine: desk })); pairLines!.close(); });
     await settle();
-    await act(async () => { renderer!.update(tree(() => {}, machines)); });
+    await page.render(tree(() => {}, machines));
     await settle();
     expect(admitted).toEqual([DESK.server_id, AWAY.server_id]);
     expect(groups().map(([name]) => name)).toEqual(["PC Old box", "PC Away"]);
@@ -254,7 +273,7 @@ describe("the account's PCs in the sidebar", () => {
     await mount();
     await act(async () => { pairLines!.enqueue(line({ error: { code: "account_pc_declined", message: "That PC was not approved. Nothing was added." } })); pairLines!.close(); });
     await settle();
-    await act(async () => { renderer!.unmount(); });
+    await page.render(null);
     await mount();
     expect(starts()).toBe(1);
     expect(text(row("Desk"))).toContain("Not approved");
@@ -270,7 +289,7 @@ describe("the account's PCs in the sidebar", () => {
     await settle();
     await comeBack();
     expect(starts()).toBe(2);
-    await act(async () => { renderer!.unmount(); });
+    await page.render(null);
     await mount();
     expect(starts()).toBe(3);
   });
@@ -279,7 +298,7 @@ describe("the account's PCs in the sidebar", () => {
     await mount();
     await act(async () => { pairLines!.enqueue(line({ error: { code: "account_pc_declined", message: "That PC was not approved. Nothing was added." } })); pairLines!.close(); });
     await settle();
-    await act(async () => { renderer!.unmount(); });
+    await page.render(null);
     // the same browser on another PC's page (the hosted app and the phone app share one origin)
     const other = { ...local, server_id: "c".repeat(32) } as unknown as Machine;
     await mount(() => {}, [other, lab]);
@@ -346,8 +365,7 @@ describe("the account's PCs in the sidebar", () => {
       expect(groups()).toEqual([]);
       expect(requests.some((request) => request.path.startsWith("/api/machines/relay/account"))).toBe(false);
       expect(lists).toBe(0);
-      await act(async () => { renderer!.unmount(); });
-      renderer = undefined;
+      await page.render(null);
     }
   });
 
@@ -391,13 +409,13 @@ describe("the account's PCs in the sidebar", () => {
     expect(text(row("Desk"))).toContain("Sign in again");
     // signed in to another account: still nothing is asked of Desk
     mine = "other";
-    await act(async () => { events.dispatchEvent(new Event(ACCOUNT_SESSION_EVENT)); });
+    await act(async () => { page.window.dispatchEvent(new page.window.Event(ACCOUNT_SESSION_EVENT)); });
     await settle();
     expect(text(row("Desk"))).toContain("Sign in again");
     expect(starts()).toBe(0);
     // signed in to that account again in this window: no reload, no other window in between
     mine = "acct";
-    await act(async () => { events.dispatchEvent(new Event(ACCOUNT_SESSION_EVENT)); });
+    await act(async () => { page.window.dispatchEvent(new page.window.Event(ACCOUNT_SESSION_EVENT)); });
     await settle();
     expect(text(row("Desk"))).not.toContain("Sign in again");
     expect(starts()).toBe(1);
@@ -411,7 +429,7 @@ describe("the account's PCs in the sidebar", () => {
     expect(text(row("Desk"))).toContain("Sign in again");
     expect(admitted).toEqual([]);
     gone = false;
-    await act(async () => { events.dispatchEvent(new Event(ACCOUNT_SESSION_EVENT)); });
+    await act(async () => { page.window.dispatchEvent(new page.window.Event(ACCOUNT_SESSION_EVENT)); });
     await settle();
     expect(text(row("Desk"))).not.toContain("Sign in again");
     expect(admitted).toEqual([DESK.server_id]);
@@ -431,7 +449,7 @@ describe("the account's PCs in the sidebar", () => {
   });
 
   it("says why a PC was not added in the page's language: the PC's server says it in English only", async () => {
-    Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["ko"], userAgent: "Mozilla/5.0 (X11; Linux x86_64)", maxTouchPoints: 0 } });
+    Object.defineProperty(page.window.navigator, "languages", { configurable: true, value: ["ko"] });
     const said: Record<string, string> = {
       // refused before the request was shown: most often a PC with no device of the account paired at it to approve
       account_pc_refused: "그 PC가 요청을 받지 않았습니다. 그 PC와 페어링된 내 계정의 기기만 다른 PC를 들여보낼 수 있습니다.",
@@ -441,20 +459,19 @@ describe("the account's PCs in the sidebar", () => {
       account_pc_gone: "그 PC를 추가하지 못했습니다. 다시 시도하세요.",
     };
     for (const [code, words] of Object.entries(said)) {
-      stored.clear();
+      page.window.localStorage.clear();
       await mount();
       await act(async () => { pairLines!.enqueue(line({ error: { code, message: "An English sentence from the PC's server." } })); pairLines!.close(); });
       await settle();
-      const dot = row("Desk").find((node) => node.type === "span" && typeof node.props.className === "string" && node.props.className.includes("machine-dot"));
-      expect([code, dot.props.title, text(row("Desk")).includes("English sentence")]).toEqual([code, words, false]);
-      await act(async () => { renderer!.unmount(); });
-      renderer = undefined;
+      const dot = row("Desk").querySelector("span.machine-dot");
+      expect([code, dot?.getAttribute("title"), text(row("Desk")).includes("English sentence")]).toEqual([code, words, false]);
+      await page.render(null);
     }
   });
 
   it("tells the sidebar only the PCs it is adding, so a device keeps its own link to one that is outdated, off or declined", async () => {
     const told: (readonly string[])[] = [];
-    await act(async () => { renderer = create(<SettingsProvider><SidebarAccountPcs machines={[local, lab]} onAdded={() => {}} onListed={(ids) => told.push(ids)} source={source} /></SettingsProvider>); });
+    await page.render(<SettingsProvider><SidebarAccountPcs machines={[local, lab]} onAdded={() => {}} onListed={(ids) => told.push(ids)} source={source} /></SettingsProvider>);
     await settle();
     // Desk is being added; Old box (outdated) and Away (off) are not, and keep any link of this device's own
     expect(told.at(-1)).toEqual([DESK.server_id]);
@@ -467,11 +484,11 @@ describe("the account's PCs in the sidebar", () => {
   });
 
   it("opens a PC being added by its row, where this device keeps its own link to it, so the add never hides the way to it", async () => {
-    await act(async () => { renderer = create(<SettingsProvider><SidebarAccountPcs machines={[local, lab]} onAdded={() => {}} openable={new Set([DESK.server_id])} source={source} /></SettingsProvider>); });
+    await page.render(<SettingsProvider><SidebarAccountPcs machines={[local, lab]} onAdded={() => {}} openable={new Set([DESK.server_id])} source={source} /></SettingsProvider>);
     await settle();
     expect(text(row("Desk"))).toContain("Connecting…");
-    expect(row("Desk").findAll((node) => node.type === "a").map((link) => link.props.href)).toEqual([`/s/${DESK.server_id}/`]);
-    expect(row("Away").findAll((node) => node.type === "a")).toHaveLength(0);
+    expect([...row("Desk").querySelectorAll("a")].map((link) => link.getAttribute("href"))).toEqual([`/s/${DESK.server_id}/`]);
+    expect(row("Away").querySelectorAll("a")).toHaveLength(0);
   });
 
   it("keeps each PC's own failure while the next PC is added", async () => {
@@ -487,8 +504,8 @@ describe("the account's PCs in the sidebar", () => {
 
   it("steps aside for the sidebar filter without ending a pairing under way", async () => {
     await mount();
-    await act(async () => { renderer!.update(tree(() => {}, [local, lab], true)); });
-    const hidden = Object.fromEntries(renderer!.root.findAll((node) => node.type === "section").map((group) => [group.props["aria-label"], group.props.hidden]));
+    await page.render(tree(() => {}, [local, lab], true));
+    const hidden = Object.fromEntries(sections().map((group) => [group.getAttribute("aria-label"), group.hidden]));
     expect(hidden).toEqual({ "PC Desk": false, "PC Old box": true, "PC Away": true });
     expect(pairSignal?.aborted).toBe(false);
   });
@@ -508,7 +525,7 @@ describe("the account's PCs in the sidebar", () => {
     await comeBack();
     expect(reads()).toBe(4);
     // focus alone, with the window never left, reads nothing
-    await act(async () => { events.dispatchEvent(new Event("focus")); });
+    await act(async () => { page.window.dispatchEvent(new page.window.Event("focus")); });
     await settle();
     expect(reads()).toBe(4);
   });
@@ -593,7 +610,7 @@ describe("the account's PCs in the sidebar", () => {
     const before = checks();
     // the roster changes as panes and agents move: a new array each time
     for (let round = 0; round < 3; round += 1) {
-      await act(async () => { renderer!.update(tree(() => {}, [{ ...local }, { ...lab }])); });
+      await page.render(tree(() => {}, [{ ...local }, { ...lab }]));
       await settle();
     }
     expect(checks()).toBe(before);
@@ -602,7 +619,7 @@ describe("the account's PCs in the sidebar", () => {
 
   it("keeps a pairing under way when the roster changes", async () => {
     await mount();
-    await act(async () => { renderer!.update(tree(() => {}, [{ ...local }, { ...lab }])); });
+    await page.render(tree(() => {}, [{ ...local }, { ...lab }]));
     await settle();
     expect(pairSignal?.aborted).toBe(false);
     expect(starts()).toBe(1);

@@ -43,6 +43,8 @@ import { omoJobCount, omoJobsAfter, omoJobTasks, type OmoJobs } from "./omo-jobs
 import type { OmoTask } from "../shared/protocol.ts";
 import type { OmoRest } from "./completion.ts";
 import { OMO_RUNNING, omoStateDir, type OmoStateOptions } from "./omo-state-dir.ts";
+import { processAlive } from "./process-start.ts";
+export { processAlive };
 
 const TURN_STARTS = new Set([
   "goal-continuation", "omo-senpi:wake", "senpi-monitor:notification", "senpi-terminal:notification",
@@ -128,10 +130,6 @@ export function omoBackgroundTasks(cwd: string, alive: (pid: number) => boolean 
   return running;
 }
 
-export function processAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; }
-}
-
 export interface OmoPane { path: string | null; startedAt: number | null }
 
 export interface OmoFile {
@@ -144,6 +142,8 @@ export interface OmoStatusDeps {
   snapshot: () => Promise<SessionSnapshot>;
   onChange: (paneId: string, status: AgentStatus, background: number, turn: boolean, rest?: OmoRest) => void;
   onFound?: (paneId: string, again: boolean) => void;
+  /** discovery no longer finds the agent's process in a pane it held: none there, or another (both starts known) */
+  onLost?: (paneId: string) => void;
   agent?: string;
   aliases?: readonly string[];
   turnAfter?: (turn: OmoTurn, line: OmoLine) => OmoTurn;
@@ -264,6 +264,12 @@ export class OmoStatus {
     return this.panes.get(paneId)?.path ?? null;
   }
 
+  /** the session a pane's agent holds and when its process started, while discovery finds it there */
+  lifeOf(paneId: string): { path: string | null; startedAt: number | null } | undefined {
+    const tracked = this.panes.get(paneId);
+    return tracked && { path: tracked.path, startedAt: tracked.startedAt };
+  }
+
   sessionOf(paneId: string): { cwd: string; sessionId: string } | null {
     const tracked = this.panes.get(paneId);
     const sessionId = tracked?.path == null ? null : omoSessionId(tracked.path);
@@ -293,18 +299,23 @@ export class OmoStatus {
         if (found.has(paneId)) continue;
         this.remember(paneId, gone);
         this.panes.delete(paneId);
+        this.deps.onLost?.(paneId);
       }
       for (const paneId of [...this.last.keys()]) if (!cwds.has(paneId)) this.last.delete(paneId);
       for (const [paneId, pane] of found) {
         const before = this.panes.get(paneId);
         if (!before) this.deps.onFound?.(paneId, this.last.has(paneId));
+        // another process started in the pane since: what the one before ran is not its background work, nor is
+        // another session's (below)
+        const restarted = before !== undefined && before.startedAt !== null && pane.startedAt !== null && pane.startedAt !== before.startedAt;
+        if (restarted) this.deps.onLost?.(paneId);
         if (before && before.path === pane.path) before.startedAt = pane.startedAt ?? before.startedAt;
         else {
           if (before) this.remember(paneId, before);
           const prior = this.last.get(paneId);
           const startedAt = pane.startedAt ?? before?.startedAt ?? (prior?.path === pane.path ? prior.startedAt : null);
           const same = prior !== undefined && prior.path === pane.path;
-          this.panes.set(paneId, { ...pane, startedAt, cwd: cwds.get(paneId) ?? "", offset: -1, size: -1, id: "", retell: prior !== undefined, turn: noTurn(), status: prior?.status ?? "idle", failed: same && prior.failed, failedAt: same ? prior.failedAt : null, history: false, background: prior?.background ?? 0, available: false, complete: false, polled: this.deps.ready !== undefined && (before?.polled === true || prior !== undefined), authoritative: false });
+          this.panes.set(paneId, { ...pane, startedAt, cwd: cwds.get(paneId) ?? "", offset: -1, size: -1, id: "", retell: prior !== undefined, turn: noTurn(), status: prior?.status ?? "idle", failed: same && prior.failed, failedAt: same ? prior.failedAt : null, history: false, background: same && !restarted ? prior.background : 0, available: false, complete: false, polled: this.deps.ready !== undefined && (before?.polled === true || prior !== undefined), authoritative: false });
         }
         if (pane.path !== null) this.last.delete(paneId);
       }

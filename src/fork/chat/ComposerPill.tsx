@@ -69,7 +69,7 @@ export function useForkComposer({ metadata, agent, role, connected, sending, isW
     if (onCommand?.(`/ovis-model ${id}${level ? ` ${level}` : ""}`)) setPicked({ id, level });
     else onRefused(t("Not confirmed. Check the terminal before sending again."));
   };
-  const renderPill = (usage: ReactNode, focusable: boolean): ReactNode => {
+  const renderPill = (usage: ReactNode, desktop: boolean): ReactNode => {
     const body = <>
       {modelShown && <span className="composer-model-info" aria-label={t("Model and reasoning")}>
         <span className={`composer-model${model ? model.named ? "" : " is-id" : " is-none"}`} title={modelId ?? t("Model not available")}>{model?.text ?? t("Model —")}</span>
@@ -79,11 +79,16 @@ export function useForkComposer({ metadata, agent, role, connected, sending, isW
           {effort && <><span className="composer-reasoning-dot" aria-hidden="true">·</span><span className="composer-reasoning-short" aria-hidden="true">{effort}</span></>}
         </span>
       </span>}
-      {/* Claude Code's plan mode is the one mode the pill marks, as an icon; every other mode draws nothing */}
-      {metadata?.permission_mode === "plan" && <span className="composer-mode" role="img" aria-label={t("Plan mode")} title={t("Plan mode")}>
-        <ClipboardList aria-hidden="true" />
-      </span>}
-      {metadata?.context && <ContextRing context={metadata.context} focusable={focusable} />}
+      {/* plan mode (Claude Code's, or a Codex Ovis started) is the one mode the pill marks: in words on a desktop, as an
+          icon on a phone, where the row has no room for them; every other mode draws nothing */}
+      {metadata?.permission_mode === "plan" && (desktop
+        ? <span className="composer-mode is-text">
+          <span className="composer-reasoning-dot" aria-hidden="true">·</span>{t("Plan mode")}
+        </span>
+        : <span className="composer-mode" role="img" aria-label={t("Plan mode")} title={t("Plan mode")}>
+          <ClipboardList aria-hidden="true" />
+        </span>)}
+      {metadata?.context && <ContextRing context={metadata.context} focusable={desktop} />}
       {usage}
     </>;
     return <>

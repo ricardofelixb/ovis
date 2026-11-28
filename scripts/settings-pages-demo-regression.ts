@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Page } from "playwright-core";
 import panes from "../site/demo/fixtures/panes.json";
+import { appContext } from "./app-context.ts";
 import { buildDemoApp } from "./demo-build.ts";
 import { DEMO_FILE_PREVIEW_SCRIPT } from "./demo-file-preview.ts";
 import { openSettingsFolds, openSettingsPage, pressInSettings, sheetRisen, themeSide } from "./settings-page.ts";
@@ -11,11 +12,12 @@ import { PAGES, SETTINGS, closeSettings, dialogOf, historyHolds, openSettings } 
 import { KO } from "../src/lib/i18n.ko.ts";
 import { JA } from "../src/lib/i18n.ja.ts";
 import { ZH } from "../src/lib/i18n.zh.ts";
-import { terminalTheme } from "../src/lib/settings.ts";
+import { terminalTheme, VOICE_LANGUAGE_STORAGE_KEY } from "../src/lib/settings.ts";
 import { rowFor, THEME_IDS, type ThemeId } from "../src/lib/themes.ts";
 import baseline from "../src/lib/themes.legacy-baseline.json";
 import { comboKey, LEGACY_COMBOS } from "./theme-baseline.ts";
 import { openLens } from "./header-lens.ts";
+import { checkChromeTmpdir } from "./chrome-path.ts";
 
 // All files and HTTP traffic stay in this disposable, loopback-only app; no herdr session is opened.
 const app = mkdtempSync(join(tmpdir(), "herdr-settings-demo-"));
@@ -45,7 +47,7 @@ interface HeldSteps { holdSteps: (timers?: boolean) => void; releaseSteps: () =>
  */
 async function lateCloseStep(browser: import("playwright-core").Browser, url: string): Promise<void> {
   for (const width of [1440, 390] as const) {
-    const context = await browser.newContext(width === 390 ? { viewport: { width, height: 844 }, isMobile: true, hasTouch: true } : { viewport: { width, height: 900 } });
+    const context = await appContext(browser, width === 390 ? { viewport: { width, height: 844 }, isMobile: true, hasTouch: true } : { viewport: { width, height: 900 } });
     try {
       await context.addInitScript((settings) => {
         localStorage.setItem("ovis:settings", settings);
@@ -173,13 +175,14 @@ try {
   } });
   const url = `http://127.0.0.1:${server.port}/herdr-web-ui/demo/app/`;
   try {
+    checkChromeTmpdir();
     const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH ?? chromium.executablePath(), headless: true, args: ["--no-sandbox"] });
     try {
       for (const [width, language] of [[390, "en"], [320, "en"], [320, "ko"], [320, "ja"], [320, "zh"]] as const) {
         const started = performance.now();
         const strings: Record<string, string> = language === "ko" ? KO : language === "ja" ? JA : language === "zh" ? ZH : {};
         const label = (name: string): string => strings[name] ?? name;
-        const context = await browser.newContext({ viewport: { width, height: 760 }, isMobile: true, hasTouch: true, locale: language });
+        const context = await appContext(browser, { viewport: { width, height: 760 }, isMobile: true, hasTouch: true, locale: language });
         try {
           await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(url).origin });
           await context.addInitScript((settings) => { if (localStorage.getItem("ovis:settings") === null) localStorage.setItem("ovis:settings", settings); }, JSON.stringify({ ...SETTINGS, language }));
@@ -210,9 +213,9 @@ try {
               await openSettingsFolds(page);
               await page.locator(".voice-key").waitFor();
               const dictation = page.getByLabel(label("Dictation language"), { exact: true });
-              await dictation.selectOption("hu-HU");
-              await page.waitForFunction(() => JSON.parse(localStorage.getItem("ovis:settings")!).voiceLanguage === "hu-HU");
-              assert.equal(await dictation.inputValue(), "hu-HU");
+              await dictation.selectOption("es-419");
+              await page.waitForFunction((key) => JSON.parse(localStorage.getItem(key) ?? "null") === "es-419", VOICE_LANGUAGE_STORAGE_KEY);
+              assert.equal(await dictation.inputValue(), "es-419");
               assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem("ovis:settings")!).language), language,
                 "dictation selection does not change the display language");
               await dictation.selectOption("auto");
@@ -427,7 +430,7 @@ try {
         }
       }
 
-      const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: "en-US" });
+      const phone = await appContext(browser, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
       try {
         await phone.addInitScript((settings) => localStorage.setItem("ovis:settings", settings), JSON.stringify(SETTINGS));
         await phone.addInitScript(() => {
@@ -556,9 +559,9 @@ try {
 
       if (process.env.UI_EVIDENCE_DIR) {
         for (const width of [1280, 390]) {
-          const context = await browser.newContext({
+          const context = await appContext(browser, {
             viewport: { width, height: width === 390 ? 844 : 800 },
-            isMobile: width === 390, hasTouch: width === 390, locale: "en-US",
+            isMobile: width === 390, hasTouch: width === 390,
           });
           try {
             await context.addInitScript((settings) => localStorage.setItem("ovis:settings", settings), JSON.stringify(SETTINGS));
@@ -579,7 +582,7 @@ try {
         }
       }
 
-      const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, locale: "en-US" });
+      const desktop = await appContext(browser, { viewport: { width: 1280, height: 800 } });
       try {
         await desktop.addInitScript((settings) => {
           if (localStorage.getItem("ovis:settings") === null) localStorage.setItem("ovis:settings", settings);

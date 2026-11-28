@@ -8,18 +8,26 @@ import { deriveServerId } from "../../../shared/relay-server-proof.ts";
 import { NewPcRowTag } from "../../components/NewPcRowTag.tsx";
 import { RelayShell, type RelayShellProps } from "../../components/RelayShell.tsx";
 import { SettingsProvider } from "../settings.ts";
-import { memoryAccountStore, newKey } from "../account/store.ts";
+import { beginSignIn } from "../account/signin.ts";
+import { memoryAccountStore, newKey, type AccountStore } from "../account/store.ts";
 import { nativeTransport, setTransport } from "../transport.ts";
 import type { RelayDevice, ShellDeviceStore } from "./device.ts";
 import { ACCOUNT_READ_WAIT_MS, ACCOUNT_STEPS_WAIT_MS, mountRelayShell, type RelayShellMount } from "./shell.tsx";
 import { pcHeld, setPcNewness } from "./newPcHere.ts";
 import { RelayTransport, type RelayTransportOptions } from "./transport.ts";
 import { RelayAdmissionTimeoutError, RelayPcOfflineError } from "./channel.ts";
+import type { offerFromCode } from "./pairCode.ts";
 import { MuxProtocolError, RELAY_PROTOCOL } from "../../../shared/relay-mux.ts";
 
 const AP = "wss://relay-ap.ovis.sh";
 const SERVICE = "https://account.ovis.sh";
 const SHEET_JOIN = "ovis-add-pc-sheet";
+
+async function signInReturnUrl(store: AccountStore, result = "code=good-code"): Promise<string> {
+  const redirectUri = "https://app.ovis.sh/";
+  const started = await beginSignIn("github", { store, service: SERVICE, redirectUri });
+  return `${redirectUri}#${result}&state=${new URL(started).searchParams.get("state")}`;
+}
 
 const keyFor = () => { const pair = generateKeyPair(); return { server_id: deriveServerId(pair.publicKey), server_public_key: exportPublicKey(pair.publicKey) }; };
 
@@ -437,11 +445,11 @@ describe("the hosted shell's front page", () => {
     browser.setVisibility("hidden");
     const offer = { v: 1 as const, ...keyFor(), relay: AP, name: "Desk PC" };
     const accountStore = memoryAccountStore();
-    await accountStore.set("pending", { "state-1": { service: SERVICE, provider: "github", state: "state-1", verifier: "verifier-123", redirect_uri: "https://app.ovis.sh/", started_at: Date.now() } });
+    const entryUrl = await signInReturnUrl(accountStore);
     const token = Promise.withResolvers<Response>();
     let exchanging = false, attempts = 0;
     const mounted = mountRelayShell(mountFor({
-      entryUrl: "https://app.ovis.sh/#code=good-code&state=state-1", store: deviceStore([]), navigate() {},
+      entryUrl, store: deviceStore([]), navigate() {},
       accountStore, accountService: SERVICE, accountProviders: ["github"],
       accountFetch: async (input) => {
         if (new URL(String(input)).pathname === "/v1/pcs") return Response.json({ pcs: [] });
@@ -1370,10 +1378,10 @@ describe("the hosted shell's front page", () => {
     // the page a sign-in returns to (#code=…) opens the saved PC once its sign-in is read, as the launch it continues would
     const returned = async (store: ShellDeviceStore, went: string[], listed: unknown[] = [], checkPc: RelayShellMount["checkPc"] = answering()): Promise<void> => {
       const accountStore = memoryAccountStore();
-      await accountStore.set("pending", { "state-1": { service: SERVICE, provider: "github", state: "state-1", verifier: "verifier-123", redirect_uri: "https://app.ovis.sh/", started_at: Date.now() } });
+      const entryUrl = await signInReturnUrl(accountStore);
       let exchanged = 0;
       await mountRelayShell(mountFor({
-        entryUrl: "https://app.ovis.sh/#code=good-code&state=state-1", store, navigate: (path) => { went.push(path); }, checkPc,
+        entryUrl, store, navigate: (path) => { went.push(path); }, checkPc,
         accountStore, accountService: SERVICE, accountProviders: ["github"],
         accountFetch: async (input) => {
           if (new URL(String(input)).pathname === "/v1/pcs") return Response.json({ pcs: listed });
@@ -1405,9 +1413,15 @@ describe("the hosted shell's front page", () => {
       const { server_id, server_public_key } = keyFor();
       const [saved] = await pcs(server_id);
       const store = deviceStore([{ ...saved!, server_public_key }]);
-      const checkPc: RelayShellMount["checkPc"] = (device) => { asked.push(device.server_id); return new Promise((resolve) => { answers.push(() => resolve({ kind: "answered", route: "relay", relay: AP, rttMs: 20 })); }); };
+      const checking = Promise.withResolvers<void>();
+      const checkPc: RelayShellMount["checkPc"] = (device) => {
+        asked.push(device.server_id);
+        checking.resolve();
+        return new Promise((resolve) => { answers.push(() => resolve({ kind: "answered", route: "relay", relay: AP, rttMs: 20 })); });
+      };
       const mounted = returned(store, went, [], checkPc);
       // the launch waits on the check the sweep started before it, which answers only now
+      await checking.promise;
       await until(() => answers.length > 0 && rendered.length > 0 && last().state.kind === "connecting", "the launch's wait on the PC's check");
       for (const answer of answers.splice(0)) answer();
       await mounted;
@@ -1628,9 +1642,9 @@ describe("the hosted shell's front page", () => {
       const listed = { server_id: deriveServerId(pair.publicKey), label: "Desk", added_at: new Date(Date.now() - 864e5).toISOString(), last_seen_at: new Date(Date.now() - 60_000).toISOString(), public_key: Buffer.from(pair.publicKey).toString("hex"), relay: AP };
       const directory = Promise.withResolvers<Response>();
       const accountStore = memoryAccountStore();
-      await accountStore.set("pending", { "state-1": { service: SERVICE, provider: "github", state: "state-1", verifier: "verifier-123", redirect_uri: "https://app.ovis.sh/", started_at: Date.now() } });
+      const entryUrl = await signInReturnUrl(accountStore);
       const mounted = mountRelayShell(mountFor({
-        entryUrl: "https://app.ovis.sh/#code=good-code&state=state-1", store: deviceStore([]), navigate: (path) => { went.push(path); },
+        entryUrl, store: deviceStore([]), navigate: (path) => { went.push(path); },
         accountStore, accountService: SERVICE, accountProviders: ["github"],
         accountFetch: async (input) => {
           const path = new URL(String(input)).pathname;
@@ -1655,10 +1669,10 @@ describe("the hosted shell's front page", () => {
       const listed = { server_id: deriveServerId(pair.publicKey), label: "Desk", added_at: new Date(Date.now() - 864e5).toISOString(), last_seen_at: new Date(Date.now() - 60_000).toISOString(), public_key: Buffer.from(pair.publicKey).toString("hex"), relay: AP };
       const directory = Promise.withResolvers<Response>();
       const accountStore = memoryAccountStore();
-      await accountStore.set("pending", { "state-1": { service: SERVICE, provider: "github", state: "state-1", verifier: "verifier-123", redirect_uri: "https://app.ovis.sh/", started_at: Date.now() } });
+      const entryUrl = await signInReturnUrl(accountStore);
       jest.useFakeTimers();
       const mounted = mountRelayShell(mountFor({
-        entryUrl: "https://app.ovis.sh/#code=good-code&state=state-1", store: deviceStore([]), navigate: (path) => { went.push(path); },
+        entryUrl, store: deviceStore([]), navigate: (path) => { went.push(path); },
         accountStore, accountService: SERVICE, accountProviders: ["github"],
         accountFetch: async (input) => {
           const path = new URL(String(input)).pathname;
@@ -1809,9 +1823,9 @@ describe("the hosted shell's front page", () => {
       browser.setVisibility("hidden");
       const went: string[] = [];
       const accountStore = memoryAccountStore();
-      await accountStore.set("pending", { "state-1": { service: SERVICE, provider: "github", state: "state-1", verifier: "verifier-123", redirect_uri: "https://app.ovis.sh/", started_at: Date.now() } });
+      const entryUrl = await signInReturnUrl(accountStore, "error=access_denied");
       await mountRelayShell(mountFor({
-        entryUrl: "https://app.ovis.sh/#error=access_denied&state=state-1", store: deviceStore(await pcs("a".repeat(32))), navigate: (path) => { went.push(path); },
+        entryUrl, store: deviceStore(await pcs("a".repeat(32))), navigate: (path) => { went.push(path); },
         accountStore, accountService: SERVICE, accountProviders: ["github"], accountFetch: async () => Response.json({ pcs: [] }),
       }));
       expect(went).toEqual([]);
@@ -2066,6 +2080,20 @@ describe("the hosted shell's front page", () => {
     expect(attempts).toBe(1);
     await mountRelayShell({ ...settings, entryUrl: paths[0] ?? "" });
     expect(last().state.kind).toBe("confirm");
+  });
+
+  it("looks a typed code up on the relay its page's ovis-relay meta names, and on Ovis's own without one", async () => {
+    const offer = { v: 1 as const, ...keyFor(), relay: AP, code: "123456" };
+    const asked: (string | undefined)[] = [];
+    const findByCode: typeof offerFromCode = async (_code, options) => { asked.push(options?.relay); return offer; };
+    const page = globalThis.document as unknown as { querySelector: (selector: string) => unknown };
+    for (const codeRelay of ["wss://relay.example.test", undefined]) {
+      page.querySelector = (selector) => codeRelay !== undefined && selector === 'meta[name="ovis-relay"]' ? { getAttribute: (name: string) => name === "content" ? codeRelay : null } : null;
+      await mountRelayShell(mountFor({ store: deviceStore([]), navigate() {}, findByCode }));
+      last().onCodeStart(); last().onCodeSubmit("ABCDE-FGHJK");
+      await until(() => last().state.kind === "code-compare", "code comparison");
+    }
+    expect(asked).toEqual(["wss://relay.example.test", undefined]);
   });
 
   it("returns from code entry in place without discarding the caller's view", async () => {

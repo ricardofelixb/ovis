@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { altSequence, clipboardKey, physicalKey, controlCode, ctrlEnterSequence, mirroredCtrlEnterKey, isPrintable, keySequence, modifyOtherKeysLevel, sanitizeKeyBarExtras, navigationSequence, terminalChord, keyFromData, NO_MODIFIER_LATCH, releaseLatched, stepModifier } from "./keys.ts";
+import { evaluateKeyboardEvent } from "./terminalInput/keyboard.ts";
+import { altOtherKeySequence, altSequence, clipboardKey, physicalKey, controlCode, ctrlEnterSequence, mirroredCtrlEnterKey, isPrintable, keySequence, modifyOtherKeysLevel, sanitizeKeyBarExtras, navigationSequence, terminalChord, keyFromData, NO_MODIFIER_LATCH, releaseLatched, stepModifier } from "./keys.ts";
 
 describe("clipboardKey", () => {
   it("recognizes native Ctrl+C/V on Korean and Russian layouts without replacing Latin layout letters", () => {
@@ -204,6 +205,32 @@ describe("ctrlEnterSequence", () => {
     expect(ctrlEnterSequence(0)).toBeNull();
     expect(ctrlEnterSequence(1)).toBe("\u001b[27;5;13~");
     expect(ctrlEnterSequence(2)).toBe("\u001b[27;5;13~");
+  });
+});
+
+describe("altOtherKeySequence", () => {
+  const key = (value: string, shiftKey = false) => ({ key: value, shiftKey });
+
+  it("encodes Alt with a character as Ghostty and xterm do under modifyOtherKeys level 2 (#4898)", () => {
+    expect(altOtherKeySequence(key("k"), "\u001bk", 2)).toBe("\u001b[27;3;107~");
+    expect(altOtherKeySequence(key("K", true), "\u001bK", 2)).toBe("\u001b[27;4;75~");
+    expect(altOtherKeySequence(key(" "), "\u001b ", 2)).toBe("\u001b[27;3;32~");
+    expect(altOtherKeySequence(key("😀"), "\u001b😀", 2)).toBe("\u001b[27;3;128512~");
+    expect(altOtherKeySequence(key("Dead"), "\u001bn", 2)).toBe("\u001b[27;3;110~");
+  });
+
+  it("keeps ESC before the character below level 2, and every control or non-Alt key at any level", () => {
+    expect(altOtherKeySequence(key("k"), "\u001bk", 0)).toBeNull();
+    expect(altOtherKeySequence(key("k"), "\u001bk", 1)).toBeNull();
+    for (const typed of ["\u001b\r", "\u001b\u000b", "\u001b\u007f", "\u001b[1;3D", "\u001b", "k"]) expect(altOtherKeySequence(key("k"), typed, 2)).toBeNull();
+  });
+
+  it("keeps macOS Option+Left/Right as the ESC b / ESC f word moves Ghostty sends at level 2", () => {
+    for (const [keyCode, name, typed] of [[37, "ArrowLeft", "\u001bb"], [39, "ArrowRight", "\u001bf"]] as const) {
+      const event = { keyCode, key: name, code: name, shiftKey: false, altKey: true, ctrlKey: false, metaKey: false };
+      expect(evaluateKeyboardEvent(event, false, true, false).key).toBe(typed);
+      expect(altOtherKeySequence(event, typed, 2)).toBeNull();
+    }
   });
 });
 

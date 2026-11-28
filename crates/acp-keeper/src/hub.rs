@@ -26,6 +26,9 @@ use crate::model::Model;
 use crate::status::{Key, Mode};
 use crate::Opts;
 
+/// The mode a client expects of an agent that has no permission modes and reports none.
+const NO_MODES: &str = "_keeper/no-modes";
+
 /// Agent lines carry the generation of the agent process that wrote them: lines of an agent the
 /// keeper already ended for the switch are dropped.
 pub enum Ev {
@@ -456,7 +459,9 @@ impl Hub {
                 let Some(seq) = self.archive.append("from-agent", &Value::Object(msg.clone()).to_string()) else {
                     return;
                 };
-                if method.starts_with("fs/") || method.starts_with("terminal/") {
+                // only a permission or a question waits for a person; anything else (`fs/*`, `terminal/*`, an agent's own
+                // extension such as Qwen Code's `craft/drainMidTurnQueue`) would wait for no one and block the next prompt
+                if !matches!(method.as_str(), "session/request_permission" | "elicitation/create") {
                     let raw = json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "Method not found"}}).to_string();
                     self.forward(&raw);
                     self.note_row("_keeper/auto_answered", json!({"id": ours, "method": method}));
@@ -619,9 +624,11 @@ impl Hub {
     }
 
     fn permits_tool_mode(&self, expected: Option<&str>) -> bool {
+        let current = self.model.modes.as_ref().map(|m| m.current.as_str());
         expected.is_some_and(|mode| !mode.is_empty())
             && !self.model.allow_all
-            && expected == self.model.modes.as_ref().map(|m| m.current.as_str())
+            // an agent without permission modes (Prime Agent) is expected as reporting none, and only while it reports none
+            && (expected == current || (expected == Some(NO_MODES) && current.is_none()))
             && !self.routes.values().any(|route| route.change.is_some())
     }
 
@@ -890,6 +897,21 @@ mod tests {
     }
 
     #[test]
+    fn an_agent_without_modes_is_permitted_only_while_it_reports_none() {
+        let dir = std::env::temp_dir().join(format!("ak-no-modes-{}", std::process::id()));
+        let (mut hub, _sent) = hub(&dir);
+        hub.model
+            .session_result(&json!({"sessionId":"s","configOptions":[{"id":"model","category":"model","currentValue":"m"}]}));
+        assert!(hub.permits_tool_mode(Some(NO_MODES)));
+        assert!(!hub.permits_tool_mode(Some("default")));
+        hub.model.update(&json!({"sessionId":"s","update":{"sessionUpdate":"current_mode_update","currentModeId":"default"}}));
+        assert!(!hub.permits_tool_mode(Some(NO_MODES)), "an agent that reports a mode is held to it");
+        assert!(hub.permits_tool_mode(Some("default")));
+        drop(hub);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn parent_cannot_resume_in_an_unproven_mode_and_stop_sends_only_cancel() {
         let dir = std::env::temp_dir().join(format!("ak-question-stop-{}", std::process::id()));
         let (mut hub, mut sent) = hub(&dir);
@@ -955,6 +977,18 @@ mod tests {
         let cancelled: Value = serde_json::from_slice(&sent.try_recv().unwrap().bytes).unwrap();
         assert_eq!(cancelled["id"], 7);
         assert_eq!(cancelled["result"]["action"], "cancel");
+        drop(hub);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn an_agent_extension_request_is_refused_at_once_and_leaves_nothing_pending() {
+        let dir = std::env::temp_dir().join(format!("ak-unit-{}-ext", std::process::id()));
+        let (mut hub, mut sent) = hub(&dir);
+        hub.handle(Ev::Agent(0, json!({"jsonrpc": "2.0", "id": 4, "method": "craft/drainMidTurnQueue", "params": {}}).to_string()));
+        let response: Value = serde_json::from_slice(&sent.try_recv().unwrap().bytes).unwrap();
+        assert_eq!(response, json!({"jsonrpc": "2.0", "id": 4, "error": {"code": -32601, "message": "Method not found"}}));
+        assert!(hub.model.pending.is_empty());
         drop(hub);
         std::fs::remove_dir_all(dir).unwrap();
     }

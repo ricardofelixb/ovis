@@ -10,7 +10,7 @@
 import { FORK_SHARED_SETTING_KEYS } from "./fork/alerts.ts";
 
 export const SHARED_SETTING_KEYS = [
-  "theme", "palette", "darkTheme", "lightTheme", "customThemes", "language", "sidebarRows", "agentOrder", "agentMarks", "agentLocks", "lockedAgents", "opencodeParentEnds", "ompHeldFiles", "restoreReplacedServer", "agentNamedGroups", "agentGroupNames", "agentGroupOf", "autoSendQueued", "autoTabNames",
+  "theme", "palette", "darkTheme", "lightTheme", "customThemes", "markdownStyle", "language", "sidebarRows", "agentOrder", "agentMarks", "agentLocks", "lockedAgents", "opencodeParentEnds", "ompHeldFiles", "restoreReplacedServer", "agentNamedGroups", "agentGroupNames", "agentGroupOf", "autoSendQueued", "autoTabNames",
   "showThinking", "quickReplies", "showQuickReplies", "showUsage", "usageCount",
   "usageGlance", "usageOrder", "usageHidden", "claudeLaunchMode", "codexLaunchMode",
   "claudeLaunchModel", "claudeLaunchEffort", "codexLaunchModel", "codexLaunchEffort", "agentBrowserTools",
@@ -68,6 +68,19 @@ const isObject = (value: unknown): value is Record<string, unknown> => typeof va
  * holds keeps its label) and the keys of the labels it dropped
  */
 export interface PreferencesChange { settings: SharedPreferences["settings"]; pins?: string[]; muted_panes?: string[]; tab_labels?: Record<string, string>; tab_labels_removed?: string[] }
+
+export interface PreferencesPut extends PreferencesChange {
+  readonly expected_revision?: number;
+}
+
+export interface PreferencesConflict {
+  readonly error: { readonly code: "revision_conflict"; readonly message: string };
+  readonly current: SharedPreferences;
+}
+
+export function preferencesConflict(current: SharedPreferences): PreferencesConflict {
+  return { error: { code: "revision_conflict", message: "Shared preferences changed since they were read" }, current };
+}
 
 function keyList(value: unknown, limit: number, length: number): string[] | null | undefined {
   if (value === undefined) return undefined;
@@ -135,4 +148,27 @@ export function sharedPreferencesBody(raw: unknown): PreferencesChange | null {
   const settings: SharedPreferences["settings"] = {};
   for (const key of SHARED_SETTING_KEYS) if (key in given) settings[key] = given[key];
   return { settings, ...(pins === undefined ? {} : { pins }), ...(muted === undefined ? {} : { muted_panes: muted }), ...(labels === undefined ? {} : { tab_labels: labels }), ...(removed === undefined ? {} : { tab_labels_removed: removed }) };
+}
+
+export function preferencesPutBody(raw: unknown): PreferencesPut | null {
+  if (!isObject(raw)) return null;
+  const expected = raw["expected_revision"];
+  if (expected !== undefined && (typeof expected !== "number" || !Number.isSafeInteger(expected) || expected < 0)) return null;
+  const body = sharedPreferencesBody(raw);
+  return body === null || expected === undefined ? body : { ...body, expected_revision: expected };
+}
+
+export function parsePreferencesConflict(raw: unknown): PreferencesConflict | null {
+  if (!isObject(raw) || !isObject(raw["error"]) || !isObject(raw["current"])) return null;
+  const error = raw["error"];
+  const current = raw["current"];
+  const revision = current["revision"];
+  const stateId = current["state_id"];
+  if (error["code"] !== "revision_conflict" || typeof error["message"] !== "string"
+    || typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0
+    || (stateId !== undefined && typeof stateId !== "string")) return null;
+  const body = sharedPreferencesBody(current);
+  if (body === null) return null;
+  const { tab_labels_removed: _removed, ...document } = body;
+  return { error: { code: "revision_conflict", message: error["message"] }, current: { ...document, revision, ...(stateId === undefined ? {} : { state_id: stateId }) } };
 }

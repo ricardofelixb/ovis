@@ -41,6 +41,7 @@ import { SHEET_QUERY } from "../lib/sheets.ts";
 import { canHideMachine, HIDDEN_MACHINES_MAX, setHiddenMachines, useHiddenMachines, withMachineHidden } from "../lib/hiddenMachines.ts";
 import { ExternalLink } from "../lib/externalLink.ts";
 import { MachineOffLine, useRecheck } from "./MachineOffLine.tsx";
+import { ProgressLine } from "./ProgressBar.tsx";
 import { outOfReachReason } from "./relayPcState.tsx";
 
 export const DRAWER_QUERY = "(max-width: 768px)";
@@ -384,7 +385,8 @@ function MachineGroup({ machine, headerless = false, canHide, onHide, ...props }
   const awayReason = away === null ? null
     : machine.kind === "ssh" ? sshWords
     : away === "unresponsive" ? t("{name} answered but did not finish connecting in time. It may be busy or restarting. Try again; if it keeps happening, restart Ovis on {name}.", { name: machine.name })
-    : away === "off" ? outOfReachReason({ displayState: "offline", last_seen_at: null }, t)
+    // the relay said it had nobody for this PC (RELAY_PC_SILENT)
+    : away === "off" ? outOfReachReason({ displayState: "offline", last_seen_at: null, check: { kind: "offline", reason: "pc" } }, t)
     // the relay's own words: #4230's reasons for it name the viewing device's network, and this is this server's
     : machineErrorText(machine.error!, t);
   const nextStep = !noticed && machine.kind === "local" && machine.error !== null && saysHerdrAway(machine.error) ? t("Start herdr on this PC, or check HERDR_SOCKET.")
@@ -415,7 +417,7 @@ function MachineGroup({ machine, headerless = false, canHide, onHide, ...props }
   // a PC of the relay (one of the account's) says where it is by the dot beside its name alone, its words a tooltip:
   // the server keeps trying it, so there is nothing to read or press under it
   const quiet = machine.kind === "relay" && !noticed;
-  const dotWords = away === "off" ? t("Can't reach the PC: it may be off") : away !== null ? awayReason ?? machineErrorText(machine.error!, t) : t(STATE_WORD[machine.state]);
+  const dotWords = away === "off" ? t("The PC is not answering") : away !== null ? awayReason ?? machineErrorText(machine.error!, t) : t(STATE_WORD[machine.state]);
   const closeMenu = useCallback(() => setMenu(null), []);
   const endRename = (save: boolean) => {
     setRenaming(false);
@@ -525,13 +527,7 @@ export function BridgeUpdateProgress({ update }: { update: MachineUpdate }) {
   const view = describeProgress(update.progress);
   const seconds = useStageSeconds(update);
   if (!view) return <p className="bridge-progress-step">{update.step}</p>;
-  return <div className="bridge-progress">
-    <p className="bridge-progress-step"><span>{view.label}</span><span className="bridge-progress-count">{view.step}</span></p>
-    <div className="bridge-progress-bar" role="progressbar" aria-label={view.label} aria-valuemin={0} aria-valuemax={100} {...(view.percent === null ? {} : { "aria-valuenow": view.percent })}>
-      <span className={view.percent === null ? "is-indeterminate" : ""} style={view.percent === null ? undefined : { width: `${view.percent}%` }} />
-    </div>
-    <p className="bridge-progress-detail">{view.detail ?? `${seconds} s`}</p>
-  </div>;
+  return <ProgressLine label={view.label} count={view.step} percent={view.percent}><p className="bridge-progress-detail">{view.detail ?? `${seconds} s`}</p></ProgressLine>;
 }
 
 function MachineActionNotice({ machine, onSetup }: { machine: Machine; onSetup(machine: Machine, update?: boolean): void }) {

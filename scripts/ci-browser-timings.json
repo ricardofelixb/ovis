@@ -72,6 +72,7 @@
   "scripts/files-prompt-regression.ts": 38,
   "scripts/terminal-viewport-regression.ts": 37,
   "scripts/relay-account-pcs-regression.ts": 35,
+  "scripts/unconfirmed-pc-notice-regression.ts": 35,
   "scripts/relay-second-device-join-regression.ts": 35,
   "scripts/pane-paging-demo-regression.ts": 34,
   "scripts/opencode-prompt-regression.ts": 34,
@@ -223,7 +224,6 @@
   "scripts/touch-long-press-demo-regression.ts": 3,
   "scripts/external-link-tab-regression.ts": 2,
   "scripts/chat-visualization-browser-qa.ts": 2,
-  "scripts/terminal-dispose-browser-qa.ts": 1,
   "scripts/relay-qa-teardown-regression.ts": 1,
   "scripts/relay-device-indexeddb-regression.ts": 1,
   "scripts/account-list-seal-browser-qa.ts": 1

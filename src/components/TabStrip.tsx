@@ -640,7 +640,7 @@ export function TabStrip({ snapshot, workspace, selectedPane, onSelectPane, onNe
     const listed = [...tabItems, ...paneList];
     const paneItems = touch && tab.tab_id === openTabId
       ? (paneActions?.(selectedPane.pane_id) ?? []).filter((item) => !listed.some((own) => own.id === item.id) && (panes.filter((pane) => pane.tab_id === selectedPane.tab_id).length < 2 || !isForkHideItem(item)) && (!soloPanes
-        || (item.id === "zoom" ? layout?.zoomed : item.id !== "split-right" && item.id !== "split-down"))) : [];
+        || (item.id === "zoom" ? layout?.zoomed : item.id !== "split-right" && item.id !== "split-down" && item.id !== "bring-pane"))) : [];
     const groups: RowMenuItem[][] = [
       paneList,
       jobItems(tab),

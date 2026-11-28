@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HARNESS_CONTRACT, isRecord } from "../../shared/harness-tool.ts";
+import { AGENT_CATALOG } from "../../shared/agent-catalog.ts";
 import { FakeHcCore } from "../herdr-core/core.fake.ts";
 import { HcConnection } from "../herdr-core/connection.ts";
 import { HERDR_CORE, serveRuntime } from "../runtime/capabilities.ts";
@@ -13,7 +14,7 @@ import { AgentToolHub } from "./hub.ts";
 import { resolveHarness } from "./harnesses.ts";
 
 const REPLAY = join(import.meta.dir, "replay-agent.fake.ts");
-interface Recorded { readonly harness: string; readonly fixture: string; readonly version: string; readonly mode: string; readonly kinds: readonly string[] }
+interface Recorded { readonly harness: string; readonly fixture: string; readonly version: string; readonly mode: string | null; readonly kinds: readonly (string | null)[] }
 /** Historical permission traces: verify the keeper shows what the adapter asks, regardless of its mode or settings.
  * These capture the earlier launch recipes, not what a default-mode launch will ask today. */
 const RECORDED: readonly Recorded[] = [
@@ -28,6 +29,16 @@ const RECORDED: readonly Recorded[] = [
   // here. With the workspace hook allowing the write, the same prompt's mkdir and MCP call still came as cards
   ...([["ask-write", "edit"], ["ask-mkdir", "execute"], ["ask-mcp", "other"], ["own-rule-mkdir", "execute"], ["own-rule-mcp", "other"]] as const)
     .map(([run, kind]) => ({ harness: "agy", fixture: `agy-1.5.16-${run}`, version: "1.5.16", mode: "default", kinds: [kind] })),
+  ...([["ask-write", "edit"], ["ask-mkdir", "execute"]] as const)
+    .map(([run, kind]) => ({ harness: "gemini", fixture: `gemini-0.71.1-${run}`, version: "0.71.1", mode: "default", kinds: [kind] })),
+  // Kiro's V3 engine names no kind on the request itself, only on the tool call it announced before it
+  ...["ask-write", "ask-mkdir"].map(run => ({ harness: "kiro", fixture: `kiro-3.6.2-${run}`, version: "kiro-cli 3.6.2", mode: "vibe", kinds: [null] })),
+  // as Kiro's, Kimi Code's request names no kind; the tool call it announced before it does
+  ...["ask-write", "ask-mkdir"].map(run => ({ harness: "kimi", fixture: `kimi-2.8.1-${run}`, version: "2.8.1", mode: "default", kinds: [null] })),
+  ...([["ask-write", "edit"], ["ask-mkdir", "execute"]] as const)
+    .map(([run, kind]) => ({ harness: "qwen", fixture: `qwen-0.28.7-${run}`, version: "0.28.7", mode: "default", kinds: [kind] })),
+  // Prime Agent has no modes and never asks: its Python cell wrote the file with no request
+  { harness: "prime-agent", fixture: "prime-agent-0.10.5-unasked-write", version: "0.10.5", mode: null, kinds: [] },
 ];
 
 describe.skipIf(!keeperBuilt).each([...RECORDED])("a $harness child replaying $fixture", ({ harness, fixture, version, mode, kinds }) => {
@@ -36,7 +47,7 @@ describe.skipIf(!keeperBuilt).each([...RECORDED])("a $harness child replaying $f
     .filter(message => message.method === "session/request_permission");
   const asked = requests.map(message => String(message.params.toolCall.toolCallId));
   it("was recorded with a card for each action its run had to ask about", () => {
-    expect(requests.map(message => message.params.toolCall.kind)).toEqual([...kinds]);
+    expect(requests.map(message => message.params.toolCall.kind ?? null)).toEqual([...kinds]);
   });
   let dir: string, hub: AgentToolHub, acp: AcpChildren, token: string, connection: HcConnection;
   const programs = new Map<string, ReturnType<typeof Bun.spawn>>();
@@ -46,8 +57,12 @@ describe.skipIf(!keeperBuilt).each([...RECORDED])("a $harness child replaying $f
     writeFileSync(join(dir, "version"), `${version}\n`);
     writeFileSync(join(dir, "scenario.json"), "{}");
     // the harness's own program: it answers `--version` and otherwise plays the recorded adapter
-    const program = join(dir, harness);
+    const program = join(dir, AGENT_CATALOG.find(entry => entry.id === harness)!.detect.binaries[0]!);
     writeFileSync(program, `#!/bin/sh
+if [ "$1" = shutdown ]; then
+  echo "$* $PRIME_AGENT_DAEMON_SOCKET $PRIME_AGENT_CODING_AGENT_DIR" >> "${join(dir, "shutdown.log")}"
+  [ ! -f "${join(dir, "shutdown-fails")}" ]; exit
+fi
 if [ "$1" = --version ]; then
   if [ -f "${join(dir, "require-version-context")}" ]; then
     [ "$PWD" = "${dir}" ] && [ "$VERSION_CONTEXT" = "child" ] && [ "$CORE_VERSION_CONTEXT" = "core" ] || exit 1
@@ -60,7 +75,7 @@ exec "${process.execPath}" "${REPLAY}" "${FIXTURE}" "${join(dir, "replay.jsonl")
     if (harness === "claude" || harness === "codex") symlinkSync(program, join(dir, harness === "claude" ? "claude-agent-acp" : "codex-acp"));
     const coreEnv = { ...process.env, CORE_VERSION_CONTEXT: "core" };
     const fake = new FakeHcCore({ exec: ({ argv, cwd, env }) => {
-      if (argv?.[0] !== program || argv[1] !== "--version") throw new Error("Unexpected core exec");
+      if (argv?.[0] !== program || (argv[1] !== "--version" && argv[1] !== "shutdown")) throw new Error("Unexpected core exec");
       const probed = Bun.spawnSync(argv, { cwd: cwd ?? undefined, env: { ...coreEnv, ...env }, stdin: "ignore", stderr: "ignore", timeout: 500 });
       return { code: probed.exitCode, stdout: Buffer.from(probed.stdout).toString("base64"), stderr: "", ms: 0, timed_out: false, truncated: false };
     } });
@@ -72,18 +87,17 @@ exec "${process.execPath}" "${REPLAY}" "${FIXTURE}" "${join(dir, "replay.jsonl")
       if (method === "terminal.run" && "env" in params) paneEnv = { ...coreEnv, ...params.env };
       return connection.call(method, params);
     } };
-    acp = new AcpChildren(join(dir, "acp"), { hc, keeperBin: () => KEEPER_BUILD, sessionMs: 5000 });
+    const resolveHere = (kind: string) => {
+      if (kind !== harness) return null;
+      const path = process.env.PATH;
+      process.env.PATH = dir;
+      try { return resolveHarness(kind); } finally { if (path === undefined) delete process.env.PATH; else process.env.PATH = path; }
+    };
+    acp = new AcpChildren(join(dir, "acp"), { hc, keeperBin: () => KEEPER_BUILD, sessionMs: 5000, ownDaemon: kind => resolveHere(kind)?.ownDaemon ?? null });
     hub = new AgentToolHub({ dir: join(dir, "tools"), acp, setting: () => ({ level: "start", depth: 1, harnesses: [harness] }),
       resolve: kind => {
-        if (kind !== harness) return null;
-        const path = process.env.PATH;
-        process.env.PATH = dir;
-        try {
-          const command = resolveHarness(kind);
-          return command && { ...command, env: { ...command.env, VERSION_CONTEXT: "child" } };
-        } finally {
-          if (path === undefined) delete process.env.PATH; else process.env.PATH = path;
-        }
+        const command = resolveHere(kind);
+        return command && { ...command, env: { ...command.env, VERSION_CONTEXT: "child" } };
       } });
     hub.listen();
     const parent = hub.runs.reserve();
@@ -104,7 +118,7 @@ exec "${process.execPath}" "${REPLAY}" "${FIXTURE}" "${join(dir, "replay.jsonl")
   const replayed = () => readFileSync(join(dir, "replay.jsonl"), "utf8").trim().split("\n").map(line => JSON.parse(line) as Record<string, any>);
   const scenario = (options: {
     readonly startMode?: string; readonly openingAllowAll?: "on" | "off";
-    readonly updatedMode?: string; readonly updatedAllowAll?: "on" | "off";
+    readonly updatedMode?: string; readonly updatedAllowAll?: "on" | "off"; readonly refuseSetMode?: boolean;
   }) => writeFileSync(join(dir, "scenario.json"), JSON.stringify(options));
   async function rejectEveryCard(session: string) {
     const child = acp.forPane(session)!;
@@ -128,6 +142,9 @@ exec "${process.execPath}" "${REPLAY}" "${FIXTURE}" "${join(dir, "replay.jsonl")
         _meta: { claudeCode: { options: { allowDangerouslySkipPermissions: false } } },
       });
     } else expect(replayed()[0]?.sessionNew).not.toHaveProperty("configOptions");
+    // Kimi Code reports `default` whatever mode the person saved: the child sets it before its first task
+    if (harness === "kimi") expect(replayed().slice(1, 3)).toEqual([{ setMode: "default" }, { prompt: expect.stringContaining("do the actions") }]);
+    else expect(replayed().some(row => "setMode" in row)).toBe(false);
     expect(started.session.version).toBe(version.match(/\d+\.\d+\.\d+/)?.[0]);
     expect(acp.forPane(session)?.client.sessionMode).toBe(mode);
     await rejectEveryCard(session);
@@ -163,7 +180,7 @@ exec "${process.execPath}" "${REPLAY}" "${FIXTURE}" "${join(dir, "replay.jsonl")
   it("opens and reports an unrecognized version", async () => {
     writeFileSync(join(dir, "version"), version.replace(/\d+\.\d+\.\d+/, "99.1.2"));
     const defaultMode = harness === "codex" ? "agent" : mode;
-    scenario({ startMode: defaultMode });
+    scenario(defaultMode === null ? {} : { startMode: defaultMode });
     const started = await call("start", { harness, cwd: dir });
     expect(started).toMatchObject({ kind: "session", session: { version: "99.1.2" } });
     if (!isRecord(started.session) || typeof started.session.address !== "string") throw new Error("No child address");
@@ -175,13 +192,53 @@ exec "${process.execPath}" "${REPLAY}" "${FIXTURE}" "${join(dir, "replay.jsonl")
     ["agy-1.5.16-ask-write", ["auto", "accept-edits"]],
     ["codex-acp-2.10.0-ask", ["agent-full-access"]],
     ["copilot-1.0.109-ask", ["https://agentclientprotocol.com/protocol/session-modes#autopilot"]],
+    ["gemini-0.71.1-ask-write", ["autoEdit", "yolo"]],
+    ["kiro-3.6.2-ask-write", ["autonomous"]],
+    ["kimi-2.8.1-ask-write", ["auto", "yolo"]],
+    ["qwen-0.28.7-ask-write", ["auto-edit", "auto", "yolo"]],
+    // any mode at all: the start was proven only for an agent that reports none
+    ["prime-agent-0.10.5-unasked-write", ["default"]],
   ]).get(fixture);
   if (elevatedModes) {
     it.each([...elevatedModes])("stops a child in wider mode %s before sending its initial task", async (startMode) => {
       scenario({ startMode });
       expect(await call("start", { harness, cwd: dir, task: "do the actions" })).toMatchObject({ kind: "refusal", error: { code: "not_granted" } });
       expect((await acp.terminals()).filter(row => row.state === "live")).toHaveLength(0);
-      expect(replayed()).toEqual([expect.objectContaining({ sessionNew: expect.any(Object) })]);
+      expect(replayed().filter(row => !("setMode" in row))).toEqual([expect.objectContaining({ sessionNew: expect.any(Object) })]);
+    });
+  }
+
+  if (harness === "prime-agent") {
+    it("gives the child a daemon of its own in its private folder and shuts that daemon down once stopped", async () => {
+      const started = await call("start", { harness, cwd: dir, task: "do the actions" });
+      if (!isRecord(started.session) || typeof started.session.address !== "string") throw new Error(JSON.stringify(started));
+      const child = acp.forPane(started.session.address)!;
+      expect(await call("wait", { session: started.session.address, timeout_s: 5 })).toMatchObject({ state: { state: "done" } });
+      expect(await call("stop", { session: started.session.address })).toMatchObject({ stopped: true });
+      expect(readFileSync(join(dir, "shutdown.log"), "utf8")).toBe(`shutdown --force ${join(child.root, "pa.sock")} ${child.root}\n`);
+    });
+
+    it("keeps the child's folder while its daemon is not proven stopped, and stops it again on the next restore", async () => {
+      const started = await call("start", { harness, cwd: dir });
+      if (!isRecord(started.session) || typeof started.session.address !== "string") throw new Error(JSON.stringify(started));
+      const { root } = acp.forPane(started.session.address)!;
+      writeFileSync(join(dir, "shutdown-fails"), "");
+      expect(await call("stop", { session: started.session.address })).toMatchObject({ stopped: true });
+      expect(existsSync(root)).toBe(true);
+      rmSync(join(dir, "shutdown-fails"));
+      await acp.restore();
+      expect(existsSync(root)).toBe(false);
+      expect(readFileSync(join(dir, "shutdown.log"), "utf8").trim().split("\n")).toHaveLength(2);
+    });
+  }
+
+  if (fixture === "kimi-2.8.1-ask-write") {
+    // Kimi Code reports `default` whatever mode the person saved, so only the mode it is set to proves the start
+    it("does not start a child whose mode it could not set", async () => {
+      scenario({ refuseSetMode: true });
+      expect(await call("start", { harness, cwd: dir, task: "do the actions" })).toMatchObject({ kind: "refusal", error: { code: "not_granted" } });
+      expect((await acp.terminals()).filter(row => row.state === "live")).toHaveLength(0);
+      expect(replayed().some(row => "prompt" in row)).toBe(false);
     });
   }
 
@@ -231,7 +288,7 @@ exec "${process.execPath}" "${REPLAY}" "${FIXTURE}" "${join(dir, "replay.jsonl")
       if (!child) throw new Error("missing child");
       expect(child.client.sessionMode).toBe(mode);
       // Even a client behind on the keeper's update must not get its prompt through.
-      await expect(child.client.submit("do the actions", mode)).rejects.toMatchObject({ code: -32004 });
+      await expect(child.client.submit("do the actions", mode ?? undefined)).rejects.toMatchObject({ code: -32004 });
       expect(await call("send", { session, task: "do the actions" })).toMatchObject({ error: { code: "not_granted" } });
       expect(replayed().filter(row => row.prompt)).toHaveLength(1);
     });

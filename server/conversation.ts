@@ -38,9 +38,10 @@ import { isKiroChatProcess, resolveKiroTranscript, kiroConversation, kiroToolOut
 import { authorizedTranscript } from "./transcript-store.ts";
 
 import type { ConversationMetadata, ConversationTurn, HerdrPane, SessionSnapshot } from "../shared/protocol.ts";
-import { herdrRpc, herdrSocketPath, paneProcessInfo, paneRead, paneScrollInfo, sessionSnapshot, type ProcessInfo } from "./herdr/client.ts";
+import { agentGet, herdrSocketPath, paneProcessInfo, paneRead, paneScrollInfo, sessionSnapshot, type ProcessInfo } from "./herdr/client.ts";
 import { resolveAgent } from "./pane-context.ts";
-import { servedStatus } from "./approvals/codex.ts";
+import { followServedThread, servedStatus } from "./approvals/codex.ts";
+import type { ServedThreadSettings } from "./approvals/codex-status.ts";
 import { codexFreshSession, codexHistorySegments, createCodexTranscriptParser, type HistorySegment, codexOutputText, codexTranscriptPath, defaultCodexHome, forgetAllCodexState, forgetCodexStateFor, paneCodexHomePlaced, paneCodexProcess, parseCodexTranscript, readRange, rolloutThread } from "./codex.ts";
 import { awaited, CODEX_IMAGE_REF, CODEX_TOOL_IMAGE_REF, codexOutputPicture, codexTranscriptImage, DataUrlPictureScan, finish, finishAsync, forgetOmpBlobTypes, InlinePictureScan, MAX_IMAGE_BYTES, ompBlobAnchor, ompBlobDigest, ompBlobPictureSteps, type Steps } from "./codex-images.ts";
 import { type Held, heldOpenPlatform, openHeldDirectory } from "./held-open.ts";
@@ -55,6 +56,7 @@ import { ompBlobStore, ompHeldOpen, ompPaneRoute, ompRouteOwns, ompRouteStore, o
 import { forgetOpencodeRead, forgetOpencodeState, OPENCODE_IMAGE_REF, opencodeConversation, opencodeDatabasePath, opencodeFreshSession, opencodeImage, opencodeReadKey, opencodeSessionId, opencodeToolOutput } from "./opencode.ts";
 import { PI_NPM_ENTRY, piTranscriptPath, unwrittenSession } from "./pi.ts";
 import { cmdModelCatalogPath, cmdTranscriptPath } from "./cmd.ts";
+import { primeTranscriptPath } from "./prime.ts";
 import { defaultDevinDbPath, DevinHistoryUnavailable, devinConversation, forgetDevinState } from "./devin.ts";
 import { forgetGrokState, GROK_IMAGE_REF, grokImage, grokProjection, grokToolOutput, parseGrokTranscript, GrokUnavailable } from "./grok.ts";
 import { resolveGrokStore } from "./grok-store.ts";
@@ -71,11 +73,12 @@ import { windowsTableWatermark } from "./windows-processes.ts";
 import { withinRetentionBudget } from "./retention-budget.ts";
 import { forgetAllPiIndexes, forgetPiIndex, piAbandonedTurns, piBranchRecords, piBranchSegments } from "./pi-tree.ts";
 import { COPILOT_IMAGE_REF, copilotImage, copilotOffsetOutput, copilotOutput, copilotRootRecord, parseCopilotTranscript } from "./copilot.ts";
-import { copilotApiTranscript, copilotExplicitResume, copilotHandoffSession, copilotProcessSession, copilotTranscriptFile, copilotUnwrittenSession, openCopilotFile, readCopilotProcessSession } from "./copilot-store.ts";
+import { copilotApiTranscript, copilotExplicitResume, copilotHandoffSession, copilotTranscriptFile, copilotUnwrittenSession, openCopilotFile, readCopilotProcessSession } from "./copilot-store.ts";
 import { forgetCopilotForeground, readCopilotForeground } from "./copilot-foreground.ts";
 import { claudeSetting, type MetadataFold, parseConversationMetadata } from "./conversation-metadata.ts";
 import { catalogVersion, piCatalogVersion } from "./pi-models.ts";
-import type { ToldMode } from "./approvals/hub.ts";
+import type { ToldMode, ToldSession } from "./approvals/hub.ts";
+import { readProcessBirth } from "./process-owner.ts";
 import { answerVersion, bindFile, boundSteps, checkBoundFile, ConversationNotStarted, ConversationReadPending, ConversationUnavailable, copilotRecoverable, type FileIdentity, openBound, readBound, type ConversationPage, HistoryChanged, type RecognizedConversation, type StreamSource, TRANSCRIPT_WINDOW_BYTES } from "./conversation-shared.ts";
 import { forgetHermesTranscriptState, hermesConversationPage, hermesToolOutput, hermesTranscriptForPane } from "./hermes.ts";
 
@@ -136,6 +139,12 @@ export function readToldModes(read: ((paneId: string) => ToldMode | null) | null
   toldMode = read ?? (() => null);
 }
 
+/** The session the hook of a Copilot Ovis started in a pane last told it runs, with the process that told it (the approval hub's). */
+let toldSession: (paneId: string, kind: string) => ToldSession | null = () => null;
+export function readToldSessions(read: ((paneId: string, kind: string) => ToldSession | null) | null): void {
+  toldSession = read ?? (() => null);
+}
+
 /**
  * `answer` with the permission mode a hook told in `session`, the session the answer's transcript is: a mode told in
  * another one (before a /resume or a /clear, or by an agent no longer running there) leaves the transcript's.
@@ -143,6 +152,24 @@ export function readToldModes(read: ((paneId: string) => ToldMode | null) | null
 export function withToldMode<T extends Pick<RecognizedConversation, "metadata" | "version">>(answer: T, told: ToldMode | null, session: string): T {
   if (told === null || told.session !== session || told.mode === answer.metadata.permission_mode) return answer;
   return { ...answer, metadata: { ...answer.metadata, permission_mode: told.mode }, version: answerVersion(answer.version, told.mode) };
+}
+
+/**
+ * The rollout records the model requested for a turn, and its effort only once that turn starts.
+ * The server can name a reroute or a settings change without writing the rollout. Reuse the
+ * existing Plan icon's metadata value, but leave other Codex modes unmarked.
+ */
+function withServedCodex(answer: RecognizedConversation, settings: ServedThreadSettings | undefined, reroutedModel?: string | null): RecognizedConversation {
+  const { metadata } = answer;
+  const model = reroutedModel ?? settings?.model ?? metadata.model;
+  const reasoning_effort = settings?.effort ?? metadata.reasoning_effort;
+  const plan = settings?.plan;
+  const permission_mode = plan === true ? "plan" : plan === false ? undefined : metadata.permission_mode;
+  if (model === metadata.model && reasoning_effort === metadata.reasoning_effort && permission_mode === metadata.permission_mode) return answer;
+  const current = { ...metadata, model, reasoning_effort };
+  if (permission_mode === undefined) delete current.permission_mode;
+  else current.permission_mode = permission_mode;
+  return { ...answer, metadata: current, version: answerVersion(answer.version, JSON.stringify([model, reasoning_effort, permission_mode])) };
 }
 
 const cache = new Map<string, { source: RecognizedConversation["source"]; signature: string; turns: ConversationTurn[]; metadata: ConversationMetadata; cursor: string | null; abandoned?: { count: number; branches: number; summary: string | null } }>();
@@ -1535,15 +1562,12 @@ export async function paneProcessRoots(paneId: string, agent: string | null | un
   cwd: string | null;
   processes?: ProcessInfo;
 }> {
-  const info = await herdrRpc<{ process_info?: { foreground_processes?: { pid?: unknown; argv?: unknown; argv0?: unknown; name?: unknown; cwd?: unknown }[] } }>(
-    "pane.process_info", { pane_id: paneId },
-  ).catch(() => null);
-  const processes = info?.process_info as ProcessInfo | undefined;
+  const processes = await paneProcessInfo(paneId).catch(() => undefined);
   const home = userHome();
   const directory = (path: string | null): string | null => {
     try { return path && statSync(path).isDirectory() ? path : null; } catch { return null; }
   };
-  const foreground = (info?.process_info?.foreground_processes ?? []).map((candidate) => ({
+  const foreground = (processes?.foreground_processes ?? []).map((candidate) => ({
     pid: typeof candidate.pid === "number" ? candidate.pid : -1,
     argv: Array.isArray(candidate.argv) ? candidate.argv.map(String) : [],
     ...(typeof candidate.argv0 === "string" ? { argv0: candidate.argv0 } : {}),
@@ -1658,7 +1682,7 @@ async function claudeProcesses(paneId: string, known?: KnownProcesses, viewed = 
   if (known !== undefined) info = known;
   else {
     try {
-      info = (await herdrRpc<{ process_info?: ProcessInfo }>("pane.process_info", { pane_id: paneId })).process_info ?? null;
+      info = (await paneProcessInfo(paneId)) ?? null;
     } catch { return []; }
   }
   const front = (info?.foreground_processes ?? []).map(({ pid, name, argv0, argv }) => ({
@@ -1687,11 +1711,11 @@ export async function claudePanePid(pane: HerdrPane): Promise<number | null> {
  * finds it, names the session it shows, never the hook's.
  */
 async function claudeTranscriptPath(paneId: string, cwds: readonly (string | null | undefined)[], onProcess?: (pid: number, attach: boolean) => void, known?: KnownProcesses, proofs?: Map<string, string>): Promise<string> {
-  const info = await herdrRpc<{ agent: { agent_session?: { value?: unknown } } }>("agent.get", { target: paneId });
-  let session = info.agent.agent_session?.value;
+  const agent = await agentGet(paneId);
+  let session: string | null | undefined = agent.agent_session?.value;
   const home = userHome();
   const facts: KnownProcesses = known !== undefined ? known
-    : await herdrRpc<{ process_info?: ProcessInfo }>("pane.process_info", { pane_id: paneId }).then((answer) => answer.process_info ?? null, () => null);
+    : await paneProcessInfo(paneId).then((info) => info ?? null, () => null);
   const processes = await claudeProcesses(paneId, facts);
   const only = processes.length === 1 ? processes[0] : undefined;
   let processDir: string | null = null;
@@ -1810,8 +1834,8 @@ function ompBlobIdentity({ path, root, identity }: { path: string; root: string;
  * `identity`: the authorized file's exact dev:ino (authorizedTranscript), so later reads can be held to it.
  */
 export async function ompTranscriptPath(paneId: string, cwd: string, known?: KnownProcesses): Promise<{ path: string; blobs: string | null; identity?: string }> {
-  const info = await herdrRpc<{ agent: { agent_session?: { kind?: unknown; value?: unknown } } }>("agent.get", { target: paneId });
-  const session = info.agent.agent_session;
+  const agent = await agentGet(paneId);
+  const session = agent.agent_session;
   const path = session?.kind === "path" && typeof session.value === "string" ? session.value : null;
   const home = userHome();
   let route = process.platform === "win32" ? null : await ompPaneRoute(paneId, known);
@@ -1833,6 +1857,29 @@ export async function ompTranscriptPath(paneId: string, cwd: string, known?: Kno
   return authorized === null ? { path: held, blobs: null } : { ...ompAuthorizedTranscript(authorized), identity: authorized.identity };
 }
 
+/**
+ * The session the hook Ovis gave a Copilot (server/approvals/copilot.ts) told it runs, while the process `pid` that told it
+ * still runs (the same start), or null.
+ */
+function hookCopilotSession(paneId: string, pid: number): string | null {
+  const told = toldSession(paneId, "copilot");
+  if (told === null || told.pid !== pid || told.birth === null) return null;
+  const now = readProcessBirth(pid);
+  return now.state === "identified" && now.birth.value === told.birth ? told.session : null;
+}
+
+/**
+ * `told` where a Copilot's log has no lifecycle line and the session marker it holds is that session or names none
+ * (missing, more than one, unreadable): a log that names a session, read or not, is never stood in for.
+ */
+function toldStandsIn(resolution: ReturnType<typeof readCopilotProcessSession>, told: string | null): string | null {
+  if (told === null) return null;
+  const selected = resolution.session;
+  const legacy = selected !== null ? !selected.logged : resolution.diagnostic === "copilot_marker_missing"
+    || resolution.diagnostic === "copilot_marker_ambiguous" || resolution.diagnostic === "copilot_marker_unreadable";
+  return legacy && (selected === null || selected.sessionId === told) ? told : null;
+}
+
 async function copilotTranscriptPath(pane: HerdrPane, panes: readonly HerdrPane[], previousClaims?: ReadonlySet<string>, peerInfo?: Map<string, Awaited<ReturnType<typeof paneProcessInfo>> | null>): Promise<{ path: string; binding: string; peerClaims: ReadonlySet<string> }> {
   const report = pane.agent_session;
   let peerClaims: Promise<ReadonlySet<string>> | undefined = previousClaims === undefined ? undefined : Promise.resolve(previousClaims);
@@ -1852,11 +1899,15 @@ async function copilotTranscriptPath(pane: HerdrPane, panes: readonly HerdrPane[
           claims.add(api.sessionId);
           return;
         }
-        const live = copilotProcessSession(processEnviron(processes[0].pid), processes[0].argv ?? [], processes[0].pid);
+        const resolution = readCopilotProcessSession(processEnviron(processes[0].pid), processes[0].argv ?? [], processes[0].pid);
+        const live = resolution.session;
         if (live?.logged) {
           claims.add(live.sessionId);
           return;
         }
+        // what its hook told counts only where neither its API nor its log names a session now
+        const told = toldStandsIn(resolution, hookCopilotSession(peer.pane_id, processes[0].pid));
+        if (told !== null) claims.add(told);
       }
       if (peer.agent_session?.agent === "copilot" && peer.agent_session.kind === "id" && typeof peer.agent_session.value === "string") claims.add(peer.agent_session.value);
     }));
@@ -1932,6 +1983,14 @@ async function copilotTranscriptPath(pane: HerdrPane, panes: readonly HerdrPane[
     if (path !== null && nodePath.basename(nodePath.dirname(path)) === logged.sessionId)
       return { path, binding: `${foreground.pid}:${logged.generation}`, peerClaims: await peerClaims! };
   }
+  // a log with no lifecycle line (its API answered first, above): the session the hook of this very Copilot told, with
+  // the transcript in its own store (toldStandsIn)
+  const told = toldStandsIn(resolution, hookCopilotSession(pane.pane_id, foreground.pid));
+  const toldPath = told === null ? null : copilotApiTranscript(told, environment, argv);
+  if (told !== null && toldPath !== null) {
+    if (await claimedByPeer(told)) throw new ConversationUnavailable("no_session_path", undefined, "copilot_peer_conflict", hint);
+    return { path: toldPath, binding: `hook:${foreground.pid}:${told}`, peerClaims: await peerClaims! };
+  }
   if (report != null) {
     if (await claimedByPeer(report.value)) throw new ConversationUnavailable("no_session_id", undefined, "copilot_peer_conflict", hint);
     if (logged === null) {
@@ -2001,24 +2060,22 @@ async function resolveTranscript(pane: HerdrPane, cwd: string, codexHome?: strin
   // A pane herdr does label is not asked: the lookup would cost every transcript lookup an RPC (and
   // a process-table read on Windows), and a gjc below another agent would take its chat.
   if (!pane.agent) {
-    const info = known !== undefined ? { process_info: known ?? undefined } : await herdrRpc<{ process_info?: { shell_pid?: number; foreground_processes?: { argv?: unknown }[] } }>(
-      "pane.process_info", { pane_id: paneId },
-    ).catch(() => null);
-    const foreground = info?.process_info?.foreground_processes ?? [];
+    const processInfo = known !== undefined ? known ?? undefined : await paneProcessInfo(paneId).catch(() => undefined);
+    const foreground = processInfo?.foreground_processes ?? [];
     const running = foreground.some((process) =>
       isGjcProcess(Array.isArray(process.argv) ? process.argv.map(String) : []),
     );
-    if (running || await gjcPidUnderShell(info?.process_info?.shell_pid)) agent = "gjc";
+    if (running || await gjcPidUnderShell(processInfo?.shell_pid)) agent = "gjc";
     else if (foreground.some((process) => Array.isArray(process.argv) && isDshProcess(process.argv))) {
       agent = "dsh";
-      if (known === undefined) known = (info?.process_info as KnownProcesses) ?? null;
+      if (known === undefined) known = processInfo ?? null;
     }
     // herdr labels Kiro from its screen: before that shows, its chat TUI in front says the same
     else if (foreground.some((process) => Array.isArray(process.argv) && isKiroChatProcess(process.argv))) {
       agent = "kiro";
-      if (known === undefined) known = (info?.process_info as KnownProcesses) ?? null;
+      if (known === undefined) known = processInfo ?? null;
     }
-    else if (await paneCodexProcess(paneId, (info?.process_info as ProcessInfo | undefined) ?? null) !== null) agent = "codex";
+    else if (await paneCodexProcess(paneId, processInfo ?? null) !== null) agent = "codex";
   }
   if ((agent === "muse" || agent === "letta" || agent === "dsh" || agent === "dsh-tui" || agent === "kiro") && known === undefined) known = (await paneProcessInfo(paneId).catch(() => undefined)) ?? null;
   if (await paneRunsOmo(paneId, known)) {
@@ -2071,10 +2128,10 @@ async function resolveTranscript(pane: HerdrPane, cwd: string, codexHome?: strin
     if (agent === "codex") {
       const { home, placed } = await paneCodexHomePlaced(paneId, codexHome, known);
       const proofs = new Map<string, string>();
-      const path = await codexTranscriptPath(paneId, cwd, home, panes, !placed, placed && !codexHome, proofs);
-      if (!path) throw new ConversationUnavailable("no_session_path");
-      const codexFile = proofs.get(path);
-      return { source: "codex-transcript", path, codexHome: home, ...(codexFile === undefined ? {} : { codexFile }) };
+      const found = await codexTranscriptPath(paneId, cwd, home, panes, !placed, placed && !codexHome, proofs);
+      if (!found) throw new ConversationUnavailable("no_session_path");
+      const codexFile = proofs.get(found.path);
+      return { source: "codex-transcript", path: found.path, codexHome: home, ...(codexFile === undefined ? {} : { codexFile }) };
     }
     if (agent === "claude") {
       const proofs = new Map<string, string>();
@@ -2097,10 +2154,16 @@ async function resolveTranscript(pane: HerdrPane, cwd: string, codexHome?: strin
       return { source: "pi-transcript", path: found.path, piAgentDir: found.agentDir, piFile: found.identity };
     }
     if (agent === "cmd") {
-      const found = await cmdTranscriptPath(paneId);
+      const found = await cmdTranscriptPath(paneId, { told: toldSession(paneId, "cmd"), processes: known?.foreground_processes });
       if (found === null) throw new ConversationUnavailable("no_session_path");
       if ("unwritten" in found) throw new ConversationNotStarted(found.unwritten.id, "cmd-transcript", found.unwritten.path);
       return { source: "cmd-transcript", path: found.path };
+    }
+    if (agent === "prime-agent") {
+      const found = await primeTranscriptPath(paneId, known === undefined ? {} : { processes: known?.foreground_processes ?? [] });
+      if (found === null) throw new ConversationUnavailable("no_session_path");
+      // Prime Agent writes pi's session format
+      return { source: "pi-transcript", path: found.path, piAgentDir: found.agentDir, piFile: found.identity };
     }
     if (agent === "opencode") {
       const session = opencodeSessionId(pane);
@@ -2146,11 +2209,9 @@ export async function paneTranscript(paneId: string, codexHome?: string, snapsho
   if (pane.agent === "devin" && !(await paneRunsOmo(paneId, known))) {
     const cwd = pane.foreground_cwd || pane.cwd;
     const storePath = devinDbPath ?? defaultDevinDbPath();
-    const info = known !== undefined ? { process_info: known ?? undefined } : await herdrRpc<{ process_info?: { foreground_processes?: { pid?: number; argv?: unknown }[] } }>(
-      "pane.process_info", { pane_id: paneId },
-    ).catch(() => null);
+    const processInfo = known !== undefined ? known ?? undefined : await paneProcessInfo(paneId).catch(() => undefined);
     if (herdrSocketPath() !== socket) throw new ConversationUnavailable("no_session_id");
-    const processes = (info?.process_info?.foreground_processes ?? []).filter((process) =>
+    const processes = (processInfo?.foreground_processes ?? []).filter((process) =>
       Array.isArray(process.argv) && process.argv.every((arg) => typeof arg === "string") &&
       isDevinProcess(process.argv as string[]) && process.argv[1] !== "acp",
     );
@@ -2176,7 +2237,12 @@ export async function paneTranscript(paneId: string, codexHome?: string, snapsho
     }
   }
 
-  return noteBinding(paneId, await resolveTranscript(pane, pane.cwd, codexHome, panes, opencodeDb, hermesHome, grokHome, museData, known, agyHistoryId, freshKimi, kimiFreshAfter));
+  const resolved = noteBinding(paneId, await resolveTranscript(pane, pane.cwd, codexHome, panes, opencodeDb, hermesHome, grokHome, museData, known, agyHistoryId, freshKimi, kimiFreshAfter));
+  if (resolved.source === "codex-transcript") {
+    const threadId = rolloutThread(resolved.path);
+    if (threadId !== null && herdrSocketPath() === socket) followServedThread(paneId, threadId);
+  }
+  return resolved;
 }
 
 const AGY_WRITE_RACE_MS = 5000;
@@ -2223,7 +2289,16 @@ async function readPaneConversation(paneId: string, codexHome?: string, page: Co
     // agy's greeting names a model only from the frame its unused session was proven on (passed in
     // as `read`): a later frame can already show another conversation, or another agy's.
     const metadata = read ?? (screen && source !== "agy-transcript" ? await screenMetadata(source) : { model: null, reasoning_effort: null });
-    return { source, turns: [], metadata, ...(screen ? { screen: true as const } : {}), cursor: null, history_id: id, version: answerVersion(id, `${metadata.model}\0${metadata.reasoning_effort}`) };
+    const answer: RecognizedConversation = { source, turns: [], metadata, ...(screen ? { screen: true as const } : {}), cursor: null, history_id: id, version: answerVersion(id, `${metadata.model}\0${metadata.reasoning_effort}`) };
+    // Before there is a rollout, only a proven empty Codex session (or our own pending launch)
+    // can reach here, so there is no other thread's transcript to check the settings against.
+    if (source !== "codex-transcript") return answer;
+    const settings = servedStatus(paneId)?.settings;
+    // The greeting's live footer can be newer than thread/started. Codex does not publish
+    // Plan to this connection until there is a rollout to subscribe to.
+    return withServedCodex(answer, settings?.initial
+      ? { ...settings, model: metadata.model ?? settings.model, effort: metadata.reasoning_effort ?? settings.effort }
+      : settings);
   };
 
   const onNotStarted = async (error: ConversationNotStarted): Promise<RecognizedConversation> => {
@@ -2476,13 +2551,10 @@ async function readPaneConversation(paneId: string, codexHome?: string, page: Co
     };
   }
   if (resolved.source === "codex-transcript") {
-    // Codex writes the model it was asked for; a turn it moved to another model is said only by its server
     const served = servedStatus(paneId);
-    if (served?.model && rolloutThread(resolved.path) === served.threadId.toLowerCase() && served.model !== answer.metadata.model) return {
-      ...answer,
-      metadata: { ...answer.metadata, model: served.model },
-      version: answerVersion(answer.version, served.model),
-    };
+    if (served !== null && rolloutThread(resolved.path) === served.threadId.toLowerCase()) {
+      answer = withServedCodex(answer, served.settings, served.model);
+    }
   }
   if (resolved.source === "cmd-transcript") {
     const herdrAgent = snapshot.agents.find((agent) => agent.pane_id === paneId);

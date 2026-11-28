@@ -143,7 +143,8 @@ describe("ovis link, on the PC itself", () => {
       if (path === "/api/relay" && request.method === "GET") return Response.json({ phase: "online", blocked: null });
       if (path === "/api/relay/code") {
         const code = codes[minted++]!;
-        return Response.json({ code, expires_at: new Date(time.now() + 600_000).toISOString(), server_id: pc.server_id });
+        // the second as a PC on its own relay answers, naming the app that looks its codes up there
+        return Response.json({ code, expires_at: new Date(time.now() + 600_000).toISOString(), server_id: pc.server_id, ...minted === 2 ? { app: "https://app.example.test" } : {} });
       }
       if (path === "/api/relay/offer") {
         // the page asks for the offer after the code, never beside it: the code starts a new pairing
@@ -160,6 +161,8 @@ describe("ovis link, on the PC itself", () => {
     const text = out.join("");
     expect(text).toContain("ABCD-EFGH-JK");
     expect(text).toContain("MNPQ-RSTV-WX");
+    expect(text).toContain("On the other device, open app.ovis.sh, choose Pair with a code");
+    expect(text).toContain("On the other device, open app.example.test, choose Pair with a code");
     expect(text).toContain(pc.server_id.match(/.{4}/g)!.join(" "));
     expectQrCode(text);
     expect(time.waits).toEqual([600_000]);
@@ -2591,6 +2594,8 @@ describe("ovis link, on the PC itself", () => {
     refuse?: (path: string, codes: number) => Response | undefined;
     service?: (request: Request, pass: () => Promise<Response>, at: { pc: ReturnType<typeof identity>; stop: AbortController; now: () => number }) => Promise<Response>;
     settings?: Record<string, string | undefined>;
+    /** the app this PC's codes name, as a PC on its own relay answers */
+    codeApp?: string;
     confirm?: string | false;
     ends?: boolean;
     soon?: boolean;
@@ -2639,7 +2644,7 @@ describe("ovis link, on the PC itself", () => {
       if (path === "/api/relay/link") return Response.json({ url: encodeOffer({ v: 1, server_id: pc.server_id, server_public_key: pc.public_key, relay: RELAY, name: "old-desktop" }, "https://app.ovis.sh") });
       if (path === "/api/relay/link/close") return Response.json({ ok: true });
       if (path === "/api/devices" && request.method === "GET") return Response.json({ devices: state.devices });
-      if (path === "/api/relay/code") return Response.json({ code: `ABCD-EFGH-J${offers.length + 1}`, expires_at: new Date(time.now() + 600_000).toISOString(), server_id: pc.server_id, ...forAccount(request, tied?.expect?.code, tied?.typedId ?? `p${offers.length + 1}`) });
+      if (path === "/api/relay/code") return Response.json({ code: `ABCD-EFGH-J${offers.length + 1}`, expires_at: new Date(time.now() + 600_000).toISOString(), server_id: pc.server_id, ...options.codeApp === undefined ? {} : { app: options.codeApp }, ...forAccount(request, tied?.expect?.code, tied?.typedId ?? `p${offers.length + 1}`) });
       if (path === "/api/relay/offer") {
         began ??= time.now();
         offers.push(String(100001 + offers.length));
@@ -2822,6 +2827,12 @@ describe("ovis link, on the PC itself", () => {
   const APP = "https://app.example.test:17541";
   const WRAPPER_NAMES = { OVIS_RELAY_APP_URL: APP, OVIS_CLI_NAME: "/opt/wrapper/bin/ovis-wrapper" };
   const approving = (settings: Record<string, string | undefined>) => scanning({ args: ["--approve"], settings, said: (text, _type, _answer, stop) => { if (text.includes("choose Add on")) stop.abort(); } });
+
+  it("with the fleet preview off, names the app the PC's reply names for its code", async () => {
+    const own = await scanning({ isTty: false, args: ["--print"], discard: true, confirm: "no", step: joins, codeApp: "https://app.example.test" });
+    expect(own.code).toBe(0);
+    expect(own.text).toContain("Or, on that device, open app.example.test, choose Pair with a code and type it.\n");
+  });
 
   it("with the fleet preview off, writes the QR code with --print where its output is not a terminal, asks for no Enter, and names app.ovis.sh and ovis whatever OVIS_RELAY_APP_URL and OVIS_CLI_NAME say, as before it", async () => {
     for (const names of [{}, WRAPPER_NAMES]) {
@@ -4450,6 +4461,37 @@ describe("ovis approve, a members join typed with all six of its digits (#28)", 
     expect(code).toBe(0);
     expect(out.at(-1)).toStartWith("Tablet one was not let in here: a device was blocked on this PC, and until that block is lifted this PC keeps out every device that came after it. Lift");
     expect(out.join("")).not.toMatch(/Approved:|is let in;/);
+  });
+
+  it("never says a first or members join is let in or approved where this PC keeps the device out, and says each reason its own way", async () => {
+    // what GET /api/relay/joins names in held_why (server/devices.ts KeptOut), and one this command does not know yet
+    const reasons = ["block", "freeze", "account_hold", "account_removed", "untrusted", "closed", "locked", "a_later_reason"];
+    const said = new Set<string>();
+    for (const held_why of reasons) {
+      for (const join of [{ ...joinOf("j1"), held_why }, { ...joinOf("j1"), digits: "482913", held_why }]) {
+        const { code, out } = await joining({ joins: [join], said: (text, answer) => { if (prompt(text, "j1")) answer("482913"); } });
+        expect(code).toBe(0);
+        expect(out.join("")).not.toMatch(/Approved:|is let in;|was received/);
+        expect(out.at(-1)).toStartWith("Tablet one was not let in");
+        said.add(out.at(-1)!);
+      }
+    }
+    expect(said.size).toBe(reasons.length);
+  });
+
+  it("goes by what the approval's answer names, which may have come since the joins were read, and never says the device is let in", async () => {
+    for (const join of [joinOf("j1"), { ...joinOf("j1"), digits: "482913" }, { ...joinOf("j1"), list_held: true }]) {
+      const { code, out } = await joining({ joins: [join], said: (text, answer) => { if (prompt(text, "j1")) answer("482913"); }, approve: () => ({ held_why: "account_hold" }) });
+      expect(code).toBe(0);
+      expect(out.join("")).not.toMatch(/Approved:|is let in;|was received|blocked/);
+      expect(out.at(-1)).toStartWith("Tablet one was not let in here");
+    }
+  });
+
+  it("lets the answer say that nothing keeps the device out any more, whatever the joins said a moment before", async () => {
+    const lifted = async (join: OwnJoin) => (await joining({ joins: [join], said: (text, answer) => { if (prompt(text, "j1")) answer("482913"); }, approve: () => ({ held_why: null }) })).out.at(-1);
+    expect(await lifted({ ...joinOf("j1"), digits: "482913", held_why: "block", list_held: true })).toBe("Tablet one is let in; it opens this PC in a moment.\n");
+    expect(await lifted({ ...joinOf("j1"), held_why: "freeze", list_held: true })).toStartWith("Approved: Tablet one");
   });
 
   it("approves nothing when its input is not a terminal: it reads no line and sends nothing", async () => {

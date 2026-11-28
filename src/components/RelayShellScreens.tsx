@@ -10,6 +10,7 @@ import type { KeyMismatch } from "../lib/relay/shellState.ts";
 import { serverScopePath } from "../lib/shellMode.ts";
 import { describeUpdate } from "../lib/updateProgress.ts";
 import { useAnnouncedText } from "../lib/useAnnouncedText.ts";
+import { followUnlessOffline } from "../lib/useOffline.ts";
 import { AccountSignIn, CheckPcsButton, PcStatusLine } from "./AccountPcs.tsx";
 import { JoinWait } from "./JoinWait.tsx";
 import { KeyId } from "./KeyId.tsx";
@@ -38,7 +39,7 @@ export function PcApprovalWait({ reason, name, digits = null, onQr, onCheck, onA
     switch (reason) {
       case "allow": return t("Press [Allow] on {name}", { name: name ?? t("this PC") });
       case "type": return t("Type this number on {name}", { name: name ?? t("this PC") });
-      case "off": return name === null ? t("Turn on Ovis on the PC") : t("{name} is off. Turn on Ovis on it.", { name });
+      case "off": return name === null ? t("Turn on Ovis on the PC") : t("{name} is not answering. Check that Ovis is running on it.", { name });
       case "declined": return t("Not allowed. Ask again, then press [Allow] on {name}.", { name: name ?? t("this PC") });
       // the PC turned the request down before anybody was asked (in no account yet, paused after too many tries): nobody declined it
       case "refused": return t("{name} cannot take this device yet", { name: name ?? t("this PC") });
@@ -250,7 +251,8 @@ export function RelayShellCardContent({ props, other = null }: RelayShellCardCon
               const status = pcStatus?.get(device.server_id);
               return (
                 <li key={device.server_id}>
-                  <a className="relay-shell-pc" href={serverScopePath(device.server_id)}>
+                  {/* with no network the line above this list says so (useOffline) */}
+                  <a className="relay-shell-pc" href={serverScopePath(device.server_id)} onClick={followUnlessOffline(serverScopePath(device.server_id), () => {})}>
                     <span className="account-pc-text">
                       <span className="relay-shell-pc-name">{device.name ?? t("Unnamed PC")}</span>
                       {status && <PcStatusLine status={status} />}
@@ -271,7 +273,7 @@ export function RelayShellCardContent({ props, other = null }: RelayShellCardCon
       {state.kind === "code-compare" && (
         <>
           <h1 className="relay-shell-title">{t("Does {name}'s screen show this ID?", { name: pc })}</h1>
-          <p className="relay-shell-copy">{t("The PC shows its ID at the top of Settings → Devices and PCs. Pair only if every group matches.")}</p>
+          <p className="relay-shell-copy">{t("The PC shows its ID under the code. Pair only if every group matches. On older versions, check Settings → Devices and PCs → Connected to this PC, or go back and use a code from Settings → Agents → Setup guide → Other ways → Show a code to type.")}</p>
           <p className="relay-shell-code-id"><KeyId id={state.offer.server_id} label={t("ID of the PC this code found")} /></p>
           <div className="relay-shell-actions"><button type="button" className="btn btn-primary" onClick={onCodeMatch}>{t("It matches")}</button><button type="button" className="btn" onClick={onCancel}>{t("Cancel")}</button></div>
         </>
@@ -323,6 +325,7 @@ export function RelayShellCardContent({ props, other = null }: RelayShellCardCon
           <h1 className="relay-shell-hero"><span>{t("Your PCs, anywhere.")}</span>{" "}<span className="relay-shell-hero-quiet">{t("Sign in to your Ovis account")}</span></h1>
           <AccountSignIn nameOnly onSignIn={onSignIn} error={pairSignIn?.kind === "signed-out" ? pairSignIn.error : null} busy={pairSignIn?.kind === "signing-in"}
             busyProvider={pairSignIn?.kind === "signing-in" ? (pairSignIn.provider ?? null) : null} failedProvider={pairSignIn?.kind === "signed-out" ? (pairSignIn.provider ?? null) : null}
+            hint={pairSignIn?.kind === "signed-out" ? pairSignIn.hint : undefined} onHintChoice={props.onHintChoice}
             {...(accountProviders ? { providers: accountProviders } : {})} />
           <AgreementLine />
           {failure.detail !== null && <p className="relay-shell-detail"><code>{failure.detail}</code></p>}

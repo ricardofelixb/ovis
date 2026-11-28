@@ -23,6 +23,7 @@ import { CLAUDE_REWIND_OPEN_MESSAGE } from "./dialogs/claude.ts";
 import { claudeRewindOpen } from "./prompt.ts";
 import { expandedDirectory } from "./directories.ts";
 import { ConversationDiagnostics } from "./conversation-diagnostics.ts";
+import type { ApprovalHub } from "./approvals/hub.ts";
 
 const conversationDiagnostics = new ConversationDiagnostics();
 
@@ -36,7 +37,7 @@ interface SummaryReadEntry {
 const summaryReads = new Map<string, SummaryReadEntry>();
 
 const INTEGRATION_BOUND = new Set(["opencode", "grok"]);
-const READ_AGENTS = new Set(["claude", "codex", "pi", "omp", "omo", "gjc", "dsh", "dsh-tui", "kiro", "copilot", "grok", "agy", "muse", "letta", "kimi", "kimi-code", "devin", "opencode", "hermes", "cmd"]);
+const READ_AGENTS = new Set(["claude", "codex", "pi", "omp", "omo", "gjc", "dsh", "dsh-tui", "kiro", "copilot", "grok", "agy", "muse", "letta", "kimi", "kimi-code", "devin", "opencode", "hermes", "cmd", "prime-agent"]);
 const LOOK_MS = 2000;
 const INTEGRATION_LIST_TTL_MS = 30_000;
 let integrations: { at: number; list: Promise<Awaited<ReturnType<typeof integrationList>>> } | null = null;
@@ -60,7 +61,7 @@ async function paneReason(paneId: string, reason: ReturnType<typeof unavailableR
   }
 }
 
-export type PaneStores = { codexHome?: string; grokHome?: string; museData?: string; opencodeDb?: string; devinDbPath?: string; hermesHome?: string; openCodeStateDir?: string };
+export type PaneStores = { codexHome?: string; grokHome?: string; museData?: string; opencodeDb?: string; devinDbPath?: string; hermesHome?: string; openCodeStateDir?: string; approvals?: Pick<ApprovalHub, "contextOf"> };
 
 /** the sides herdr's pane.swap and pane.resize take, and a move's side of its target; anything else is refused before the RPC, which would answer invalid_request */
 const isPaneDirection = (value: unknown): value is PaneDirection => value === "left" || value === "right" || value === "up" || value === "down";
@@ -339,10 +340,12 @@ export async function handlePaneRequest(request: Request, url: URL, pathname: st
     const gone = new Promise<"gone">((resolve) => { leave = () => resolve("gone"); });
     if (request.signal.aborted) leave(); else request.signal.addEventListener("abort", leave, { once: true });
     for (const [paneId, entry] of summaryReads) if (entry.settledAt !== undefined && Date.now() - entry.settledAt >= PANE_SUMMARY_KEEP_MS) summaryReads.delete(paneId);
+    let attempted = 0;
     try {
       for (const paneId of paneIds) {
         const left = deadline - Date.now();
         if (left <= 0 || request.signal.aborted) break;
+        attempted++;
         const running = summaryReads.get(paneId);
         let entry: SummaryReadEntry;
         if (running?.settledAt !== undefined) {
@@ -378,7 +381,8 @@ export async function handlePaneRequest(request: Request, url: URL, pathname: st
     } finally {
       request.signal.removeEventListener("abort", leave);
     }
-    return jsonResponse({ server_time: new Date().toISOString(), summaries } satisfies PaneSummaries, 200, { "cache-control": "no-store" });
+    const skipped = attempted < paneIds.length ? paneIds.slice(attempted) : undefined;
+    return jsonResponse({ server_time: new Date().toISOString(), summaries, skipped } satisfies PaneSummaries, 200, { "cache-control": "no-store" });
   }
 
   if (pathname === "/api/pane/conversation") {
@@ -395,13 +399,22 @@ export async function handlePaneRequest(request: Request, url: URL, pathname: st
     try {
       const { version, ...conversation } = await paneConversation(paneId, options.codexHome, page, options.devinDbPath, options.opencodeDb, options.hermesHome, options.grokHome, options.museData);
       conversationDiagnostics.recovered(paneId, requestIdContext.getStore()?.id);
-      // omp's transcript counts the tokens a request filled but never names the window; its own
-      // status bar does (server/omp-status.ts), so the chat's ring gets a percent from there
-      const screenContext = conversation.source === "omp-transcript" ? await ompScreenContext(paneId) : null;
-      const answer = screenContext === null ? conversation
-        : { ...conversation, metadata: { ...(conversation.metadata ?? { model: null, reasoning_effort: null }), context: screenContext } };
+      // The live extension knows the current window and fill, which the session file does not record together.
+      // Only read omp's status bar if its extension has never reported. An unknown sample leaves the file as-is.
+      const kind = conversation.source === "omp-transcript" ? "omp" : conversation.source === "omo-transcript" ? "omo"
+        : conversation.source === "pi-transcript" ? "pi" : null;
+      let context = kind === null ? undefined : options.approvals?.contextOf(paneId, kind);
+      if (kind === "omp" && context === undefined) {
+        const screen = await ompScreenContext(paneId);
+        // A report can arrive during the screen RPCs. Even a report of unknown beats the screen.
+        const reported = options.approvals?.contextOf(paneId, kind);
+        context = reported === undefined ? screen : reported;
+      }
+      context ??= null;
+      const answer = context === null ? conversation
+        : { ...conversation, metadata: { ...(conversation.metadata ?? { model: null, reasoning_effort: null }), context } };
       // no-store keeps the browser's own cache out of it, so the chat sees the 304.
-      const etag = `W/"${version}${screenContext === null ? "" : `-ctx${screenContext.used}:${screenContext.window}`}"`;
+      const etag = `W/"${version}${context === null ? "" : `-ctx${context.used}:${context.window}`}"`;
       const serverTime = new Date().toISOString();
       const headers = { etag, "cache-control": "no-store", "x-server-time": serverTime };
       if (request.headers.get("if-none-match")?.replace(/^W\//, "") === etag.slice(2)) return new Response(null, { status: 304, headers });
@@ -484,8 +497,8 @@ export async function handlePaneRequest(request: Request, url: URL, pathname: st
     } catch (error) { return errorResponse(error); }
   }
 
-  // a pane put beside another of its own tab (client.ts `paneMoveBeside`): herdr's focus stays where
-  // it was, and the layout reaches every client as a swap's does, through layout.updated
+  // a pane put beside another pane, of its own tab or another one (client.ts `paneMoveBeside`): herdr's
+  // focus stays where it was, and the layout reaches every client as a swap's does, through layout.updated
   if (pathname === "/api/pane/move") {
     setRequestRoute(pathname);
     if (request.method !== "POST") return badRequest("method_not_allowed", "use POST");

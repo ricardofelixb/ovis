@@ -25,12 +25,13 @@ import { parseFoundHerdrSessions, throwawayPath, validHerdrSocket } from "./herd
 import { isCoreAdapterSocket } from "./herdr-core/pipe.ts";
 import { writePrivateState } from "./private-state.ts";
 import { holdsDocument, readStateDocument, setAsideDamaged } from "./state-document.ts";
+import { AgentChanges } from "./agent-changes.ts";
 import { detectHost, HERDR_INSTALL_CMD, installLockOwner, type RemoteHost } from "./remote-host.ts";
 import type { FoundHerdrSession, FoundOvis } from "../shared/machines.ts";
 import { DESKTOP_APP_UPDATES, REVISION, type UpdateStatus } from "../shared/update.ts";
 import { discard, readCappedJson, REMOTE_LIMITS } from "./remote-json.ts";
 import { capabilities } from "./runtime/capabilities.ts";
-import { SshConnection, sshClient } from "./ssh.ts";
+import { SshConnection, sshClient, type SshForward } from "./ssh.ts";
 import { WAITING_FOR_WINDOWS_LOGIN } from "./windows-herdr-start.ts";
 import { decodeOffer, SERVER_ID_PATTERN, isWssOrigin, type RelayOffer } from "../shared/relay-offer.ts";
 import { offerFromCode, TypedCodeError } from "../shared/relay-code-offer.ts";
@@ -57,6 +58,22 @@ import { hcTwin } from "./hc-machine-twin.ts";
 const RELAY_FOUND_MS = 10 * 60_000;
 /** the account service keeps an admission for 10 minutes: a key made for another PC of the account waits no longer */
 const ACCOUNT_PC_MS = 10 * 60_000;
+const WEB_FORWARDS_PER_MACHINE = 8;
+
+export class MachineForwardError extends Error {
+  constructor(readonly code: "machine_not_found" | "forward_not_ssh" | "machine_offline" | "forward_busy" | "forward_cancelled" | "forward_failed", message: string) {
+    super(message);
+  }
+}
+
+interface WebForward { port: number; ssh: SshForward; retiring?: true }
+/** One opening shared by every request for the same bind and port: cancelled only once all of them left. */
+interface PendingWebForward { opening: Promise<number>; waiters: number; abort: AbortController }
+interface WebForwards {
+  open: Map<string, WebForward>;
+  pending: Map<string, PendingWebForward>;
+  tail: Promise<unknown>;
+}
 
 export type AccountPcFailure = "invalid" | "added" | "self" | "outdated" | "offline" | "gone" | "busy" | "refused" | "declined" | "unanswered" | "cancelled";
 
@@ -74,6 +91,7 @@ type StoredMachine = { id: string; name: string; enabled: boolean; snapshot?: Se
 interface Runtime {
   machine: Machine;
   ssh?: SshConnection;
+  webForwards?: WebForwards;
   tunnel?: RelayPcTunnel;
   forward?: AddressPcForward;
   routeProbes?: RouteProbes;
@@ -221,6 +239,11 @@ function pastThisApp(offer: { updatable: boolean; latest_version: string | null 
   if (!offer?.updatable) return null;
   return !offer.latest_version ? UNKNOWN_RELEASE : newerThanThisApp(offer.latest_version) ? NEWER_THAN_APP : null;
 }
+// A preview app (the Mac staging profile) runs its own Ovis in a home of its own, so the Ovis it finds on a PC over SSH
+// is always another, released one: it never connects to that one, updates it or takes it into the preview's account
+const PREVIEW_LEAVES_OWN_OVIS = "This PC runs its own Ovis, which this preview app leaves alone: it neither connects to that Ovis nor updates it. Use the released Ovis app for this PC.";
+const PREVIEW_INSTALLS_NOTHING = "A preview app installs and starts no Ovis on another PC: install it on that PC itself.";
+const PREVIEW_NO_ACCOUNT_ADD = "A preview app adds no PC to its account over SSH: it would take that PC's own Ovis into the preview's test account.";
 const NOT_CONNECT_APPROVED = "Connect this PC first: it was added from herdr, and connecting it here was not approved yet.";
 const NOT_BRIDGE_APPROVED = "Review the bridge update in this PC's dialog first: it was added from herdr without approving this app's bridge.";
 /**
@@ -294,9 +317,9 @@ function bridgeUnreachable(descriptor: BridgeDescriptor, error: unknown): string
   return `This PC's Ovis does not answer at ${at} through SSH. If it runs with HOST set to another address, update it or set HOST=127.0.0.1 there, restart it, then add the PC again.`;
 }
 
-async function freePort(): Promise<number> {
+async function freePort(host = "127.0.0.1"): Promise<number> {
   const server = tcpServer();
-  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(0, host, resolve); });
   const port = (server.address() as { port: number }).port;
   await new Promise<void>((resolve) => server.close(() => resolve()));
   return port;
@@ -306,6 +329,12 @@ async function freePort(): Promise<number> {
 function newerBundle(version: unknown): boolean {
   return newerBundleRelease(version);
 }
+/** A PC's own Ovis offered as a choice: its loopback port and whether it is newer than this app tell apart two on one PC. */
+const foundOvis = (descriptor: BridgeDescriptor, bundleVersion: unknown): FoundOvis => ({
+  socket_path: descriptor.socket_path, runtime: "herdr-core",
+  ...(Number.isInteger(descriptor.port) && descriptor.port >= 1 && descriptor.port <= 65535 ? { port: descriptor.port } : {}),
+  ...(newerBundle(bundleVersion) ? { newer_than_app: true as const } : {}),
+});
 /**
  * ssh's refusals: the PC answered, and only a password or a new host key gets past them. The
  * remote denial reads "user@host: Permission denied (publickey,…)."; a local key file ssh cannot
@@ -381,7 +410,7 @@ export function bridgeAgentNews(tell: () => void) {
 export class MachineManager {
   private machines = new Map<string, Runtime>();
   private jobs = new Map<string, JobState>();
-  private listeners = new Set<(event: MachineEvent) => void>();
+  private listeners = new Map<(event: MachineEvent) => void, "internal" | "roster">();
   private stopped = false;
   private readonly bridgeWork = new Map<string, Promise<void>>();
   private localBusy = false;
@@ -392,6 +421,7 @@ export class MachineManager {
   private localTimer: ReturnType<typeof setInterval>;
   private saveTimer?: ReturnType<typeof setTimeout>;
   private profileState: HerdrProfileState;
+  private readonly agentChanges: AgentChanges;
   private statePath: string;
   private written: string | undefined;
   private relayStatePath: string;
@@ -450,13 +480,16 @@ export class MachineManager {
   private serverId?: () => string | undefined;
   private readonly tailnet: TailnetPcs;
   private readonly sshCandidateOptions: SshCandidatesOptions;
+  /** a preview app's server (OVIS_PREVIEW_PROFILE): it leaves every PC's own Ovis alone */
+  private readonly previewProfile: boolean;
 
   constructor(readonly stateDir: string, private push: PushService, private completions: CompletionTracker, private readLocal: () => Promise<SessionSnapshot> = () => this.completions.readSnapshot(sessionSnapshot, labelOmoPanes),
-    options: { restoreReplaced?: () => boolean; installer?: string; bootId?: string; localFinishEpoch?: () => string; now?: () => number; ownUpdate?: { pollMs?: number; startMs?: number; checkMs?: number; offerMs?: number }; moveOfferMs?: { idle: number; active: number }; relaySocket?: (url: string) => RelaySocket; relayDirectSocket?: (url: string) => RelaySocket; serverId?: () => string | undefined; tailnet?: TailnetPcsOptions; sshCandidates?: SshCandidatesOptions } = {}) {
+    options: { restoreReplaced?: () => boolean; installer?: string; bootId?: string; localFinishEpoch?: () => string; now?: () => number; ownUpdate?: { pollMs?: number; startMs?: number; checkMs?: number; offerMs?: number }; moveOfferMs?: { idle: number; active: number }; previewProfile?: boolean; relaySocket?: (url: string) => RelaySocket; relayDirectSocket?: (url: string) => RelaySocket; serverId?: () => string | undefined; tailnet?: TailnetPcsOptions; sshCandidates?: SshCandidatesOptions } = {}) {
     this.bootId = options.bootId;
     this.tailnet = new TailnetPcs(options.tailnet);
     this.sshCandidateOptions = options.sshCandidates ?? (options.tailnet?.readStatus === undefined ? {} : { readStatus: options.tailnet.readStatus });
     this.serverId = options.serverId;
+    this.previewProfile = options.previewProfile === true;
     this.relaySocket = options.relaySocket;
     this.relayDirectSocket = options.relayDirectSocket;
     this.localFinishEpoch = options.localFinishEpoch;
@@ -468,6 +501,7 @@ export class MachineManager {
     this.now = options.now ?? (() => performance.now());
     if (this.bootId) this.local.source_boot_id = this.bootId;
     this.profileState = new HerdrProfileState(stateDir);
+    this.agentChanges = new AgentChanges(stateDir);
     this.statePath = join(stateDir, "machines.json");
     this.relayStatePath = join(stateDir, "relay-pcs.json");
     this.addressStatePath = join(stateDir, "address-pcs.json");
@@ -565,7 +599,7 @@ export class MachineManager {
             runtime.machine.enabled = false; this.disconnect(runtime);
             for (const [jobId, job] of this.jobs) if (job.public.machine_id === id) this.cancelJob(jobId);
             this.dropUpdate(runtime);
-            this.machines.delete(id);
+            this.machines.delete(id); this.agentChanges.forget(id);
             this.emit();
           }
           this.removeKey(id);
@@ -605,7 +639,7 @@ export class MachineManager {
       runtime.machine.enabled = false; this.disconnect(runtime);
       for (const [jobId, job] of this.jobs) if (job.public.machine_id === id) this.cancelJob(jobId);
       this.dropUpdate(runtime);
-      this.machines.delete(id);
+      this.machines.delete(id); this.agentChanges.forget(id);
       changed = true;
     }
     if (changed) this.emit();
@@ -676,7 +710,7 @@ export class MachineManager {
     for (const [id, runtime] of this.machines) {
       if (runtime.machine.kind !== "hc" || wanted.has(id)) continue;
       runtime.machine.enabled = false; this.disconnect(runtime);
-      this.machines.delete(id);
+      this.machines.delete(id); this.agentChanges.forget(id);
       changed = true;
     }
     if (changed) this.emit();
@@ -705,7 +739,14 @@ export class MachineManager {
       runtime.machine.runtime = runtime.machine.state === "connected" && runtime.machine.herdr ? runtime.machine.herdr.runtime ?? "herdr" : undefined;
       if (runtime.machine.kind !== "hc") runtime.machine.ovis_update = this.updateOffer(runtime);
     }
-    return [own ? { ...this.local, server_id: own } : this.local, ...[...this.machines.values()].map((r) => r.machine)];
+    const machines = [own ? { ...this.local, server_id: own } : this.local, ...[...this.machines.values()].map((r) => r.machine)];
+    // Serving a roster never observes changes: it can be a cached snapshot or a read between a
+    // status frame and its counter. Only accepted live snapshots and status frames date changes.
+    return machines.map((machine) => {
+      if (!machine.snapshot) return machine;
+      const snapshot = this.agentChanges.snapshot(machine.id, machine.snapshot, false);
+      return snapshot === machine.snapshot ? machine : { ...machine, snapshot };
+    });
   }
   private updateOffer(runtime: Runtime): PcUpdateOffer | null {
     const machine = runtime.machine;
@@ -728,7 +769,7 @@ export class MachineManager {
       return { how: "install", current_version: own.version, latest_version: fix.mode === "replace" ? release.slice(1) : own.latest_version, updatable: !unapproved, reason: unapproved,
         ...(fix.mode === "restart" ? { revision: runtime.remoteRevision ?? null } : {}),
         steps: fix.mode === "replace"
-          ? [`Stop the Ovis server started by hand on that PC (process ${fix.pid}); its settings and data stay.`, `Install Ovis ${release} there with its official installer (install.sh at ${release}, as ${INSTALLER} gives it), as a herdr plugin that updates itself; an Ovis already installed there is started and updated instead.`, "As when it is run by hand, the installer adds what is missing for this account only (herdr, Bun 1.4 or newer, which may add itself to the shell's startup file), and serves Ovis to the tailnet when Tailscale runs there.", "Start it and connect to it. herdr and its sessions keep running."]
+          ? [`Stop the Ovis server started by hand on that PC (process ${fix.pid}); its settings and data stay.`, `Install Ovis ${release} there with its official installer (install.sh at ${release}, as ${INSTALLER} gives it), as a herdr plugin that updates itself; an Ovis already installed there is started and updated instead.`, "As when it is run by hand, the installer adds what is missing for this account only (herdr, Bun 1.4 or newer, which may add itself to the shell's startup file), and serves Ovis to the tailnet when Tailscale runs there. Where herdr is not running, it starts it and has a user service start it again (ovis-herdr on Linux, only where this account's lingering is on or it can turn it on without a password; a LaunchAgent on a Mac).", "Start it and connect to it. herdr and its sessions keep running."]
           : [`Restart that PC's Ovis (process ${fix.pid}) through its own launcher (its herdr plugin or user service), so it runs the supervisor that installs updates.`, `Then have it install its update${own.latest_version ? ` v${own.latest_version}` : ""}. herdr and its sessions keep running.`] };
     }
     if (machine.kind === "ssh" && own) {
@@ -775,8 +816,13 @@ export class MachineManager {
     }
     return this.machines.get(pc)?.finishes.ended(epoch) ?? false;
   }
-  subscribe(listener: (event: MachineEvent) => void): () => void {
-    this.listeners.add(listener);
+  get rosterWatched(): boolean {
+    for (const kind of this.listeners.values()) if (kind === "roster") return true;
+    return false;
+  }
+
+  subscribe(listener: (event: MachineEvent) => void, { internal = false } = {}): () => void {
+    this.listeners.set(listener, internal ? "internal" : "roster");
     listener({ type: "machines", machines: this.list() });
     return () => this.listeners.delete(listener);
   }
@@ -784,7 +830,13 @@ export class MachineManager {
     if (this.stopped) return;
     // a PC added, renamed or removed can make a core machine its twin, or end that: shown again at once, not at the next read
     if (!event && !this.hcSyncing && this.hcStart && this.twinsOf(this.hcSeen) !== this.hcTwins) { this.syncHcMachines(this.hcSeen); return; }
-    for (const listener of this.listeners) listener(event ?? { type: "machines", machines: this.list() });
+    if (event?.type === "machine-message" && event.message.type === "pane-status") {
+      const changedAt = this.agentChanges.status(event.machine_id, event.message.pane_id, event.message.agent_status);
+      // a remote PC's own Ovis may name a time of its clock: only this server's is told
+      const { changed_at: _theirs, ...message } = event.message;
+      if (changedAt !== undefined || _theirs !== undefined) event = { ...event, message: changedAt === undefined ? message : { ...message, changed_at: changedAt } };
+    }
+    for (const listener of this.listeners.keys()) listener(event ?? { type: "machines", machines: this.list() });
   }
   localMessage(message: ServerMessage): void {
     if (message.type === "pane-status" && this.localFinishes.stale(message.finish_epoch)) return;
@@ -792,12 +844,12 @@ export class MachineManager {
       this.localRevision++;
       if (this.localBusy) this.localRefreshQueued = true;
     }
-    this.emit({ type: "machine-message", machine_id: LOCAL_MACHINE, message });
     if (message.type === "pane-exited") this.heardAgents.forget(message.pane_id);
     if (message.type === "pane-status" && this.local.snapshot) {
       this.local.snapshot = snapshotAfterStatus(this.local.snapshot, message);
       this.localFinishes.hold(message.finish_epoch, this.bootId);
     }
+    this.emit({ type: "machine-message", machine_id: LOCAL_MACHINE, message });
     if (message.type === "session-changed" || message.type === "pane-exited") void this.refreshLocal();
   }
   /**
@@ -826,7 +878,7 @@ export class MachineManager {
           if (revision !== this.localRevision) { this.localRefreshQueued = true; continue; }
           this.localDiagnostics.recovered(LOCAL_MACHINE, { operation: "snapshot", elapsed_ms: performance.now() - started });
           if (!olderOrderRead(this.local.snapshot, snapshot) && !this.localFinishes.stale(snapshot.finish_epoch)) {
-            this.local.snapshot = snapshot;
+            this.local.snapshot = this.agentChanges.snapshot(LOCAL_MACHINE, snapshot, true);
             this.localFinishes.settle(snapshot);
           }
           this.local.state = "connected"; this.local.error = null;
@@ -933,6 +985,7 @@ export class MachineManager {
   }
   install(request: PcInstallRequest, shown?: string): PcInstallJob {
     if (this.stopped) throw new Error("Server stopping");
+    if (this.previewProfile) throw new PcUpdateRefused(PREVIEW_INSTALLS_NOTHING);
     const name = "name" in request ? request.name : undefined;
     if (name !== undefined && (typeof name !== "string" || name.length > 100)) throw new Error("PC name must be at most 100 characters");
     if (request.machine_id !== undefined) {
@@ -1173,8 +1226,7 @@ export class MachineManager {
     const accountAdd = request.account_add === true;
     if (accountAdd && (request.update_remote || options.auto || options.fromInstall || options.keysOnly)) throw new Error("An account add is its own setup, asked in its dialog");
     if (accountAdd && (target.herdr_socket || target.start_new_herdr)) throw new Error("An account add connects to that PC's own Ovis, not to a herdr session");
-    // the owner's socket is forwarded over a multiplexed connection, which this app has on Linux and macOS only
-    if (accountAdd && process.platform === "win32") throw new Error("Adding a PC to your account over SSH from Windows is not supported yet.");
+    if (accountAdd && this.previewProfile) throw new Error(PREVIEW_NO_ACCOUNT_ADD);
     if (existing?.machine.kind === "relay") throw new Error(RELAY_PC_UPDATES);
     if (existing?.machine.kind === "address") throw new Error(ADDRESS_PC_UPDATES);
     if (existing?.machine.kind === "hc") throw new Error(HC_MACHINE_MANAGED);
@@ -1537,8 +1589,9 @@ export class MachineManager {
     if (job && host.kind === "windows") job.public.windows_startup = moving || !this.machines.has(runtime.machine.id);
     const { platform } = inspection;
     let expectedSocket = inspection.expectedSocket;
+    if (target.own_ovis && this.previewProfile) throw new MachineActionRequired(PREVIEW_LEAVES_OWN_OVIS, "setup");
     if (target.own_ovis && host.kind !== "posix") throw new MachineActionRequired("Choosing this PC's Ovis server over SSH requires Linux or macOS", "setup");
-    const candidates = inspection.descriptors.filter((d) => d?.managed_remote === false && typeof d.socket_path === "string" && d.socket_path !== expectedSocket);
+    const candidates = this.previewProfile ? [] : inspection.descriptors.filter((d) => d?.managed_remote === false && typeof d.socket_path === "string" && d.socket_path !== expectedSocket);
     // what already serves the expected socket (a live bridge registered for it, or herdr answering there) is connected as
     // before: a saved PC that reconnects to it is never stopped by a choice nobody asked for.
     const servedAlready = async (): Promise<false | "bridge" | "herdr" | "socket"> => {
@@ -1573,7 +1626,7 @@ export class MachineManager {
           const proved = await this.verify(ssh, candidate, candidate.socket_path, true, true);
           if (runtime.generation !== generation || this.stopped || job?.abort.signal.aborted) throw new Error("Setup cancelled");
           if (proved.identity.pid !== candidate.pid || proved.identity.managed_remote !== false || proved.identity.herdr.runtime !== "herdr-core") continue;
-          found.push({ socket_path: candidate.socket_path, runtime: "herdr-core" });
+          found.push(foundOvis(candidate, proved.identity.bundle_version));
           answered = true;
           const listed = proved.identity.found_herdr_sessions;
           if (listed === undefined) unlisted = true;
@@ -1585,7 +1638,7 @@ export class MachineManager {
           // is neither dropped nor replaced by a new herdr. Only one proven not owned or not live is dropped (above).
           // Unasked, its runtime is told by its socket: a TUI herdr's ends in /herdr.sock, the core adapter's never does.
           // Only the core adapter's own name (isCoreAdapterSocket) is one: any other could never be connected to
-          if (owned && !validHerdrSocket(candidate.socket_path) && isCoreAdapterSocket(candidate.socket_path)) { found.push({ socket_path: candidate.socket_path, runtime: "herdr-core" }); unlisted = true; }
+          if (owned && !validHerdrSocket(candidate.socket_path) && isCoreAdapterSocket(candidate.socket_path)) { found.push(foundOvis(candidate, candidate.bundle_version)); unlisted = true; }
         }
       }
       if (runtime.generation !== generation || this.stopped || job?.abort.signal.aborted) throw new Error("Setup cancelled");
@@ -1648,6 +1701,7 @@ export class MachineManager {
       descriptor = undefined;
     }
     if (target.own_ovis && !descriptor) throw await ownOvisGone();
+    if (this.previewProfile && descriptor && !descriptor.managed_remote) throw new MachineActionRequired(PREVIEW_LEAVES_OWN_OVIS, "setup");
     // an account add lands only on that PC's own Ovis: never on a bridge this app runs there, nor one it would install
     // or start in its place (nothing below installs or starts anything for it)
     if (job?.accountAdd && descriptor?.managed_remote !== false) {
@@ -1791,6 +1845,8 @@ export class MachineManager {
         for (let i = 0; i < pollLimit; i++) {
           if (job?.abort.signal.aborted || runtime.generation !== generation || this.stopped) throw new Error("Setup cancelled");
           descriptor = (await host.descriptors(ssh)).find((d) => d.socket_path === expectedSocket && d.pid !== stalePid);
+          // a PC's own Ovis that registered there meanwhile is not the bridge started here: a preview leaves it alone
+          if (descriptor && this.previewProfile && !descriptor.managed_remote) throw new MachineActionRequired(PREVIEW_LEAVES_OWN_OVIS, "setup");
           if (descriptor) break;
           const found = await host.foundSessions?.(ssh, inspection);
           if (found?.gone) throw new MachineActionRequired("The herdr session chosen for this PC is no longer running. Start it on that PC and reconnect, or choose again.", "choose_herdr", false, found.sessions);
@@ -1924,6 +1980,94 @@ export class MachineManager {
     const port = await freePort();
     await ssh.forward(port, descriptor.port);
     return { url: `http://127.0.0.1:${port}`, token: descriptor.token };
+  }
+  /** A browser's local TCP forward is separate from the bridge and belongs to this SSH connection. */
+  async forwardWebPort(id: string, remotePort: number, bind: string, ovisPort: number, signal: AbortSignal): Promise<number> {
+    const cancelled = () => new MachineForwardError("forward_cancelled", "Opening this SSH port forward was cancelled");
+    if (signal.aborted) throw cancelled();
+    const runtime = this.machines.get(id);
+    if (id === LOCAL_MACHINE || (runtime && runtime.machine.kind !== "ssh")) throw new MachineForwardError("forward_not_ssh", "This PC is not connected over SSH");
+    if (!runtime) throw new MachineForwardError("machine_not_found", "PC not found");
+    const ssh = runtime.ssh;
+    const offline = () => new MachineForwardError("machine_offline", "Connect this PC over SSH first");
+    if (!ssh?.connected() || runtime.machine.state !== "connected") throw offline();
+    const forwards: WebForwards = runtime.webForwards ??= { open: new Map(), pending: new Map(), tail: Promise.resolve() };
+    const key = `${bind}:${remotePort}`;
+    // Each request waits on its own signal; an aborted one alone is told so.
+    const wait = async (entry: PendingWebForward): Promise<number> => {
+      entry.waiters++;
+      const left = Promise.withResolvers<never>();
+      left.promise.catch(() => undefined);
+      const leave = () => {
+        if (--entry.waiters === 0) entry.abort.abort();
+        left.reject(cancelled());
+      };
+      signal.addEventListener("abort", leave, { once: true });
+      try { return await Promise.race([entry.opening, left.promise]); }
+      finally { signal.removeEventListener("abort", leave); }
+    };
+    const pending = forwards.pending.get(key);
+    if (pending) return wait(pending);
+    const reuse = () => {
+      const existing = forwards.open.get(key);
+      if (existing?.retiring) return undefined;
+      if (existing?.ssh.listening()) return existing.port;
+      forwards.open.delete(key);
+    };
+    const existing = reuse();
+    if (existing !== undefined) return existing;
+    if (forwards.pending.size >= WEB_FORWARDS_PER_MACHINE) throw new MachineForwardError("forward_busy", "Too many ports are being opened for this PC");
+
+    const current = () => runtime.ssh === ssh && runtime.webForwards === forwards && runtime.machine.state === "connected" && ssh.connected();
+    const shared = new AbortController();
+    const check = () => {
+      if (shared.signal.aborted) throw cancelled();
+      if (!current()) throw offline();
+    };
+    const retire = async (key: string, forward: WebForward) => {
+      // A failed cancellation may already have closed the listener. Keep counting it
+      // against the cap, but do not return it as a working forward.
+      forward.retiring = true;
+      await forward.ssh.close();
+      forwards.open.delete(key);
+    };
+    const opening = forwards.tail.then(async () => {
+      try {
+        check();
+        const cached = reuse();
+        if (cached !== undefined) return cached;
+        const port = await freePort(bind === "[::1]" ? "::1" : bind);
+        // If Ovis listens only on another interface, freePort may still pick its port number.
+        if (port === ovisPort) throw new Error("That port is in use by Ovis");
+        check();
+        const same = forwards.open.get(key);
+        if (same?.retiring) await retire(key, same);
+        else if (forwards.open.size >= WEB_FORWARDS_PER_MACHINE) {
+          const oldest = forwards.open.entries().next().value;
+          if (oldest) await retire(...oldest);
+        }
+        check();
+        const tunnel = await ssh.forward(port, remotePort, true, bind);
+        if (!current() || !tunnel.listening()) {
+          await tunnel.close();
+          throw new Error("The port forward is no longer listening");
+        }
+        const opened = { port, ssh: tunnel };
+        forwards.open.set(key, opened);
+        if (shared.signal.aborted) {
+          await retire(key, opened);
+          throw cancelled();
+        }
+        return port;
+      } catch {
+        check();
+        throw new MachineForwardError("forward_failed", "Ovis could not open this SSH port forward");
+      }
+    }).finally(() => forwards.pending.delete(key));
+    const entry: PendingWebForward = { opening, waiters: 0, abort: shared };
+    forwards.pending.set(key, entry);
+    forwards.tail = opening.catch(() => undefined);
+    return wait(entry);
   }
   private pause(signal?: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
@@ -2211,7 +2355,17 @@ export class MachineManager {
       try { message = JSON.parse(String(event.data)); } catch { return; }
       if (message.type === "pane-status" && runtime.finishes.stale(message.finish_epoch)) return;
       if (["snapshot", "pane-status", "pane-exited"].includes(message.type)) runtime.snapshotRevision++;
-      if (message.type === "snapshot" && this.admitRemote(runtime, message.snapshot)) { runtime.machine.snapshot = message.snapshot; runtime.finishes.hold(message.snapshot.finish_epoch, message.snapshot.order_epoch); this.push.seed(forAlerts(message.snapshot.panes), runtime.machine.id, runtime.machine.name, pcServerId(runtime.machine)); this.emit(); }
+      if (message.type === "snapshot") {
+        const snapshot = message.snapshot;
+        const admitted = this.admitRemote(runtime, snapshot);
+        message = { ...message, snapshot: this.agentChanges.snapshot(runtime.machine.id, snapshot, admitted) };
+        if (admitted) {
+          runtime.machine.snapshot = snapshot;
+          runtime.finishes.hold(snapshot.finish_epoch, snapshot.order_epoch);
+          this.push.seed(forAlerts(snapshot.panes), runtime.machine.id, runtime.machine.name, pcServerId(runtime.machine));
+          this.emit();
+        }
+      }
       if (message.type === "pane-status") {
         if (runtime.machine.snapshot) { runtime.machine.snapshot = snapshotAfterStatus(runtime.machine.snapshot, message); runtime.finishes.hold(message.finish_epoch, runtime.acceptedEpoch); }
         if (runtime.candidate) runtime.candidate = snapshotAfterStatus(runtime.candidate, message);
@@ -2358,6 +2512,7 @@ export class MachineManager {
     return tracked;
   }
   private disconnect(runtime: Runtime): void {
+    if (!this.stopped && runtime.observer) this.agentChanges.disconnected(runtime.machine.id);
     runtime.generation++;
     runtime.refreshQueued = false;
     clearTimeout(runtime.retry); runtime.retry = undefined; clearInterval(runtime.poll);
@@ -2366,6 +2521,12 @@ export class MachineManager {
     runtime.observer?.close(); runtime.observer = undefined;
     for (const close of runtime.terminals) close(); runtime.terminals.clear();
     runtime.ssh?.close(); runtime.ssh = undefined; runtime.endpoint = undefined;
+    const webForwards = runtime.webForwards;
+    runtime.webForwards = undefined;
+    if (webForwards) {
+      for (const { ssh } of webForwards.open.values()) void ssh.close().catch(() => {});
+      webForwards.open.clear();
+    }
     runtime.tunnel?.close(); runtime.tunnel = undefined; delete runtime.machine.route;
     runtime.forward?.close(); runtime.forward = undefined;
     if (runtime.hc?.bridge) {
@@ -2420,10 +2581,12 @@ export class MachineManager {
   }
   private publish(runtime: Runtime, snapshot: SessionSnapshot, settled = false, server?: string): void {
     if (runtime.move) { runtime.move.snapshot = snapshot; runtime.move.snapshotServer = settled ? snapshot.order_epoch : server; return; }
+    this.agentChanges.snapshot(runtime.machine.id, snapshot, true);
     runtime.machine.snapshot = snapshot;
     if (settled) runtime.finishes.settle(snapshot); else runtime.finishes.hold(snapshot.finish_epoch, server);
     this.saveSoon();
-    this.push.seed(forAlerts(snapshot.panes), runtime.machine.id, runtime.machine.name, pcServerId(runtime.machine));
+    // A refresh that did not race the observer can recover status changes it missed while disconnected.
+    this.push.seed(forAlerts(snapshot.panes), runtime.machine.id, runtime.machine.name, pcServerId(runtime.machine), { reconcileDeferrals: settled });
   }
   private proved(runtime: Runtime, boot: string): void {
     runtime.machine.source_boot_id = boot;
@@ -2496,7 +2659,7 @@ export class MachineManager {
     // the key goes first: a registration saved without the PC must not leave its credential behind
     if (runtime.machine.kind === "relay") removeRelayPcKey(this.relayKeyPath(id));
     if (runtime.machine.kind === "address") removeAddressPcToken(this.addressTokenPath(id));
-    this.machines.delete(id); this.persist();
+    this.machines.delete(id); this.agentChanges.forget(id); this.persist();
     for (const suffix of ["", ".pub"]) try { unlinkSync(join(this.sshDir, id + suffix)); } catch {}
     this.emit();
   }
@@ -2547,10 +2710,10 @@ export class MachineManager {
    * included, while the person compares the ID with the one that PC shows; addRelay with `found` then pairs with
    * it.
    */
-  async relayFoundByCode(code: unknown, signal?: AbortSignal): Promise<{ ticket: string; server_id: string; name: string | null }> {
+  async relayFoundByCode(code: unknown, signal?: AbortSignal, relay?: string): Promise<{ ticket: string; server_id: string; name: string | null }> {
     if (this.stopped) throw new Error("Server stopping");
     if (typeof code !== "string" || code.length > 64) throw new TypedCodeError("not-a-code");
-    const offer = await offerFromCode(code, { ...(this.relaySocket ? { connect: this.relaySocket } : {}), ...(signal ? { signal } : {}) });
+    const offer = await offerFromCode(code, { ...(this.relaySocket ? { connect: this.relaySocket } : {}), ...(signal ? { signal } : {}), ...(relay ? { relay } : {}) });
     if (this.stopped) throw new Error("Server stopping");
     const now = this.now();
     for (const [ticket, held] of this.foundByCode) if (now - held.at > RELAY_FOUND_MS) this.foundByCode.delete(ticket);
@@ -2581,7 +2744,7 @@ export class MachineManager {
     const name = this.tailnet.foundAt(url);
     if (name === null) throw new TailnetPcError("not_found", "That PC is not among those found on Tailscale. Look again.");
     const asked = await this.tailnet.code(url as string, this.relayServerIds());
-    const found = await this.relayFoundByCode(asked.code);
+    const found = await this.relayFoundByCode(asked.code, undefined, asked.relay);
     if (found.server_id !== asked.server_id) {
       this.foundByCode.delete(found.ticket);
       throw new TailnetPcError("mismatch", "The relay found a different PC than the one asked. Nothing was added.");
@@ -2764,7 +2927,7 @@ export class MachineManager {
     return runtime.machine;
   }
   async stop(): Promise<void> {
-    this.stopped = true; clearTimeout(this.discoveryTimer); clearTimeout(this.hcTimer); clearInterval(this.localTimer); clearTimeout(this.saveTimer);
+    this.stopped = true; this.agentChanges.flush(); clearTimeout(this.discoveryTimer); clearTimeout(this.hcTimer); clearInterval(this.localTimer); clearTimeout(this.saveTimer);
     for (const id of this.jobs.keys()) this.cancelJob(id);
     this.installer.stop();
     for (const runtime of this.machines.values()) { runtime.ownJob?.abort.abort(); this.disconnect(runtime); }
@@ -2775,11 +2938,13 @@ export class MachineManager {
 }
 
 export function paneAfterStatus(p: HerdrPane, message: Extract<ServerMessage, { type: "pane-status" }>): HerdrPane {
-  const { background_tasks: before, background_wait: _waited, plan: planBefore, context: contextBefore, finish_id: _finish, ...pane } = p;
+  const { background_tasks: before, background_wait: _waited, plan: planBefore, context: contextBefore, finish_id: _finish, copilot_processing: processing, ...pane } = p;
   const tasks = message.background_tasks === undefined ? before : message.background_tasks > 0 ? message.background_tasks : undefined;
   const plan = message.plan === undefined ? planBefore : message.plan ?? undefined;
   const context = message.context === undefined ? contextBefore : message.context ?? undefined;
-  return { ...pane, agent_status: message.agent_status, ...(message.finish_id === undefined ? {} : { finish_id: message.finish_id }), ...(tasks === undefined ? {} : { background_tasks: tasks }), ...(message.background_wait ? { background_wait: true } : {}), ...(plan === undefined ? {} : { plan }), ...(context === undefined ? {} : { context }) };
+  const started = message.agent_status === "working" && p.agent_status !== "working";
+  const sample = started && processing === false ? undefined : processing;
+  return { ...pane, agent_status: message.agent_status, ...(sample === undefined ? {} : { copilot_processing: sample }), ...(message.finish_id === undefined ? {} : { finish_id: message.finish_id }), ...(tasks === undefined ? {} : { background_tasks: tasks }), ...(message.background_wait ? { background_wait: true } : {}), ...(plan === undefined ? {} : { plan }), ...(context === undefined ? {} : { context }) };
 }
 
 function snapshotAfterStatus(snapshot: SessionSnapshot, message: Extract<ServerMessage, { type: "pane-status" }>): SessionSnapshot {

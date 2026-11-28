@@ -2,7 +2,7 @@ import { NO_AGENT_MESSAGE } from "../../shared/submit-outcome.ts";
 import { resolveHerdrKeys } from "../../shared/herdr-keys.ts";
 import type { AgentIntegration, AgentStatus, CommandForm, CommandOutcome, ConversationTurn, DevicePairedEvent, DevicePairedSeenEvent, DevicesRevokedAll, HealthAuth, IntegrationsResponse, Machine, MachineEvent, OmoActivity, OmoTask, PairedDevice, PairingCode, PaneBackgroundAgentDetail, PaneDirection, PaneFindMatch, PaneFindRequest, PaneMoved, PanePlan, PaneResized, PaneSplit, PaneSwapped, PaneZoomed, PendingMessage, PlanStep, PluginActionResult, PluginActions, PluginActionsResponse, PortalStatus, RelayStatus, SecuritySummary, ServerMessage, SessionSnapshot, SlashCommand, TabMoved, TabMovedToWorkspace, UsageReport, WorkspaceCreated, WorkspaceInfo, WorktreeEntry, WorktreeInventory, WorktreeListing, WorktreeOpened, WorktreeRemoved, PullRequestEntry, PullRequestListing } from "../../shared/protocol.ts";
 import type { PushSubscriptionStatus, RepoBranchComparison, RepoDiffFile, RepoDiffFileList, RepoDiffFilePatch, RepoDiffRefs, RepoDiffRepository, RepoDiffScope, SessionHistoryAgent, SessionHistoryResponse, SessionResumeResponse } from "../../shared/protocol.ts";
-import { nextTabLabels, normalizeThemeChange, sharedPreferencesBody, type SharedPreferences } from "../../shared/preferences.ts";
+import { nextTabLabels, normalizeThemeChange, preferencesConflict, preferencesPutBody, type SharedPreferences } from "../../shared/preferences.ts";
 import type { PullRequestCheckLog, PullRequestView } from "../../shared/pull-request.ts";
 import type { SystemReport } from "../../shared/system.ts";
 import { VOICE_DEFAULTS, type VoiceStatus } from "../../shared/voice.ts";
@@ -329,8 +329,11 @@ function emitSse(event: MachineEvent): void {
 let preferences: SharedPreferences = { revision: 0, settings: {}, muted_panes: [] };
 
 function changePreferences(raw: unknown): Response {
-  const change = sharedPreferencesBody(raw);
-  if (change === null) return error("invalid_body", "Send { settings: object, pins?: string[], muted_panes?: string[], tab_labels?: { [pane|terminal]: string }, tab_labels_removed?: string[] }", 400);
+  const change = preferencesPutBody(raw);
+  if (change === null) return error("invalid_body", "Send { settings: object, pins?: string[], muted_panes?: string[], tab_labels?: { [pane|terminal]: string }, tab_labels_removed?: string[], expected_revision?: non-negative safe integer }", 400);
+  if (change.expected_revision !== undefined && change.expected_revision !== preferences.revision) {
+    return json(preferencesConflict(preferences), 409, { "cache-control": "no-store" });
+  }
   const { settings } = normalizeThemeChange(preferences.settings, change);
   const pins = change.pins ?? preferences.pins;
   const merged = { ...preferences.settings, ...settings };
@@ -494,6 +497,55 @@ function structureChanged(): void {
   if (!orderControl.holdSse) publishRoster();
   emitSse({ type: "machine-message", machine_id: local.id, message: { type: "session-changed" } });
   for (const socket of sockets) socket.push({ type: "session-changed" });
+}
+
+/**
+ * A pane brought beside another tab's pane, as herdr moves it there: it takes half of the target as a split
+ * does and leaves its tab as a close takes it, so a tab it leaves empty closes, and its workspace with it.
+ * The demo keeps its ID, and herdr's focus on it goes with it. With no room beside the target, nothing moves.
+ */
+function moveDemoPaneInto(pane: Pane, target: Pane, split: "right" | "down"): boolean {
+  const snap = snapshot();
+  const from = snap.layouts.find((layout) => layout.tab_id === pane.tab_id);
+  const into = snap.layouts.find((layout) => layout.tab_id === target.tab_id);
+  const cell = into?.panes.find((candidate) => candidate.pane_id === target.pane_id);
+  if (!into || !cell || !splitLayout(into, target.pane_id, { pane_id: pane.pane_id, focused: false, rect: cell.rect }, split)) return false;
+  // a tab the pane leaves shows its other panes again: a zoom on it would hide one of them
+  if (from) { closeLayoutPane(from, pane.pane_id); from.zoomed = false; }
+  const left = { tab: pane.tab_id, workspace: pane.workspace_id };
+  Object.assign(pane, { tab_id: target.tab_id, workspace_id: target.workspace_id });
+  const agent = snap.agents.find((entry) => entry.pane_id === pane.pane_id);
+  if (agent) Object.assign(agent, { tab_id: target.tab_id, workspace_id: target.workspace_id });
+  if (!snap.panes.some((candidate) => candidate.tab_id === left.tab)) {
+    snap.tabs = snap.tabs.filter((tab) => tab.tab_id !== left.tab);
+    snap.layouts = snap.layouts.filter((layout) => layout.tab_id !== left.tab);
+    autoTabs.delete(left.tab);
+    relabelAutoTabs(left.workspace);
+  } else if (from && from.focused_pane_id === pane.pane_id) {
+    from.focused_pane_id = from.panes[0]!.pane_id;
+    for (const candidate of from.panes) candidate.focused = candidate.pane_id === from.focused_pane_id;
+  }
+  snap.workspaces = snap.workspaces.filter((workspace) => snap.tabs.some((tab) => tab.workspace_id === workspace.workspace_id));
+  if (snap.focused_pane_id === pane.pane_id) {
+    snap.focused_tab_id = target.tab_id;
+    snap.focused_workspace_id = target.workspace_id;
+    into.focused_pane_id = pane.pane_id;
+    for (const candidate of into.panes) candidate.focused = candidate.pane_id === pane.pane_id;
+    // as focusDemoPane does: the focused pane's tab is its workspace's active one
+    const workspace = snap.workspaces.find((entry) => entry.workspace_id === target.workspace_id);
+    if (workspace) workspace.active_tab_id = target.tab_id;
+  }
+  for (const tab of snap.tabs) {
+    const own = snap.panes.filter((candidate) => candidate.tab_id === tab.tab_id);
+    Object.assign(tab, { pane_count: own.length, agent_status: rollupStatus(own.map((candidate) => candidate.agent_status)), focused: tab.tab_id === snap.focused_tab_id });
+  }
+  for (const [index, workspace] of snap.workspaces.entries()) {
+    const own = snap.panes.filter((candidate) => candidate.workspace_id === workspace.workspace_id);
+    const tabs = snap.tabs.filter((tab) => tab.workspace_id === workspace.workspace_id);
+    Object.assign(workspace, { number: index + 1, pane_count: own.length, tab_count: tabs.length, agent_status: rollupStatus(own.map((candidate) => candidate.agent_status)), focused: workspace.workspace_id === snap.focused_workspace_id });
+    if (!tabs.some((tab) => tab.tab_id === workspace.active_tab_id)) workspace.active_tab_id = tabs[0]!.tab_id;
+  }
+  return true;
 }
 
 /** A click in herdr focuses the pane, its tab and its workspace while preserving other tabs' own focus. */
@@ -1809,14 +1861,15 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
       if (side !== "left" && side !== "right" && side !== "up" && side !== "down") return error("invalid_side", "side must be left, right, up or down", 400);
       const other = paneOf(target);
       if (!other) return error("pane_not_found", "pane not found", 404);
-      const reason = other.pane_id === pane.pane_id ? "same_pane" : other.tab_id !== pane.tab_id ? "cross_tab" : null;
-      if (reason) return json({ ok: true, changed: false, reason } satisfies PaneMoved);
+      if (other.pane_id === pane.pane_id) return json({ ok: true, changed: false, reason: "same_pane" } satisfies PaneMoved);
       const split = side === "left" || side === "right" ? "right" : "down";
-      if (!moveLayoutPane(layout, pane.pane_id, target, split)) return error("split_failed", "The demo pane is too small to split.", 400);
+      const into = snap.layouts.find((candidate) => candidate.tab_id === other.tab_id);
+      if (!into) return error("pane_not_found", "pane not found", 404);
+      if (!(other.tab_id === pane.tab_id ? moveLayoutPane(layout, pane.pane_id, target, split) : moveDemoPaneInto(pane, other, split))) return error("split_failed", "The demo pane is too small to split.", 400);
       // herdr puts a moved pane right of or below its target: a swap puts it before
-      if (side === "left" || side === "up") swapLayoutPanes(layout, pane.pane_id, target);
+      if (side === "left" || side === "up") swapLayoutPanes(into, pane.pane_id, target);
       // a zoomed tab shows every pane again, as herdr-core's move makes it, so the moved one is in view
-      layout.zoomed = false;
+      into.zoomed = false;
       structureChanged();
       return json({ ok: true, changed: true, reason: null } satisfies PaneMoved);
     }
@@ -2155,7 +2208,7 @@ async function pushRoute(path: string, method: string, init: RequestInit | undef
 }
 
 /** Settings → Alerts → Also send to: kept in this page only, and never posted anywhere. */
-const NO_WEBHOOK: AlertWebhookView = { configured: false, preset: null, target: null, chat_id: null, alerts: DEFAULT_ALERTS, reachable_link: false, last_success_at: null, last_failure_at: null, last_error: null };
+const NO_WEBHOOK: AlertWebhookView = { configured: false, preset: null, target: null, chat_id: null, alerts: DEFAULT_ALERTS, link: true, reachable_link: false, last_success_at: null, last_failure_at: null, last_error: null };
 let demoWebhook: AlertWebhookView = NO_WEBHOOK;
 const demoMask = (preset: string, secret: string): string => { if (preset === "telegram") return "…"; try { return `${new URL(secret).host}/…`; } catch { return "…"; } };
 
@@ -2176,7 +2229,8 @@ function alertWebhookRoute(path: string, method: string, init: RequestInit | und
   const same = demoWebhook.configured && demoWebhook.preset === preset;
   if (!secret && !same) return error("invalid_webhook", preset === "telegram" ? "a bot token is required" : "a URL is required", 400);
   demoWebhook = { ...NO_WEBHOOK, configured: true, preset, target: secret ? demoMask(preset, secret) : demoWebhook.target,
-    chat_id: preset === "telegram" ? body.chat_id ?? null : null, alerts: body.alerts ?? demoWebhook.alerts,
+    chat_id: preset === "telegram" ? body.chat_id ?? (same ? demoWebhook.chat_id : null) : null, alerts: body.alerts ?? demoWebhook.alerts,
+    link: body.link ?? (same ? demoWebhook.link : true),
     reachable_link: demoWebhook.reachable_link || !/^(?:localhost|.+\.localhost|127(?:\.\d{1,3}){3}|0\.0\.0\.0|\[::1?\]|\[::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}\])\.?$/i.test(location.hostname) };
   return json(demoWebhook, 200, { "cache-control": "no-store" });
 }
@@ -2743,7 +2797,7 @@ class DemoSocket extends EventTarget {
     const pane = paneOf(paneId);
     if (!pane || pane.agent || chats.has(paneId) || this.mode === "observe") return;
     let history = histories.get(paneId);
-    // xterm sends SGR wheel reports once demo history has enabled mouse reporting.
+    // The terminal sends SGR wheel reports once demo history has enabled mouse reporting.
     text = text.replace(/\x1b\[<(\d+);\d+;\d+[Mm]/g, (_report, value: string) => {
       const button = Number(value);
       if (history && (button & 64) !== 0) history.setOffset(history.offset + ((button & 1) === 0 ? 3 : -3));

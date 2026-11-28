@@ -644,7 +644,7 @@ export function lockRefusal(code: "locked" | "strict"): string {
  * them, for the own window's card to show; this terminal never shows them, and asks for them typed all the same.
  */
 /** `list`: the join is let in by the account's signed list, so an approval is only received here: the device is in once its entry is in the list. */
-export interface OwnJoin { readonly id: string; readonly label: string; readonly asked_at?: string; readonly digits?: string; readonly list?: boolean; readonly list_behind?: boolean; readonly list_not_signer?: boolean; readonly list_needs_keys?: boolean; readonly list_held?: boolean; readonly list_unknown?: boolean }
+export interface OwnJoin { readonly id: string; readonly label: string; readonly asked_at?: string; readonly digits?: string; readonly list?: boolean; readonly list_behind?: boolean; readonly list_not_signer?: boolean; readonly list_needs_keys?: boolean; readonly list_held?: boolean; readonly list_unknown?: boolean; readonly held_why?: string }
 
 /**
  * A join this PC cannot let in (`list_unknown`, server/relay/session.ts): it is pinned to its account's signed list, and
@@ -652,34 +652,76 @@ export interface OwnJoin { readonly id: string; readonly label: string; readonly
  */
 const olderAppWords = (label: string): string => `${label} cannot be let in here: this PC lets devices into your account by its signed list, and ${label} asked without its part of that list, as an Ovis older than 0.5.10 does. Update Ovis on ${label}, then have it ask to join again.\n`;
 
-/** Why this PC lets nobody into its list by an approval here (GET /api/relay/joins), or keeps that one device out. */
-type CannotSign = "behind" | "not_signer" | "needs_keys" | "held";
+/**
+ * Why this PC lets nobody into its list by an approval here (GET /api/relay/joins), or keeps that one device out: a
+ * block here (`held`), or what `held_why` names (server/devices.ts KeptOut); `kept_out` for a reason this command
+ * does not know yet.
+ */
+type CannotSign = "behind" | "not_signer" | "needs_keys" | "held" | "freeze" | "account_hold" | "account_removed" | "untrusted" | "closed" | "locked" | "kept_out";
+
+/** `held_why` as this command says it. A Revoke here keeps out no key approved here, so the joins never name one. */
+const HELD_WHY: Readonly<Record<string, CannotSign>> = {
+  block: "held", freeze: "freeze", account_hold: "account_hold", account_removed: "account_removed", untrusted: "untrusted", closed: "closed", locked: "locked",
+};
 
 /**
  * What a terminal says once this PC took the approval of `label`: it is let in at once, or, by the account's list, once
  * its entry is there. `cannot`: why the approval here lets nobody in: this PC signs nobody into its list (`behind`;
  * `not_signer` for a PC that joined by an invite; `needs_keys` for one that came in as its account moved, with no key
- * of its own in the list yet), or it keeps that very device out (`held`, a block on this PC). `command`: how this
- * command is typed here.
+ * of its own in the list yet), or it keeps that very device out (CannotSign). `command`: how this command is typed here.
  */
-const approvedWords = (label: string, list: boolean, cannot: CannotSign | null = null, command = "ovis"): string => cannot === "held"
-  ? `${label} was not let in here: a device was blocked on this PC, and until that block is lifted this PC keeps out every device that came after it${list ? ", whether or not your account's list holds it" : ""}. Lift the block on a device of your account that is older than it and signs in with two-step sign-in, or run ${command} recover on this PC, which lists the block with the command that lifts it. ${label} can open this PC after that.\n`
-  : cannot === "behind"
-  ? `${label} was not let in: Ovis on this PC is older than what a device wrote into your account's list, and lets nobody new in until it is updated. Update Ovis on this PC (Settings → Updates), then have ${label} ask again; or allow it on another device of your account.\n`
-  : cannot === "needs_keys"
-  ? `${label} was not let in: this PC came into your account's list as your account moved, and holds no key of its own in it yet, so it lets nobody into the list itself. Allow ${label} on another device of your account, or run ${command} add on this PC to give it its keys (compare the number with a device of your account), then have ${label} ask again.\n`
-  : cannot === "not_signer"
-  ? `${label} was not let in: this PC joined your account by an invite, and a PC that did lets nobody into your account's list itself. Allow ${label} on another device of your account.\n`
-  : list
-  ? `The approval of ${label} was received. It opens this PC once it is in your account's list, which takes a moment; if it does not, have it ask again.\n`
-  : `${label} is let in; it opens this PC in a moment.\n`;
+function approvedWords(label: string, list: boolean, cannot: CannotSign | null = null, command = "ovis"): string {
+  switch (cannot) {
+    case "held":
+      return `${label} was not let in here: a device was blocked on this PC, and until that block is lifted this PC keeps out every device that came after it${list ? ", whether or not your account's list holds it" : ""}. Lift the block on a device of your account that is older than it and signs in with two-step sign-in, or run ${command} recover on this PC, which lists the block with the command that lifts it. ${label} can open this PC after that.\n`;
+    case "freeze":
+      return `${label} was not let in here: your Ovis account keeps out every device that came after a device it blocked, and this PC keeps to that. Lift the block on a device of your account that is older than it and signs in with two-step sign-in, or run ${command} recover on this PC, which lists the block with the command that lifts it. ${label} can open this PC after that.\n`;
+    case "account_hold":
+      return `${label} was not let in here: your Ovis account holds new devices or this one back on this PC for now, and approving it here does not change that.\n`;
+    case "account_removed":
+      return `${label} was not let in here: its key was removed from your Ovis account, and this PC lets no removed key in, whoever approves it here.\n`;
+    case "untrusted":
+      return `${label} was not let in here: this PC holds an earlier pairing of its key whose time it cannot trust, and keeps that key out.\n`;
+    case "closed":
+      return `${label} was not let in: this PC cannot trust its account records right now, and lets no new device in. Open it on its own screen, or run ${command} recover there, then have ${label} ask again.\n`;
+    case "locked":
+      return `${label} was not let in: this PC is locked, and lets in only a device approved on its own screen. Unlock it there, then have ${label} ask again.\n`;
+    case "kept_out":
+      return `${label} was not let in here: this PC keeps it out, whoever approves it here.\n`;
+    case "behind":
+      return `${label} was not let in: Ovis on this PC is older than what a device wrote into your account's list, and lets nobody new in until it is updated. Update Ovis on this PC (Settings → Updates), then have ${label} ask again; or allow it on another device of your account.\n`;
+    case "needs_keys":
+      return `${label} was not let in: this PC came into your account's list as your account moved, and holds no key of its own in it yet, so it lets nobody into the list itself. Allow ${label} on another device of your account, or run ${command} add on this PC to give it its keys (compare the number with a device of your account), then have ${label} ask again.\n`;
+    case "not_signer":
+      return `${label} was not let in: this PC joined your account by an invite, and a PC that did lets nobody into your account's list itself. Allow ${label} on another device of your account.\n`;
+    case null:
+      return list
+        ? `The approval of ${label} was received. It opens this PC once it is in your account's list, which takes a moment; if it does not, have it ask again.\n`
+        : `${label} is let in; it opens this PC in a moment.\n`;
+  }
+}
 
-/** Why an approval here lets this join into nobody's list, as GET /api/relay/joins says of it; null when it may. */
-const cannotSign = (join: OwnJoin): CannotSign | null => join.list_held === true ? "held" : join.list_behind === true ? "behind"
+/** Why an approval here lets this join into nobody's list, or this PC keeps it out, as GET /api/relay/joins says of it; null when it may. */
+const cannotSign = (join: OwnJoin): CannotSign | null => join.held_why !== undefined ? Object.hasOwn(HELD_WHY, join.held_why) ? HELD_WHY[join.held_why]! : "kept_out"
+  : join.list_held === true ? "held" : join.list_behind === true ? "behind"
   : join.list_needs_keys === true ? "needs_keys" : join.list_not_signer === true ? "not_signer" : null;
 
-/** What `POST /api/relay/join` made of the six digits typed: `away` when its answer did not come. */
-export type JoinOutcome = "approved" | "wrong_digits" | "gone" | "locked" | "strict" | "away";
+/**
+ * What `POST /api/relay/join` made of the six digits typed: `away` when its answer did not come. An approval this PC
+ * took names what keeps that device out as it was taken (`held_why`, null: nothing), in place of `approved`, which
+ * an Ovis that does not say it answers.
+ */
+export type JoinOutcome = "approved" | { readonly held_why: string | null } | "wrong_digits" | "gone" | "locked" | "strict" | "away";
+
+/**
+ * The join as an approval of it was answered: what keeps a join of no list out is what that answer says, which may
+ * have changed since the join was listed (null: nothing does). An answer that does not say leaves the join as listed.
+ */
+function answeredJoin(join: OwnJoin, answer: { readonly held_why?: unknown }): OwnJoin {
+  if (join.list === true || (answer.held_why !== null && typeof answer.held_why !== "string")) return join;
+  const { held_why: _listed, list_held: _held, ...rest } = join;
+  return answer.held_why === null ? rest : { ...rest, held_why: answer.held_why };
+}
 
 export interface JoinOptions extends AnswerInput {
   readonly approve: (id: string, digits: string) => Promise<JoinOutcome>;
@@ -729,11 +771,13 @@ export async function approveJoins(joins: readonly OwnJoin[], options: JoinOptio
       const typed = line.normalize("NFKC").replace(/\s/g, "");
       if (typed === "") { out(`${label} is left waiting until its time runs out.\n`); break; }
       if (!SIX_DIGITS.test(typed)) { out(`That line answered nothing: only all six digits ${label} shows let it in. Answer again.\n`); continue; }
-      const outcome = await options.approve(join.id, typed);
+      const answer = await options.approve(join.id, typed);
+      const outcome = typeof answer === "string" ? answer : "approved";
       if (outcome === "locked" || outcome === "strict") { out(lockRefusal(outcome)); return 1; }
       if (outcome === "away") { out("Your answer may not have reached the Ovis on this PC. Run this again once it answers.\n"); return 1; }
       // a join into the account's list is let in by its entry, first join or not: the approval was received, no more
-      out(outcome === "approved" ? first || join.list === true || join.list_held === true ? approvedWords(label, join.list === true, cannotSign(join), command.replace(/ approve$/, "")) : `Approved: ${label} joins your account once it confirms.\n`
+      const answered = outcome === "approved" ? answeredJoin(join, typeof answer === "string" ? {} : answer) : join;
+      out(outcome === "approved" ? first || join.list === true || cannotSign(answered) !== null ? approvedWords(label, join.list === true, cannotSign(answered), command.replace(/ approve$/, "")) : `Approved: ${label} joins your account once it confirms.\n`
         : outcome === "wrong_digits" ? first ? `That is not the number ${label} shows, so it was not let in. To try again, have ${label} ask again, then run ${command} again.\n`
           : `That is not the number ${label} shows. It was not let in; it can ask again.\n`
         : `${label} is no longer waiting.\n`);
@@ -804,12 +848,12 @@ async function linkWithCode(options: LinkOptions, api: Api): Promise<number> {
     for (;;) {
       // the code first: it starts a new pairing, which the offer then carries (RelayPanel CompactRelay);
       // the offer comes whether the code did or not, since its QR code still pairs
-      let code: ({ code: string; expires_at: string; server_id: string } & ForAccount) | null = null;
+      let code: ({ code: string; expires_at: string; server_id: string; app?: string } & ForAccount) | null = null;
       let refused = "";
       let offer: { url: string; expires_at: string } & ForAccount;
       try {
         try {
-          code = await api<{ code: string; expires_at: string; server_id: string } & ForAccount>("POST", "/api/relay/code");
+          code = await api<{ code: string; expires_at: string; server_id: string; app?: string } & ForAccount>("POST", "/api/relay/code");
           // this run's from here on, by its id. One from an Ovis that names none is told only by the QR code that carries it
           mine = mineOf(undefined, code.pairing?.id);
         } catch (error) {
@@ -836,7 +880,7 @@ async function linkWithCode(options: LinkOptions, api: Api): Promise<number> {
       out([
         "",
         ...code !== null
-          ? [`Code to type: ${code.code}   (works once, expires in ${left})`, `On the other device, open ${appHost(options, offer.url)}, choose Pair with a code and type it,`, "or scan this QR code with the phone's camera:"]
+          ? [`Code to type: ${code.code}   (works once, expires in ${left})`, `On the other device, open ${code.app === undefined ? appHost(options, offer.url) : new URL(code.app).host}, choose Pair with a code and type it,`, "or scan this QR code with the phone's camera:"]
           : [`No code to type this time (${refused}).`, `Scan this QR code with the phone's camera (expires in ${left}):`],
         "",
         qr(offer.url),
@@ -1053,7 +1097,7 @@ async function addByQr(options: LinkOptions, api: Api, joining: Joining): Promis
   let lost: string | null = null;
   let older = false;
   const forAccount = { headers: { "x-ovis-expect-account": joining.signedIn } };
-  let card: { readonly url: string; readonly typed: string | null; readonly refused: string; readonly serverId: string; readonly until: number } | null = null;
+  let card: { readonly url: string; readonly typed: string | null; readonly typedApp: string; readonly refused: string; readonly serverId: string; readonly until: number } | null = null;
   let screen = false;
   let drawnFor = "";
   let atPrompt = false;
@@ -1069,7 +1113,7 @@ async function addByQr(options: LinkOptions, api: Api, joining: Joining): Promis
     const head = ["2/2  Let this PC in", "", "Scan this QR code with a device that is signed in to this Ovis account. It adds this PC to the account; there is no number to type.", ...!tied && !joining.plain ? [OLDER_PC] : [], ""];
     const tail = [
       ...card.typed !== null
-        ? [`Code to type: ${card.typed}   (works once, expires in ${left})`, `Or, on that device, open ${appHost(options, card.url)}, choose Pair with a code and type it.`]
+        ? [`Code to type: ${card.typed}   (works once, expires in ${left})`, `Or, on that device, open ${card.typedApp}, choose Pair with a code and type it.`]
         : [`No code to type this time (${card.refused}). The QR code expires in ${left}.`],
       `No device in the account yet? Open ${appHost(options, card.url)} on your phone, sign in, then scan.`,
       `That device then shows an ID: pair only if it matches this PC's ID, every group: ${groups(card.serverId)}`,
@@ -1117,9 +1161,9 @@ async function addByQr(options: LinkOptions, api: Api, joining: Joining): Promis
   const mint = async (): Promise<void> => {
     minted++;
     pinned = null;
-    let typed: ({ code: string; expires_at: string; server_id: string } & ForAccount) | null = null;
+    let typed: ({ code: string; expires_at: string; server_id: string; app?: string } & ForAccount) | null = null;
     let refused = "";
-    try { typed = await api<{ code: string; expires_at: string; server_id: string } & ForAccount>("POST", "/api/relay/code", forAccount); } catch (error) {
+    try { typed = await api<{ code: string; expires_at: string; server_id: string; app?: string } & ForAccount>("POST", "/api/relay/code", forAccount); } catch (error) {
       if (!(error instanceof LocalError)) throw error;
       // nothing was started, and the code pending stays as it was: neither taken back here nor counted as this round's
       if (NO_CODE_STARTED.has(error.code)) throw refusal(error);
@@ -1160,7 +1204,7 @@ async function addByQr(options: LinkOptions, api: Api, joining: Joining): Promis
       older = true;
       say(`${OLDER_PC}\n`);
     }
-    card = { url: offer.url, typed: typed?.code ?? null, refused, serverId: typed?.server_id ?? decoded.server_id, until: Math.min(typed === null ? Infinity : Date.parse(typed.expires_at), Date.parse(offer.expires_at)) };
+    card = { url: offer.url, typed: typed?.code ?? null, typedApp: typed?.app === undefined ? appHost(options, offer.url) : new URL(typed.app).host, refused, serverId: typed?.server_id ?? decoded.server_id, until: Math.min(typed === null ? Infinity : Date.parse(typed.expires_at), Date.parse(offer.expires_at)) };
     draw();
   };
   // a device got in, or this PC joined an account: from then on no code is shown again, whatever becomes of that device
@@ -1778,7 +1822,7 @@ async function watchFirstJoins(options: LinkOptions, api: Api, watched: { readon
   const stopAt = now() + FIRST_JOIN_MS;
   interface Question { readonly prompt: string; shownAt: number | null }
   const intro: Question = { prompt: `Open ${name} from My PCs on your phone. If the phone shows six digits, type them here (Enter to finish without): `, shownAt: null };
-  let asked: (Question & { readonly id: string; readonly label: string; readonly list: boolean; readonly cannot: CannotSign | null }) | null = null;
+  let asked: (Question & { readonly id: string; readonly label: string; readonly list: boolean; readonly join: OwnJoin }) | null = null;
   const current = (): Question => asked ?? intro;
   const seen = new Set<string>();
   let onScreen: Question | null = null;
@@ -1824,8 +1868,8 @@ async function watchFirstJoins(options: LinkOptions, api: Api, watched: { readon
         const { id, label } = asked;
         if (!SIX_DIGITS.test(typed)) { say(`That line answered nothing: type all six digits ${label} shows, or press Enter by itself to finish without. Answer again.\n`); continue; }
         try {
-          await api("POST", "/api/relay/join", { body: { id, digits: typed } });
-          say(approvedWords(label, asked.list, asked.cannot, cli(options)));
+          const answer = await api<{ held_why?: unknown } | undefined>("POST", "/api/relay/join", { body: { id, digits: typed } });
+          say(approvedWords(label, asked.list, cannotSign(answeredJoin(asked.join, answer ?? {})), cli(options)));
           return true;
         } catch (error) {
           if (signal.aborted || !(error instanceof LocalError || error instanceof AwayError)) throw error;
@@ -1860,7 +1904,7 @@ async function watchFirstJoins(options: LinkOptions, api: Api, watched: { readon
           const label = plainLabel(next.label);
           // a join this PC cannot let in is asked nothing: its six digits would let nobody in
           if (next.list_unknown === true) say(olderAppWords(label));
-          else asked = { id: next.id, label, list: next.list === true, cannot: cannotSign(next), prompt: `${firstJoinLead(next, account)} Type the six digits ${label} shows (one wrong entry ends this request), or press Enter to finish without: `, shownAt: null };
+          else asked = { id: next.id, label, list: next.list === true, join: next, prompt: `${firstJoinLead(next, account)} Type the six digits ${label} shows (one wrong entry ends this request), or press Enter to finish without: `, shownAt: null };
         }
         const rows = await throughAccount();
         if (rows !== null && known === null) known = new Map(rows.map((row) => [row.id, usage(row)]));

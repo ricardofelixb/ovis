@@ -1,6 +1,6 @@
 /**
  * Simplified Chinese for the keys only the chat files use:
- * components/ChatView.tsx, components/Markdown.tsx, components/MermaidLightbox.tsx,
+ * components/ChatView.tsx, components/ChatWork.tsx, components/ChatTurn.tsx, components/Markdown.tsx, components/MermaidLightbox.tsx,
  * components/ChatMinimap.tsx, components/ImageLightbox.tsx, components/BackgroundTasks.tsx,
  * components/BackgroundAgentDetail.tsx, components/Artifacts.tsx, components/OmpBtw.tsx, components/MarkdownLinkMenu.tsx,
  * lib/workBlocks.ts (with CATEGORY_LABEL), lib/toolVerbs.ts (with VERB_LABEL), lib/outcomeChip.ts,
@@ -242,7 +242,6 @@ export const CHAT_ZH: Record<string, string> = {
   "{n} of {count}": "第 {n} 张，共 {count} 张",
   "Couldn't copy the image. Download it instead.": "无法复制图片。请改为下载。",
   "Couldn't save the image.": "无法保存图片。",
-  "Saved to Downloads.": "已保存到“下载”。",
   "Conversation turns": "对话轮次",
   "Go to turn {n}": "跳到第 {n} 轮",
   "Show full message": "显示完整消息",

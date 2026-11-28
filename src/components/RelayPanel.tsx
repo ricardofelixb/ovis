@@ -9,6 +9,7 @@ import { t, useT } from "../lib/i18n.ts";
 import { callNative, hasNativePlugin } from "../lib/nativeApp.ts";
 import { announcePairingCode, PAIRING_CODE_EVENT, QR_CODE_ENDED_CHANNEL, tellOtherWindowsQrCodeEnded, type AnnouncedCode, type RelayState } from "../lib/useRelay.ts";
 import type { RelayStatus } from "../../shared/protocol.ts";
+import { GLOBAL_APP, REGIONAL_APPS } from "../../shared/relay-regions.ts";
 import { decodeOffer } from "../../shared/relay-offer.ts";
 import { QrReveal, ShareLink } from "./PhonePanel.tsx";
 import { KeyId } from "./KeyId.tsx";
@@ -324,12 +325,7 @@ export function RelayPairing({ phone = false, compact = false, qrOnly = false, o
   // the typed code names the PC too, so its ID stays to compare with while the QR offer is being fetched again
   const offerId = offer === null ? undefined : decodeOffer(offer.url)?.server_id;
   const serverId = offerId ?? typedId;
-  const pcId = serverId !== null && (
-    <div className="relay-pairing-id">
-      <p className="settings-description">{t("This PC's ID")}</p>
-      <KeyId id={serverId} label={t("This PC's ID")} />
-    </div>
-  );
+  const pcId = serverId !== null && <ThisPcId id={serverId} />;
   const newCode = <button type="button" className="btn" disabled={state === "minting"} onClick={() => void renew()}><RefreshCw aria-hidden="true" />{t("New code")}</button>;
   if (phone) return (
     <div className="relay-pairing-phone" role="status">
@@ -375,7 +371,7 @@ export function RelayPairing({ phone = false, compact = false, qrOnly = false, o
  * else ends this one on the PC (`reset`): it goes, and Refresh asks for another, never on its own, or the two
  * would keep ending each other.
  */
-function CompactRelay({ qr, qrExpires, failure, reset, onMinted }: { qr: string | null; qrExpires: string | null; failure: string | null; reset: number; onMinted: () => void }) {
+export function CompactRelay({ qr, qrExpires, failure, reset, onMinted }: { qr: string | null; qrExpires: string | null; failure: string | null; reset: number; onMinted: () => void }) {
   const t = useT();
   const [code, setCode] = useState<RelayCode | null>(null);
   const [busy, setBusy] = useState(false);
@@ -413,6 +409,8 @@ function CompactRelay({ qr, qrExpires, failure, reset, onMinted }: { qr: string 
     setBusy(false);
   }, [reset]);
   const deadline = code !== null ? code.expires_at : qrExpires;
+  // a code on this PC's own relay is found only through the app beside it, so that app is named; Ovis's is the default
+  const ownApp = code?.app !== undefined && code.app !== GLOBAL_APP && !Object.values(REGIONAL_APPS).includes(code.app) ? code.app : null;
   useEffect(() => {
     if (deadline === null) return;
     const ms = Date.parse(deadline) - Date.now();
@@ -425,10 +423,24 @@ function CompactRelay({ qr, qrExpires, failure, reset, onMinted }: { qr: string 
     const timer = window.setTimeout(() => void mint(), ms);
     return () => window.clearTimeout(timer);
   }, [code, deadline]);
+  // Refresh can return a new code while the QR still carries the previous identity.
+  const serverId = code?.server_id ?? (qr === null ? undefined : decodeOffer(qr)?.server_id) ?? null;
   return (
     <div className="relay-pairing-compact" role="status">
       <CompactPair qr={qr} qrLabel={t("QR code that pairs a phone through the relay")} code={code?.code ?? null} codeLabel={t("Code to type")} busy={busy} onRefresh={() => void mint()} />
+      {ownApp !== null && <p className="settings-hint">{t("Type the code in {app}.", { app: new URL(ownApp).host })}</p>}
+      {serverId !== null && <ThisPcId id={serverId} />}
       {(error ?? failure) !== null && <p className="settings-hint relay-error" role="alert">{error ?? failure}</p>}
+    </div>
+  );
+}
+
+function ThisPcId({ id }: { id: string }) {
+  const t = useT();
+  return (
+    <div className="relay-pairing-id">
+      <p className="settings-description">{t("This PC's ID")}</p>
+      <KeyId id={id} label={t("This PC's ID")} />
     </div>
   );
 }
@@ -493,7 +505,7 @@ function TypedCode({ reset, onMinted }: { reset: number; onMinted: (code: RelayC
       {code !== null && (
         <div className="relay-typed-code" role="status">
           <p className="relay-typed-code-value" aria-label={t("Code to type")}>{code.code}</p>
-          <p className="settings-hint">{t("On the other device, open app.ovis.sh, choose Pair with a code and type it. Expires in {time}. It works once.", { time: left })}</p>
+          <p className="settings-hint">{t("On the other device, open {app}, choose Pair with a code and type it. Expires in {time}. It works once.", { app: new URL(code.app ?? GLOBAL_APP).host, time: left })}</p>
           <p className="settings-hint">{t("That device then shows an ID: pair only if it matches this PC's ID below, every group.")}</p>
         </div>
       )}
