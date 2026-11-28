@@ -52,6 +52,18 @@ await withDemoBrowser({
     await open(session, landscape, theme, "?app=inbox", async (page) => {
       await page.locator(".inbox-column .inbox-rail").waitFor();
       inbox = (await railTop(page, ".inbox-column .inbox-rail")).button;
+      const selector = '.inbox-rail-item[aria-current="page"]';
+      const current = page.locator(selector);
+      await current.waitFor();
+      const fill = () => current.evaluate((button) => getComputedStyle(button).backgroundColor);
+      const transparent = "rgba(0, 0, 0, 0)";
+      assert.equal(await fill(), transparent, `${theme}: Rail marks the current place with its glyph, not a fill`);
+      await current.hover();
+      assert.equal(await fill(), transparent, `${theme}: hovering does not fill the current place`);
+      await page.mouse.down();
+      await page.waitForFunction(([selector, transparent]) => getComputedStyle(document.querySelector(selector)!).backgroundColor !== transparent, [selector, transparent] as const);
+      await page.mouse.move(700, 300);
+      await page.mouse.up();
     });
     await open(session, landscape, theme, `?pane=${encodeURIComponent(panes.api)}`, async (page) => {
       const rail = ".sidebar:not(.inbox-column) > .inbox-rail";
