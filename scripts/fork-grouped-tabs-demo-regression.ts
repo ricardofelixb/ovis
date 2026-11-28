@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { chromium } from "playwright-core";
 import type { SessionSnapshot } from "../shared/protocol.ts";
 import panes from "../site/demo/fixtures/panes.json";
-import { buildDemoApp } from "./demo-build.ts";
+import { withDemoBrowser } from "./demo-browser.ts";
 import { serveDemo } from "./demo-server.ts";
-import { chromePath } from "./chrome-path.ts";
 
 /** All metadata is synthetic and confined to this disposable demo, never a live session. */
 function fixture(snapshot: SessionSnapshot | null, ids: string[]): void {
@@ -34,160 +31,86 @@ function fixture(snapshot: SessionSnapshot | null, ids: string[]): void {
   }
 }
 
-const app = mkdtempSync(join(tmpdir(), "ovis-grouped-tabs-demo-"));
-try {
-  await buildDemoApp(app);
-  const transportPath = join(app, "demo-transport.js");
-  const transport = readFileSync(transportPath, "utf8");
-  assert.ok(transport.includes("function readSnapshot(machine) {"), "the demo's snapshot hook is available");
-  writeFileSync(transportPath, transport.replace("function readSnapshot(machine) {", `function readSnapshot(machine) { (${fixture.toString()})(machine.snapshot, ${JSON.stringify([panes.api, panes.web, panes.flaky, panes.omp, panes.cli, panes.hermes, panes.shell])});`));
-  const index = join(app, "index.html");
-  writeFileSync(index, readFileSync(index, "utf8").replace(/<script type="module"/, '<script src="./demo-transport.js"></script>\n<script type="module"'));
-  const server = serveDemo(app);
-  try {
-    const browser = await chromium.launch({ executablePath: chromePath(), headless: true, args: ["--no-sandbox"] });
+await withDemoBrowser({
+  tempPrefix: "ovis-grouped-tabs-demo-",
+  serve(app) {
+    const transportPath = join(app, "demo-transport.js");
+    const transport = readFileSync(transportPath, "utf8");
+    assert.ok(transport.includes("function readSnapshot(machine) {"), "the demo's snapshot hook is available");
+    writeFileSync(transportPath, transport.replace("function readSnapshot(machine) {", `function readSnapshot(machine) { (${fixture.toString()})(machine.snapshot, ${JSON.stringify([panes.api, panes.web, panes.flaky, panes.omp, panes.cli, panes.hermes, panes.shell])});`));
+    return serveDemo(app);
+  },
+}, async ({ newContext, baseUrl, evidence }) => {
+  for (const width of [1280, 390]) for (const { enabled, children, overflow = false } of [{ enabled: false, children: 2 }, { enabled: true, children: 2 }, { enabled: true, children: 6 }, { enabled: true, children: 2, overflow: true }]) {
+    if (overflow && width < 768) continue;
+    const context = await newContext({ viewport: { width, height: 844 }, isMobile: width < 768, hasTouch: width < 768 });
     try {
-      for (const width of [1280, 390]) for (const { enabled, children, overflow = false } of [{ enabled: false, children: 2 }, { enabled: true, children: 2 }, { enabled: true, children: 6 }, { enabled: true, children: 2, overflow: true }]) {
-        if (overflow && width < 768) continue;
-        const context = await browser.newContext({ viewport: { width, height: 844 }, isMobile: width < 768, hasTouch: width < 768, locale: "en-US" });
-        try {
-          await context.addInitScript(({ enabled: agentFriends, children: count, overflow: more }) => {
-            localStorage.setItem("qa:children", String(count));
-            localStorage.setItem("qa:overflow", String(more));
-            localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", agentFriends, alertsOn: false }));
-            localStorage.setItem("ovis:phone-tabs", JSON.stringify("header"));
-            Reflect.set(window, "__ovisDemoHoldTurn", true);
-          }, { enabled, children, overflow });
-          const page = await context.newPage();
-          const errors: string[] = [];
-          page.on("pageerror", (error) => errors.push(error.message));
-          await page.goto(`http://127.0.0.1:${server.port}/herdr-web-ui/demo/app/?pane=${encodeURIComponent(panes.api)}`);
-          await page.locator(".conn-live").waitFor();
-          const row = page.locator(".header-tabs .tab-strip");
-          await row.getByRole("tab", { name: /^QA parent/ }).waitFor();
-          if (overflow) {
-            await row.getByRole("tab", { name: "QA unrelated 0", exact: true }).click();
-            await page.locator(".header-tabs .tab-strip-more").click();
-            const more = page.getByRole("menu", { name: "More tabs", exact: true });
-            await more.getByRole("menuitemcheckbox", { name: "QA implementer", exact: true }).click({ button: "right" });
-            const childMenu = page.getByRole("menu", { name: "QA implementer", exact: true });
-            await childMenu.waitFor();
-            await more.waitFor({ state: "detached" });
-            await childMenu.getByRole("menuitem", { name: "Rename tab", exact: true }).click();
-            await row.getByRole("textbox").waitFor();
-          } else if (!enabled) {
-            assert.equal(await row.locator(".fork-tab-chip").count(), 0);
-            assert.equal(await row.getByRole("tab", { name: /^QA implementer/ }).count(), 1);
-          } else {
-            const chip = row.getByRole("tab", { name: "QA implementer", exact: true });
-            assert.equal(await row.locator(".fork-tab-chip").count(), children);
-            assert.equal(await chip.locator(".lucide-bot").count(), 1);
-            assert.equal(await chip.locator(".fork-tab-friend").count(), 0);
-            await chip.click();
-            await page.locator(`[data-layout-pane=${JSON.stringify(panes.web)}]`).waitFor({ state: "visible" });
-            assert.equal(await chip.getAttribute("aria-selected"), "true");
-            await page.waitForFunction(() => {
-              const selected = document.querySelector('.header-tabs .fork-tab-chip[aria-selected="true"]')?.getBoundingClientRect();
-              const strip = document.querySelector(".header-tabs .tab-strip")?.getBoundingClientRect();
-              return selected && strip && selected.left >= strip.left - 1 && selected.right <= strip.right + 1;
-            }, null, { timeout: 5_000 });
-            assert.ok((await page.title()).includes("QA implementer"), "the window title names the selected child");
-            assert.equal(await row.locator(".tab-strip-item.is-active .tab-strip-label").textContent(), "QA parent");
-            if (width < 768) {
-              const box = (await chip.boundingBox())!;
-              assert.ok(box.width >= 44 && box.height >= 44, "phone chips are touch targets");
-              const gap = await row.locator(".tab-strip-item.is-active").evaluate((item) => {
-                const label = item.querySelector(".tab-strip-label")!.getBoundingClientRect();
-                const chips = item.querySelector(".fork-tab-chips")!.getBoundingClientRect();
-                return chips.left - label.right;
-              });
-              assert.ok(gap < 24, `a phone's tab hugs its short title and its chips (gap ${gap}px)`);
-              if (process.env.QA_SHOTS) await page.screenshot({ path: `${process.env.QA_SHOTS}/phone-${children}.png`, clip: { x: 0, y: 0, width, height: 120 } });
-              const inactive = row.getByRole("tab", { name: "QA reviewer", exact: true });
-              const before = await inactive.evaluate((node) => node.previousElementSibling?.getAttribute("aria-label"));
-              assert.ok(before);
-              await inactive.dispatchEvent("pointerdown", { pointerType: "touch", pointerId: 1, clientX: 0, clientY: 0 });
-              const childMenu = page.getByRole("dialog", { name: "QA reviewer", exact: true });
-              await childMenu.waitFor();
-              await inactive.dispatchEvent("pointerup", { pointerType: "touch", pointerId: 1 });
-              assert.equal(await chip.getAttribute("aria-selected"), "true", "a long press does not select the child");
-              await childMenu.getByRole("button", { name: "Move tab left", exact: true }).click();
-              await childMenu.waitFor({ state: "detached" });
-              await page.waitForFunction((previous) => {
-                const names = [...document.querySelectorAll(".header-tabs .fork-tab-chip")].map((node) => node.getAttribute("aria-label"));
-                return names.includes(previous) && names.indexOf("QA reviewer") < names.indexOf(previous);
-              }, before);
-              await page.locator(".header-tabs-sheet").click();
-              const sheet = page.locator(".row-sheet");
-              const review = sheet.getByRole("button", { name: "QA reviewer", exact: true });
-              await review.waitFor();
-              assert.equal(await review.locator(".lucide-bot").count(), 1);
-              await review.click();
-              await sheet.waitFor({ state: "detached" });
-              await page.locator(`[data-layout-pane=${JSON.stringify(panes.flaky)}]`).waitFor({ state: "visible" });
-            } else {
-              await chip.press("F2");
-              const rename = row.getByRole("textbox");
-              await rename.waitFor();
-              await rename.press("Escape");
-              await chip.waitFor();
-              const next = await chip.evaluate((node) => node.nextElementSibling?.getAttribute("aria-label"));
-              assert.ok(next);
-              await chip.press("Alt+Shift+ArrowRight");
-              await page.waitForFunction((neighbour) => {
-                const names = [...document.querySelectorAll(".header-tabs .fork-tab-chip")].map((node) => node.getAttribute("aria-label"));
-                return names.includes(neighbour) && names.indexOf(neighbour) < names.indexOf("QA implementer");
-              }, next);
-              await page.locator('.header-tabs .tab-strip[aria-busy="false"]').waitFor();
-              const sibling = row.getByRole("tab", { name: next, exact: true });
-              const target = (await chip.boundingBox())!;
-              await sibling.dragTo(chip, { targetPosition: { x: target.width - 2, y: target.height / 2 } });
-              await page.waitForFunction((neighbour) => {
-                const names = [...document.querySelectorAll(".header-tabs .fork-tab-chip")].map((node) => node.getAttribute("aria-label"));
-                return names.includes(neighbour) && names.indexOf("QA implementer") < names.indexOf(neighbour);
-              }, next);
-              assert.equal(await chip.getAttribute("aria-selected"), "true", "dragging does not select another child");
-              if (children === 2) {
-                await row.getByRole("tab", { name: "QA parent", exact: true }).click();
-                const area = (await page.locator(".pane-split").boundingBox())!;
-                const source = (await chip.boundingBox())!;
-                const start = { x: source.x + source.width / 2, y: source.y + source.height / 2 };
-                const end = { x: area.x + area.width * 0.8, y: area.y + area.height / 2 };
-                const guide = page.locator(".split-drop.is-visible");
-                await page.mouse.move(start.x, start.y);
-                await page.mouse.down();
-                await page.mouse.move(end.x, end.y, { steps: 6 });
-                await page.waitForFunction(() => document.querySelector(".split-drop.is-visible")?.getAttribute("data-edge") === "right", null, { timeout: 5_000 });
-                await page.mouse.move(start.x, start.y, { steps: 6 });
-                // Upstream keeps the outline while dragging, but offers no split over the strip.
-                await page.waitForFunction(() => document.querySelector(".split-drop.is-visible")?.getAttribute("data-edge") === null);
-                await page.mouse.move(end.x, end.y, { steps: 6 });
-                await page.waitForFunction(() => document.querySelector(".split-drop.is-visible")?.getAttribute("data-edge") === "right");
-                await page.keyboard.press("Escape");
-                await page.mouse.up();
-                await guide.waitFor({ state: "hidden" });
-                assert.equal(await page.locator(".pane-split.is-split").count(), 0, "Escape cancels the split drag");
-                await page.mouse.move(start.x, start.y);
-                await page.mouse.down();
-                await page.mouse.move(end.x, end.y, { steps: 6 });
-                await page.waitForFunction(() => document.querySelector(".split-drop.is-visible")?.getAttribute("data-edge") === "right");
-                await page.mouse.up();
-                await page.locator(".pane-split.is-split").waitFor();
-                await page.locator(`.pane-split.is-split [data-layout-pane=${JSON.stringify(panes.api)}]:visible`).waitFor();
-                await page.locator(`.pane-split.is-split [data-layout-pane=${JSON.stringify(panes.web)}]:visible`).waitFor();
-                await guide.waitFor({ state: "hidden" });
-              }
-            }
-            if (process.env.UI_EVIDENCE_DIR && children === 2) {
-              mkdirSync(process.env.UI_EVIDENCE_DIR, { recursive: true });
-              await page.screenshot({ path: join(process.env.UI_EVIDENCE_DIR, `grouped-tabs-${width}.png`) });
-            }
-          }
-          assert.deepEqual(errors, []);
-          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-          console.log(`PASS grouped tabs: width=${width}, agentFriends=${enabled}, children=${children}, overflow=${overflow}`);
-        } finally { await context.close(); }
+      await context.addInitScript(({ enabled: agentFriends, children: count, overflow: more }) => {
+        localStorage.setItem("qa:children", String(count));
+        localStorage.setItem("qa:overflow", String(more));
+        localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", agentFriends, alertsOn: false }));
+        localStorage.setItem("ovis:phone-tabs", JSON.stringify("header"));
+        Reflect.set(window, "__ovisDemoHoldTurn", true);
+      }, { enabled, children, overflow });
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.goto(`${baseUrl}?pane=${encodeURIComponent(panes.api)}`);
+      await page.locator(".conn-live").waitFor();
+      const row = page.locator(".header-tabs .tab-strip");
+      await row.getByRole("tab", { name: /^QA parent/ }).waitFor();
+      const parent = row.getByRole("tab", { name: /^QA parent/ });
+      if (overflow) {
+        await row.getByRole("tab", { name: "QA unrelated 0", exact: true }).click();
+        await page.locator(".header-tabs .tab-strip-more").click();
+        const more = page.getByRole("menu", { name: "More tabs", exact: true });
+        await more.getByRole("menuitem", { name: /^QA implementer/ }).click();
+        await page.locator(`[data-layout-pane=${JSON.stringify(panes.web)}]`).waitFor({ state: "visible" });
+      } else if (!enabled) {
+        assert.equal(await row.locator(".workspace-fold-count").count(), 0);
+        assert.equal(await row.getByRole("tab", { name: /^QA implementer/ }).count(), 1);
+      } else {
+        assert.equal(await row.getByRole("tab", { name: /^QA (implementer|reviewer|helper)/ }).count(), 0, "job agents have no tab of their own");
+        assert.equal(await parent.locator(".workspace-fold-count").textContent(), `+${children}`);
+        const label = (await parent.locator(".tab-strip-label").boundingBox())!;
+        const count = (await parent.locator(".workspace-fold-count").boundingBox())!;
+        assert.ok(count.x >= label.x + label.width - 1, `"+N" follows the tab's name (count at ${count.x}px, name ends at ${label.x + label.width}px)`);
+        let menu;
+        if (width < 768) {
+          await parent.dispatchEvent("pointerdown", { pointerType: "touch", pointerId: 1, clientX: 0, clientY: 0 });
+          menu = page.getByRole("dialog", { name: "QA parent", exact: true });
+          await menu.waitFor();
+          await parent.dispatchEvent("pointerup", { pointerType: "touch", pointerId: 1 });
+        } else {
+          await parent.click({ button: "right" });
+          menu = page.getByRole("menu", { name: "QA parent", exact: true });
+          await menu.waitFor();
+        }
+        const job = menu.getByRole(width < 768 ? "button" : "menuitem", { name: /^QA implementer/ });
+        assert.equal(await job.locator(".lucide-bot").count(), 1);
+        assert.equal(await menu.getByRole(width < 768 ? "button" : "menuitem", { name: /^Rename tab/ }).count(), 1, "the tab's own items stay");
+        await job.click();
+        await menu.waitFor({ state: "detached" });
+        await page.locator(`[data-layout-pane=${JSON.stringify(panes.web)}]`).waitFor({ state: "visible" });
+        assert.equal(await parent.getAttribute("aria-selected"), "true");
+        assert.ok((await page.title()).includes("QA implementer"), "the window title names the selected child");
+        assert.equal(await row.locator(".tab-strip-item.is-active .tab-strip-label").textContent(), "QA parent");
+        if (width < 768) {
+          if (process.env.QA_SHOTS) await page.screenshot({ path: `${process.env.QA_SHOTS}/phone-${children}.png`, clip: { x: 0, y: 0, width, height: 120 } });
+          await page.locator(".header-tabs-sheet").click();
+          const sheet = page.locator(".row-sheet");
+          const review = sheet.getByRole("button", { name: /^QA reviewer/ });
+          await review.waitFor();
+          assert.equal(await review.locator(".lucide-bot").count(), 1);
+          await review.click();
+          await sheet.waitFor({ state: "detached" });
+          await page.locator(`[data-layout-pane=${JSON.stringify(panes.flaky)}]`).waitFor({ state: "visible" });
+        }
+        if (evidence && children === 2) await page.screenshot({ path: join(evidence, `grouped-tabs-${width}.png`) });
       }
-    } finally { await browser.close(); }
-  } finally { await server.stop(true); }
-} finally { rmSync(app, { recursive: true, force: true }); }
+      assert.deepEqual(errors, []);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+      console.log(`PASS grouped tabs: width=${width}, agentFriends=${enabled}, children=${children}, overflow=${overflow}`);
+    } finally { await context.close(); }
+  }
+});

@@ -1,14 +1,12 @@
 /** Exercise fork opt-ins over the demo, never a live session. Audio/desktop services are fixtures;
  * Pi uses a fake Chromium microphone and a local protocol peer, not OpenAI or the user's devices. */
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { chromium, type Page } from "playwright-core";
+import type { Page } from "playwright-core";
 import { encodePiVoiceFrame, parsePhoneFrame, type PhoneToPiFrame } from "../shared/pi-voice.ts";
 import panes from "../site/demo/fixtures/panes.json";
-import { buildDemoApp } from "./demo-build.ts";
-import { chromePath } from "./chrome-path.ts";
+import { withDemoBrowser } from "./demo-browser.ts";
 
 type RequestRecord = { path: string; body: Record<string, unknown> };
 
@@ -150,92 +148,88 @@ async function checkGithub(page: Page, url: string, enabled: boolean) {
   assert.deepEqual(calls.find(({ path }) => path === "/api/worktree/create")?.body, { workspace_id: "w1C", branch: "docs/release-steps", base: "origin/docs/release-steps" });
 }
 
-const app = mkdtempSync(join(tmpdir(), "ovis-fork-features-"));
 const voiceFrames: PhoneToPiFrame[] = [];
-try {
-  await buildDemoApp(app);
-  writeFileSync(join(app, "fork-services.js"), `(${installServices.toString()})();`);
-  writeFileSync(join(app, "fork-desktop.html"), desktop);
-  const index = join(app, "index.html");
-  writeFileSync(index, readFileSync(index, "utf8").replace(/<script type="module"/, '<script src="./demo-transport.js"></script><script src="./fork-services.js"></script><script type="module"'));
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request, server) {
-    const url = new URL(request.url);
-    if (url.pathname === "/ws/pi-voice" && server.upgrade(request)) return;
-    const path = url.pathname.replace(/^\/herdr-web-ui\/demo\/app\//, "");
-    if (path.split("/").includes("..") || path.includes("\\")) return new Response(null, { status: 400 });
-    const file = Bun.file(join(app, !path || path.endsWith("/") ? `${path}index.html` : path));
-    return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
-  }, websocket: { message(socket, message) {
-    const frame = parsePhoneFrame(String(message));
-    voiceFrames.push(frame);
-    if (frame.type === "hello") {
-      socket.send(encodePiVoiceFrame({ type: "phase", phase: "listening" }));
-      socket.send(encodePiVoiceFrame({ type: "usage", seconds: 12 }));
-    }
-    if (frame.type === "set-muted") socket.send(encodePiVoiceFrame({ type: "mute", muted: frame.muted }));
-  } } });
-  try {
-    const browser = await chromium.launch({ executablePath: chromePath(), headless: true,
-      args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] });
-    try {
-      for (const legacy of [false, true]) {
-        const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: "en-US" });
-        try {
-          await context.addInitScript((legacy) => localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", alertsOn: false, ...(legacy ? { contextCircle: true } : {}) })), legacy);
-          const page = await context.newPage();
-          const errors: string[] = [];
-          page.on("pageerror", (error) => errors.push(error.message));
-          const url = `http://127.0.0.1:${server.port}/herdr-web-ui/demo/app/`;
-          await page.goto(`${url}?pane=${encodeURIComponent(panes.omp)}&view=chat`);
-          await page.locator(".conn-live").waitFor({ state: "attached" });
-          await page.locator(".chat-turn-agent").first().waitFor();
-          if (!legacy) {
-            assert.equal(await page.locator(".chat-speak").count(), 0);
-            await openMenu(page);
-            assert.equal(await page.locator(".machine-screen").count(), 0);
-            assert.equal(await page.locator(".row-sheet").getByRole("button", { name: "Pull requests…", exact: true }).count(), 0);
-            await page.keyboard.press("Escape");
-            await page.keyboard.press("Escape");
-            assert.deepEqual(await requests(page), [], "disabled features make no service requests");
-          } else {
-            await checkReadAloud(page);
-            await checkComputer(page);
-            await checkPullRequests(page);
-          }
-          await page.goto(`${url}?pane=${encodeURIComponent(panes.cli)}&view=chat`);
-          await page.locator(".conn-live").waitFor({ state: "attached" });
-          const start = page.getByRole("button", { name: "Start live voice", exact: true });
-          if (!legacy) {
-            await page.getByRole("button", { name: "Send message", exact: true }).waitFor();
-            assert.equal(await start.count(), 0);
-            assert.equal(voiceFrames.length, 0);
-            assert.deepEqual(await requests(page), [], "disabled features make no service requests");
-          } else {
-            await start.click();
-            const live = page.getByRole("group", { name: "Live voice", exact: true });
-            await live.getByRole("button", { name: /^Call controls/ }).click();
-            await live.getByRole("timer", { name: "Voice time used", exact: true }).waitFor();
-            await live.getByRole("button", { name: "Mute", exact: true }).click();
-            await live.getByRole("button", { name: "Unmute", exact: true }).click();
-            await live.getByRole("button", { name: "Mute", exact: true }).waitFor();
-            await live.getByRole("button", { name: "End call", exact: true }).click();
-            await live.waitFor({ state: "detached" });
-            assert.ok(voiceFrames.some((frame) => frame.type === "hello"));
-            assert.deepEqual(voiceFrames.filter((frame) => frame.type === "set-muted"), [{ type: "set-muted", muted: true }, { type: "set-muted", muted: false }]);
-            assert.ok(voiceFrames.some((frame) => frame.type === "stop"));
-          }
-          await checkGithub(page, url, legacy);
-          if (legacy) {
-            await page.evaluate(() => {
-              localStorage.setItem("ovis:fork-settings", JSON.stringify({ navigation: "upstream" }));
-              localStorage.removeItem("ovis:fork-github-repo");
-            });
-            await checkGithub(page, url, true);
-          }
-          assert.deepEqual(errors, []);
-          console.log(`PASS ${legacy ? "migrated fork" : "upstream defaults"}: read aloud, Computer, pull requests, GitHub inbox and Pi voice`);
-        } finally { await context.close(); }
+await withDemoBrowser({
+  tempPrefix: "ovis-fork-features-",
+  args: ["--no-sandbox", "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+  afterTransport: '<script src="./fork-services.js"></script>',
+  serve(app) {
+    writeFileSync(join(app, "fork-services.js"), `(${installServices.toString()})();`);
+    writeFileSync(join(app, "fork-desktop.html"), desktop);
+    return Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request, server) {
+      const url = new URL(request.url);
+      if (url.pathname === "/ws/pi-voice" && server.upgrade(request, { data: undefined })) return;
+      const path = url.pathname.replace(/^\/herdr-web-ui\/demo\/app\//, "");
+      if (path.split("/").includes("..") || path.includes("\\")) return new Response(null, { status: 400 });
+      const file = Bun.file(join(app, !path || path.endsWith("/") ? `${path}index.html` : path));
+      return await file.exists() ? new Response(file) : new Response(null, { status: 404 });
+    }, websocket: { message(socket, message) {
+      const frame = parsePhoneFrame(String(message));
+      voiceFrames.push(frame);
+      if (frame.type === "hello") {
+        socket.send(encodePiVoiceFrame({ type: "phase", phase: "listening" }));
+        socket.send(encodePiVoiceFrame({ type: "usage", seconds: 12 }));
       }
-    } finally { await browser.close(); }
-  } finally { await server.stop(true); }
-} finally { rmSync(app, { recursive: true, force: true }); }
+      if (frame.type === "set-muted") socket.send(encodePiVoiceFrame({ type: "mute", muted: frame.muted }));
+    } } });
+  },
+}, async ({ newContext, baseUrl }) => {
+  for (const legacy of [false, true]) {
+    const context = await newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    try {
+      await context.addInitScript((legacy) => localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", alertsOn: false, ...(legacy ? { contextCircle: true } : {}) })), legacy);
+      const page = await context.newPage();
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      const url = baseUrl;
+      await page.goto(`${url}?pane=${encodeURIComponent(panes.omp)}&view=chat`);
+      await page.locator(".conn-live").waitFor({ state: "attached" });
+      await page.locator(".chat-turn-agent").first().waitFor();
+      if (!legacy) {
+        assert.equal(await page.locator(".chat-speak").count(), 0);
+        await openMenu(page);
+        assert.equal(await page.locator(".machine-screen").count(), 0);
+        assert.equal(await page.locator(".row-sheet").getByRole("button", { name: "Pull requests…", exact: true }).count(), 0);
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("Escape");
+        assert.deepEqual(await requests(page), [], "disabled features make no service requests");
+      } else {
+        await checkReadAloud(page);
+        await checkComputer(page);
+        await checkPullRequests(page);
+      }
+      await page.goto(`${url}?pane=${encodeURIComponent(panes.cli)}&view=chat`);
+      await page.locator(".conn-live").waitFor({ state: "attached" });
+      const start = page.getByRole("button", { name: "Start live voice", exact: true });
+      if (!legacy) {
+        await page.getByRole("button", { name: "Send message", exact: true }).waitFor();
+        assert.equal(await start.count(), 0);
+        assert.equal(voiceFrames.length, 0);
+        assert.deepEqual(await requests(page), [], "disabled features make no service requests");
+      } else {
+        await start.click();
+        const live = page.getByRole("group", { name: "Live voice", exact: true });
+        await live.getByRole("button", { name: /^Call controls/ }).click();
+        await live.getByRole("timer", { name: "Voice time used", exact: true }).waitFor();
+        await live.getByRole("button", { name: "Mute", exact: true }).click();
+        await live.getByRole("button", { name: "Unmute", exact: true }).click();
+        await live.getByRole("button", { name: "Mute", exact: true }).waitFor();
+        await live.getByRole("button", { name: "End call", exact: true }).click();
+        await live.waitFor({ state: "detached" });
+        assert.ok(voiceFrames.some((frame) => frame.type === "hello"));
+        assert.deepEqual(voiceFrames.filter((frame) => frame.type === "set-muted"), [{ type: "set-muted", muted: true }, { type: "set-muted", muted: false }]);
+        assert.ok(voiceFrames.some((frame) => frame.type === "stop"));
+      }
+      await checkGithub(page, url, legacy);
+      if (legacy) {
+        await page.evaluate(() => {
+          localStorage.setItem("ovis:fork-settings", JSON.stringify({ navigation: "upstream" }));
+          localStorage.removeItem("ovis:fork-github-repo");
+        });
+        await checkGithub(page, url, true);
+      }
+      assert.deepEqual(errors, []);
+      console.log(`PASS ${legacy ? "migrated fork" : "upstream defaults"}: read aloud, Computer, pull requests, GitHub inbox and Pi voice`);
+    } finally { await context.close(); }
+  }
+});

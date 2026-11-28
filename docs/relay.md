@@ -211,8 +211,8 @@ then waits for the approval. On a PC's own page, the join shows the digits under
 
 **Pairing with a typed code.** For a device with no camera pointed at the PC, **Show a code to
 type** under the QR code shows ten characters, `XXXXX-XXXXX` (Crockford base32: no I, L, O or U;
-O, I and L typed are read as 0, 1 and 1), and **Pair with a code** on app.ovis.sh takes them
-(in a browser, in the **Ovis relay** tab of the signed-out front page, **Connect a PC**, or under
+O, I and L typed are read as 0, 1 and 1), and **Pair with a code** on app.ovis.sh (or the PC's own
+app, below) takes them (in a browser, in the **Ovis relay** tab of the signed-out front page, **Connect a PC**, or under
 **Add a PC → Scan a QR code**, the front page itself when no account service runs). The code finds the PC and hands the device the same offer the QR code carries, then the
 device pairs with the six-digit code in it as a scanned QR code does: nothing else admits it
 ([`shared/relay-pair-code.ts`](../shared/relay-pair-code.ts),
@@ -246,8 +246,11 @@ long as it; the PC checks that code is still the pending one before it sends the
 device that knew the code it ran out otherwise. Wrong typed codes do not count toward the 20 failed
 relay pairings that pause QR pairing. A code is a relay control like the QR code: made on the PC or
 a direct connection, never through the relay (`local_required`) or by a Portal visitor. The PC
-offers codes only on `relay.ovis.sh` (409 `code_unavailable` on a relay of its own), where the hosted
-app looks for them. The relay sees the nameplate, when the two meet and how big the frames are.
+offers codes on `relay.ovis.sh`, where app.ovis.sh looks for them, and on a relay of its own only when
+`OVIS_RELAY_APP_URL` names an app of its own too, built with the same `OVIS_RELAY_URL` so it looks
+there (`<meta name="ovis-relay">`); a relay of its own with app.ovis.sh or its regional copy answers
+409 `code_unavailable`, and a build that names one of Ovis's relays writes no meta. The relay sees
+the nameplate, when the two meet and how big the frames are.
 CPace asks for the password's mapping to run in constant time; this one is JavaScript (noble), which
 promises no such thing. The PC works out its first message before a device arrives and every try
 hashes a fresh `sid`, so the relay cannot time it against an arrival or measure one input twice.
@@ -335,8 +338,35 @@ The installer runs `ovis add` as its last step when it is given `--add`
 (`curl -fsSL https://ovis.sh/install.sh | sh -s -- --add`), at a terminal you can answer at and
 while the app runs. What was typed in that terminal while the installer worked is discarded before
 the step starts, so it answers nothing the step asks; where the installer cannot discard it, it
-prints the command instead. On a PC where it has just installed herdr the app is not up yet: start
-herdr, then run `ovis add`, as its last lines say.
+prints the command instead. On a PC where herdr was not running (installed just now, or stopped),
+the installer first starts it, so the app is up for the add, and on a server sets up what starts it
+again at boot ([Quick start](guide.md#quick-start)). With the account named, nothing is asked, so one
+line adds a new server from a script or a coding agent, with no terminal
+([INSTALL.md](../INSTALL.md) says how an agent runs it and relays the sign-in code):
+
+```bash
+curl -fsSL https://ovis.sh/install.sh | sh -s -- --add --account <id>
+```
+
+It runs `ovis add --account <id>` and exits non-zero when the PC was not added. A release whose add
+does not take `--account` (before 0.5.10) is not started that way, since it would not check the
+account; the installer says to update first. Afterwards `ovis status --json` on the PC names the
+account it is in.
+
+With an invite instead (`ovis join`, below), nothing is signed in to on the PC, and the installer runs
+`ovis join` with the line in its environment (`OVIS_INVITE`), never on a command line:
+
+```bash
+curl -fsSL https://ovis.sh/install.sh | sh -s -- --join-file ./ovis-invite.txt --account <id>
+```
+
+`OVIS_JOIN=<line>` does the same where arguments cannot be given; `--join <line>` too, but the line then
+shows in the process list while the installer runs. A line that is not one (`ovis-join:1:` and
+base64url) is refused before anything is installed, and so is `--join` with `--add`. `--account` is
+the account the invite must be for; without it the installer runs `ovis join` at a terminal, which
+asks, and where nobody can answer it refuses before installing anything, naming `--account <id>`. It exits non-zero unless the PC joined, with one line for what
+`ovis join` reported (a used or expired invite, a PC in another account, an account service that did
+not answer, …).
 
 `login`, `add` and `link` are one command under three names. On a desktop, `login` opens the sign-in
 page in the browser itself, as `codex login` does; the address and code stay on screen for another device. Every way turns the relay on first when
@@ -696,11 +726,11 @@ for it before they show or ask anything.
   server that goes away in those last ten minutes ends it unless the PC is in the account by then. A run
   that ends sooner (the PC was added, Ctrl+C) leaves the window to run out by itself, within ten
   minutes.
-- **`link --code`** prints what **Connect a device** shows: the code to type at app.ovis.sh
-  (**Pair with a code**), the relay pairing link as a QR code drawn in the terminal, and this PC's
-  ID for the other device to compare. Both renew when they run out. When the relay mints no typed
-  code (a relay that is not Ovis's own, or one that refuses it), it says why and shows a QR code
-  of its own alone. Its QR code carries its own code to type, else a fresh code (`x-ovis-pairing`,
+- **`link --code`** prints what **Connect a device** shows: the code to type in the PC's app
+  (app.ovis.sh unless `OVIS_RELAY_APP_URL` names another, **Pair with a code**), the relay pairing
+  link as a QR code drawn in the terminal, and this PC's ID for the other device to compare. Both
+  renew when they run out. When the relay mints no typed code (a relay of its own beside Ovis's app
+  or its regional copy, or one that refuses it), it says why and shows a QR code of its own alone. Its QR code carries its own code to type, else a fresh code (`x-ovis-pairing`,
   [A code made for an account](account.md#a-code-made-for-an-account)). Ctrl+C, SIGTERM, SIGHUP
   (the terminal closing), or any error, takes back what it made (`POST /api/devices/pair/cancel`
   with `{ "code", "id" }`, the six-digit code it showed and its id, or the id of a code to type whose
@@ -1442,8 +1472,9 @@ plugin ([native-app.md](native-app.md#direct-on-the-same-network)); a browser st
   against one set of limits whichever way they came (relay links and direct carriers together):
   eight at once and four per device key, whose oldest gives way once the new one is used (its first stream): until
   then it may be one of the app's racing carriers, which makes nothing give way, and past three of those for one
-  device key the oldest of them does. With every place taken, a device already at its share still gets a racing
-  carrier in (used, it replaces its own oldest), at most three past the limit in all. Peers outside private IPv4 are refused before upgrade, and on the Tailscale address
+  device key the oldest of them does. With every place taken, a device already at its share still gets its racing
+  carriers in (used, one replaces its own oldest), three past every place for each such device at most, so another
+  device's unused carriers never keep it from replacing its own sessions. Peers outside private IPv4 are refused before upgrade, and on the Tailscale address
   every peer outside Tailscale's range (each listener takes only its own network's peers). Removing a device, stopping
   the relay, resetting its identity or turning direct connections off ends them.
 - **The app moves on its own.** An app with a socket for it (`RelayTransport` `directSocket`)

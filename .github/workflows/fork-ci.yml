@@ -44,6 +44,7 @@ jobs:
       - uses: ./.github/actions/setup-ci
         with:
           node: 'true'
+          pty-host: 'true'
       - run: bun install --frozen-lockfile
       - name: Fetch the pinned upgrade fixtures
         # upstream's release tags: the fork's origin carries only some of them, and never pushes v* tags by hand

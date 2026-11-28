@@ -6,10 +6,10 @@ import "./agent-role.css";
 
 export type AgentRole = NonNullable<HerdrPane["agent_role"]>;
 
-/** A job agent's icon, whatever its role (the runner's `role` label): tab chips, sidebar and inbox rows. */
+/** A job agent's icon, whatever its role (the runner's `role` label): tab menus, sidebar and inbox rows. */
 export const SUB_AGENT_ICON: LucideIcon = Bot;
 
-/** A job agent's role while Agent friends is on (the setting the folded tab chips follow too); otherwise none. */
+/** A job agent's role while Agent friends is on (the setting that hides job agent tabs too); otherwise none. */
 export function useForkRole(role: AgentRole | undefined): AgentRole | undefined {
   const { settings } = useSettings();
   return settings.agentFriends ? role : undefined;

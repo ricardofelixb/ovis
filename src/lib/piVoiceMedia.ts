@@ -98,13 +98,12 @@ export class BrowserLiveMedia {
   }
 
   /** A frame from Pi. Only the ones about the audio device are acted on; any of them shows Pi is there. */
-  receive(frame: PiToPhoneFrame): void {
+  receive(frame: PiToPhoneFrame): Promise<void> | void {
     if (this.#closed) return;
     this.#armLease();
     switch (frame.type) {
       case "request":
-        void this.#serve(frame);
-        break;
+        return this.#serve(frame);
       case "activate":
         this.#active = true;
         this.#syncTrack();

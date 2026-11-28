@@ -1,44 +1,21 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { act } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
 import type { Machine } from "../../../shared/machines.ts";
 import fixture from "../../../site/demo/fixtures/machines.json";
 import { InboxList } from "../../components/InboxList.tsx";
+import { openPage, reactProps, type Page } from "../../lib/page.fixture.ts";
 import { SettingsProvider } from "../../lib/settings.ts";
 import type { SidebarActivity } from "../../lib/sidebarActivity.tsx";
 import { newQuestionReads } from "../../lib/useInboxQuestions.ts";
 import { SummaryReads } from "../../lib/useInboxSummaries.ts";
 
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let renderer: ReactTestRenderer | undefined;
+let page: Page;
 beforeEach(() => {
-  for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-  const events = new EventTarget();
-  Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["en"] } });
-  Object.defineProperty(globalThis, "getComputedStyle", { configurable: true, value: () => ({ getPropertyValue: () => "" }) });
-  Object.defineProperty(globalThis, "document", { configurable: true, value: {
-    body: { nodeType: 1, children: [] }, querySelector: () => null,
-    documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } },
-    addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
-  } });
-  Object.defineProperty(globalThis, "window", { configurable: true, value: {
-    matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }),
-    localStorage: { getItem: (key: string) => key === "ovis:settings" ? '{"agentFriends":true}' : null, setItem() {} },
-    addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
-    requestAnimationFrame() { return 0; }, cancelAnimationFrame() {},
-    history: { state: null, pushState() {}, replaceState() {}, back() {} }, location: { href: "http://localhost/", search: "" },
-  } });
+  page = openPage();
+  page.window.localStorage.setItem("ovis:settings", '{"agentFriends":true}');
+  Object.defineProperty(page.window, "matchMedia", { configurable: true, writable: true, value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) });
 });
-afterEach(async () => {
-  await act(async () => renderer?.unmount());
-  renderer = undefined;
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  saved.clear();
-});
+afterEach(() => page.close());
 
 test.each([false, true])("a conductor arriving during keyboard focus cannot move rows or connect to an unrelated row (other first: %s)", async (otherFirst) => {
   const machines = structuredClone(fixture.machines) as Machine[];
@@ -57,16 +34,16 @@ test.each([false, true])("a conductor arriving during keyboard focus cannot move
   const view = (withConductor: boolean) => <SettingsProvider><InboxList machines={roster(withConductor)} activity={activity}
     watching={false} wide filter="all" onFilter={() => {}} query="" onQuery={() => {}} scroll={scroll} focus={focus}
     onOpen={() => {}} onNew={() => {}} questionReads={questionReads} summaryReads={summaryReads} /></SettingsProvider>;
-  await act(async () => { renderer = create(view(false)); });
-  const root = renderer!.root;
-  const order = () => root.findAll((node) => node.type === "li" && node.props["data-pane"]).map((node) => node.props["data-pane"]);
-  const list = () => root.findAll((node) => node.type === "div" && node.props.className === "inbox-groups")[0]!;
+  await page.render(view(false));
+  const order = () => [...page.container.querySelectorAll("li[data-pane]")].map((node) => node.getAttribute("data-pane"));
+  // the list's own handlers, with the focus a keyboard gives and takes back
+  const list = () => reactProps(page.container.querySelector("div.inbox-groups")!) as Record<"onFocus" | "onBlur", (event: object) => void>;
   expect(order()).toEqual(initial.map((pane) => pane.pane_id));
-  await act(async () => { list().props.onFocus({ target: { matches: () => true } }); });
-  await act(async () => { renderer!.update(view(true)); });
+  await act(async () => { list().onFocus({ target: { matches: () => true } }); });
+  await page.render(view(true));
   expect(order()).toEqual([...initial, conductor!].map((pane) => pane.pane_id));
-  expect(root.findAll((node) => node.type === "li" && node.props["data-depth"] !== undefined)).toHaveLength(0);
-  await act(async () => { list().props.onBlur({ relatedTarget: null, currentTarget: {} }); });
+  expect(page.container.querySelectorAll("li[data-depth]")).toHaveLength(0);
+  await act(async () => { list().onBlur({ relatedTarget: null, currentTarget: {} }); });
   expect(order()).toEqual((otherFirst ? [other!, conductor!, helper!] : [conductor!, helper!, other!]).map((pane) => pane.pane_id));
-  expect(root.findAll((node) => node.type === "li" && node.props["data-depth"] !== undefined)).toHaveLength(1);
+  expect(page.container.querySelectorAll("li[data-depth]")).toHaveLength(1);
 });

@@ -1716,6 +1716,15 @@ describe("herdr-core adapter, agents", () => {
     await expect(agentStart({ name: "hermes-1", kind: "hermes", paneId: "t1" }, socket)).resolves.toMatchObject({ type: "agent_started", pane_id: "t1" });
   });
 
+  it("confirms a cmd launch when Command Code renames itself command-code", async () => {
+    const shell = { pid: 10, name: "bash" };
+    const record = terminal("t1", { pid: 10, argv: ["/bin/bash"], foreground: shell });
+    const { socket, cores } = await posix([record], {
+      "terminal.get": () => ({ ...record, foreground: cores[0]?.typed.length ? { pid: 11, name: "command-code", argv: ["command-code"] } : shell }),
+    });
+    await expect(agentStart({ name: "cmd-1", kind: "cmd", paneId: "t1" }, socket)).resolves.toMatchObject({ type: "agent_started" });
+  });
+
   it("lets what is typed after a start reach the pane while the start waits for its agent", async () => {
     const shell = { pid: 10, name: "bash" };
     const record = terminal("t1", { pid: 10, argv: ["/bin/bash"], foreground: shell });
@@ -1740,6 +1749,16 @@ describe("herdr-core adapter, agents", () => {
     holder.cores = ready.cores;
     await agentStart({ name: "cursor-1", kind: "cursor", paneId: "t1" }, ready.socket);
     expect(ready.cores[0]!.typed.map((write) => write.text).join("")).toBe("\u0015'cursor-agent'\r");
+  });
+
+  it("types Kiro's command, kiro-cli, for the kind kiro", async () => {
+    const shell = { pid: 10, name: "bash" };
+    const record = terminal("t1", { pid: 10, argv: ["/bin/bash"], foreground: shell });
+    const holder: { cores: FakeCore[] } = { cores: [] };
+    const ready = await posix([record], { "terminal.get": () => ({ ...record, foreground: holder.cores[0]?.typed.length ? { pid: 11, name: "kiro-cli" } : shell }) });
+    holder.cores = ready.cores;
+    await agentStart({ name: "kiro-1", kind: "kiro", paneId: "t1" }, ready.socket);
+    expect(ready.cores[0]!.typed.map((write) => write.text).join("")).toBe("\u0015'kiro-cli'\r");
   });
 
   it("refuses a pane with a program in front, a kind that is no command, and an argument with a control character", async () => {
@@ -1853,6 +1872,24 @@ describe("herdr-core adapter, agents", () => {
     expect(kinds).toContain("codex");
     expect(kinds).not.toContain("omo");
     expect(kinds).toContain("cmd");
+  });
+
+  it("starts Command Code and names the pane from its process title", async () => {
+    const shell = { pid: 10, name: "bash" };
+    const record = terminal("t1", { pid: 10, argv: ["/bin/bash"], foreground: shell });
+    const title = { pid: 11, name: "command-code" };
+    let typed = () => "";
+    let looks = 0;
+    const ready = await posix([record], {
+      "terminal.get": () => ({ ...record, foreground: typed() === "" ? shell : looks++ === 0 ? { pid: 12, name: "node", argv: ["node", "/srv/app/cmd.js"] } : title }),
+      "terminal.list": () => ({ terminals: [{ ...record, foreground: looks > 1 ? title : shell }] }),
+    });
+    typed = () => ready.cores[0]!.typed.map((write) => write.text).join("");
+
+    await agentStart({ name: "cmd-1", kind: "cmd", paneId: "t1", program: "/opt/agent tools/cmd", args: ["a b"] }, ready.socket);
+
+    expect(typed()).toBe("\u0015'/opt/agent tools/cmd' 'a b'\r");
+    expect((await sessionSnapshot(ready.socket)).panes[0]?.agent).toBe("cmd");
   });
 });
 
@@ -2168,13 +2205,49 @@ describe("herdr-core adapter, Ovis's layout document", () => {
     expect((await sessionSnapshot(socket)).layouts[0]).toMatchObject({ zoomed: false });
   });
 
-  it("moves a pane beside another tab's pane in no tab of its own and refuses where the Herdr app arranges", async () => {
-    const { socket, store } = await core([labeled("t1"), labeled("t2"), labeled("t3", "S", "U")]);
-    expect(await paneMoveBeside("t1", "t3", "right", socket)).toEqual({ changed: false, reason: "cross_tab" });
-    await expect(herdrRpc("pane.move", { pane_id: "t1", destination: { type: "tab", tab_id: "U", target_pane_id: "t3", split: "right" } }, socket)).rejects.toMatchObject({ code: "unsupported" });
-    expect(store.writes).toEqual([]);
+  it("brings a pane of another tab beside a pane by its labels and one edit, the rest of its tab staying, and refuses where the Herdr app arranges", async () => {
+    // the tabs as Ovis's splits left them
+    const store = documents();
+    store.docs.set("ovis-layout", { version: 1, value: { schema: 1, workspaces: [
+      { id: "S", tabs: [
+        { id: "T", zoomed: null, root: { split: "right", ratio: 0.5, first: { leaf: "t1" }, second: { leaf: "t2" } } },
+        { id: "U", zoomed: null, root: { split: "down", ratio: 0.5, first: { leaf: "t3" }, second: { leaf: "t4" } } },
+      ] },
+      { id: "R", tabs: [{ id: "V", zoomed: null, root: { leaf: "t5" } }] },
+    ] } });
+    const { socket, terminals } = await core([labeled("t1"), labeled("t2"), labeled("t3", "S", "U"), labeled("t4", "S", "U"), labeled("t5", "R", "V")], store);
+    const tabOf = async (tab: string) => Object.fromEntries((await sessionSnapshot(socket)).layouts.find((layout) => layout.tab_id === tab)!.panes.map((pane) => [pane.pane_id, pane.rect]));
+    // t3 leaves a tab of two: t4 stays there, and t3 takes half of t1's place, its terminal and id kept
+    expect(await paneMoveBeside("t3", "t1", "right", socket)).toEqual({ changed: true, reason: null });
+    expect(store.writes).toHaveLength(1);
+    expect(terminals.find((entry) => entry.address === "t3")!.labels).toMatchObject({ "herdr.space": "S", "herdr.tab": "T" });
+    expect(await tabOf("T")).toEqual({ t1: { x: 0, y: 0, width: 250, height: 1000 }, t3: { x: 250, y: 0, width: 250, height: 1000 }, t2: { x: 500, y: 0, width: 500, height: 1000 } });
+    expect(Object.keys(await tabOf("U"))).toEqual(["t4"]);
+    // t5 was its workspace's one pane: the tab and the workspace it leaves are gone, as herdr answers
+    const moved = await herdrRpc<{ move_result: { changed: boolean; pane: { pane_id: string; tab_id: string }; closed_tab_id: string | null; closed_workspace_id: string | null } }>("pane.move", { pane_id: "t5", destination: { type: "tab", tab_id: "T", target_pane_id: "t2", split: "down" } }, socket);
+    expect(moved.move_result).toMatchObject({ changed: true, pane: { pane_id: "t5", tab_id: "T" }, closed_tab_id: "V", closed_workspace_id: "R" });
+    expect((await tabOf("T"))["t5"]).toEqual({ x: 500, y: 500, width: 500, height: 500 });
+    expect((await sessionSnapshot(socket)).workspaces.map((workspace) => workspace.workspace_id)).toEqual(["S"]);
+    const writes = store.writes.length;
     store.docs.set("herdr-app", { value: { spaces: [] }, version: 1 });
-    await expect(paneMoveBeside("t1", "t2", "down", socket)).rejects.toMatchObject({ code: "unsupported" });
+    await expect(paneMoveBeside("t4", "t1", "down", socket)).rejects.toMatchObject({ code: "unsupported" });
+    expect(store.writes).toHaveLength(writes);
+    expect(terminals.find((entry) => entry.address === "t4")!.labels).toMatchObject({ "herdr.tab": "U" });
+  });
+
+  it("says a pane another move took elsewhere between its labels and the edit was not moved, never that it is beside the target", async () => {
+    const store = documents();
+    let held: HcTerminal[] = [];
+    const read = store.handlers["doc.get"];
+    // the first read of Ovis's document after t3 is labeled into T: another client has just labeled it back into U
+    store.handlers["doc.get"] = (params) => {
+      const at = held.findIndex((entry) => entry.address === "t3");
+      if (params["name"] === "ovis-layout" && at !== -1 && held[at]!.labels?.["herdr.tab"] === "T") held[at] = { ...held[at]!, labels: { ...held[at]!.labels, "herdr.tab": "U" } };
+      return read(params);
+    };
+    const { socket, terminals } = await core([labeled("t1"), labeled("t3", "S", "U"), labeled("t4", "S", "U")], store);
+    held = terminals;
+    await expect(herdrRpc("pane.move", { pane_id: "t3", destination: { type: "tab", tab_id: "T", target_pane_id: "t1", split: "right" } }, socket)).rejects.toMatchObject({ code: "pane_not_moved" });
     expect(store.writes).toEqual([]);
   });
 
@@ -2317,6 +2390,12 @@ describe("herdr-core adapter, Ovis's layout document", () => {
         expect(steps).toEqual(expected);
       });
     }
+
+    it("brings a pane of another tab in after the edit that finds it outside: its labels, then the edit, then the snapshot", async () => {
+      const { answer, steps } = await callsOf("pane.move", { pane_id: "t3", destination: { type: "tab", tab_id: "A1", target_pane_id: "t1", split: "right" } });
+      expect(answer).toMatchObject({ move_result: { changed: true, closed_tab_id: "A2", closed_workspace_id: null } });
+      expect(steps).toEqual([...EDIT_UNCHANGED, ...SNAPSHOT, "terminal.get", "terminal.label", ...EDIT, ...SNAPSHOT]);
+    });
 
     it("reads Ovis's document before the terminals in every edit it writes", async () => {
       for (const [method, params] of edits) {
@@ -2531,7 +2610,10 @@ describe("another machine of the core, as its own PC (#2497)", () => {
       const holder: { cores: FakeCore[] } = { cores: [] };
       const ready = await setup([record], { "terminal.get": () => ({ ...record, foreground: holder.cores[0]?.typed.length ? { pid: 42, name: "claude" } : shell }) }, undefined, "lab", { platform, processTable: () => { throw new Error("no process table off Windows"); } });
       holder.cores = ready.cores;
-      expect((await agentManifests(ready.socket)).manifests.map((manifest) => manifest.agent)).toContain("claude");
+      const kinds = (await agentManifests(ready.socket)).manifests.map((manifest) => manifest.agent);
+      expect(kinds).toContain("claude");
+      expect(kinds).toContain("codex");
+      expect(kinds).not.toContain("cmd");
       await agentStart({ name: "x", kind: "claude", paneId: "t1" }, ready.socket);
       expect(ready.cores[0]!.typed.map((write) => write.text).join("")).toBe("\u0015'claude'\r");
     }

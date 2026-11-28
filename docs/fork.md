@@ -1,87 +1,51 @@
 # Fork boundaries
 
-This fork is `ricardofelixb/ovis`; upstream is `devswha/ovis`. This inventory compares the starting commit `da5afc54` with its upstream merge base, `2decd453d6a28eb6cf21647c6f928150d1196c5c`. It includes inherited fork changes, not just this refactor.
+This fork is `ricardofelixb/ovis`; upstream is `devswha/ovis`. The current upstream merge base is `211b7657914422d1209dd17f13e62b142db56653`. The starting-file inventory and older verification entries below are historical: they compare `da5afc54` with its then-base `2decd453d6a28eb6cf21647c6f928150d1196c5c`.
 
 ## Grouped sub-agent tabs
 
-Upstream candidate (A), behind **Agent friends** (off by default). `src/fork/tabs/groupAgentTabs.ts`
-folds same-workspace descendants into their visible parent without changing real tabs or order;
-missing parents/cycles remain ordinary tabs. `src/fork/tabs/TabChips.tsx` and `src/fork/tabs/tab-chips.css`
-provide tiny sub-agent controls (one Bot icon for every role, a neutral Terminal when the role is unknown), without a repeated
-friend. Their named controls select the real child pane, keep its menu/rename/close, and highlight
-selection; touch hold opens its menu. Chips stay pinned in their parent group. The desktop row,
-phone header row and phone tabs sheet all share these controls; selecting a child leaves the
-parent highlighted while the existing header/pane title continues to name the selected child.
-Overflow chips retain menuitem semantics for the existing arrow-key navigation; sheet chips remain
-ordinary buttons. Their mouse press preserves the menu on browsers that do not focus clicked buttons.
-`src/components/TabStrip.tsx` hooks the grouping, chip mount and presentation-only selected/root
-mapping; original tabs still drive commands. Its scroll-to-selection hook uses `forkOpenTab` in
-`src/fork/tabs/TabChips.tsx` to measure the selected child chip rather than its parent, falling back to
-the upstream active tab when no child is selected. `src/components/RowMenu.tsx` adds a generic optional
-`trailing` sibling-control slot (one type field and two render sites), needed for attached chips
-in a sheet without invalid nested buttons. TabStrip's missing grouped-tab presentation extension
-point is an upstream PR candidate. This differs from Warp's collapsible tab groups: job roles stay
-reachable on the parent, per the requested lower-noise design; no code or pixels were copied.
-`src/fork/tabs/tabGroupLayout.ts` budgets attached chip widths in the desktop More overflow, delegating
-to upstream's existing calculation unchanged with no groups. Phone chips keep 44px touch targets. Fork-only role metadata lives
+Upstream candidate (A), behind **Agent friends** (off by default; no setting of its own).
+`src/fork/tabs/groupAgentTabs.ts` hides a job agent's tab (an hc pane whose `parent_pane_id` is in
+another tab of the same workspace, descendants included) from the strip and counts it on its visible
+parent, without changing real tabs or order; missing parents and cycles remain ordinary tabs. The
+parent tab shows a small "+N" after its name, the sidebar's `ForkFoldCount`
+(`src/fork/inbox/HelpersFace.tsx`, the same `workspace-fold-count` styling), N being its hidden job
+agents, running or not. Right click or touch hold on that tab opens its usual menu (rename, close,
+move and the rest stay) with one more section, built by `forkJobItems` in `src/fork/tabs/jobMenu.tsx`:
+one item per pane of the hidden tabs (groupAgentTabs' `folded`), each selecting its own pane: a job
+agent with a Bot icon in its state colour (`RoleIcon`), its pane name and its hc role, and any other
+pane sharing its tab as a plain terminal, so none is out of reach. While a hidden child is open, its
+parent's touch menu keeps that pane's own actions, as the open tab's menu has them. The desktop row, the phone header row, the desktop More
+overflow and the phone tabs sheet all list them under their parent. While a hidden child is the
+selected pane, its parent tab shows selected and the sheet offers to move that parent. The
+header/pane title keeps naming the child.
+This replaced the Bot chips on the parent tab (`TabChips.tsx`, `tabGroupLayout.ts`, `tab-chips.css`,
+RowMenu's `trailing` slot and useTabReorder's `dropBoundary`, all removed): one marker and the menu
+the tab already has, as the sidebar folds helpers. Fork-only role metadata lives
 in `shared/fork/pane.ts` and `shared/fork/core-terminals.ts`: only hc labels `role=implement`,
 `review` or `explore` become optional `agent_role`; herdr and old bridges omit it.
 Upstream hooks: `server/herdr-core/snapshot.ts` adds `forkPaneFields` to the existing fork import
 and one spread in `paneOf`; `shared/protocol.ts` adds one type import and one intersection.
-`server/fork/fork-pane-role.test.ts` failed before implementation, then passed with both app-owned
-and Ovis-owned layouts. No generated file or setting default changed.
 
-Hook footprint (insertions/deletions vs `upstream/main`, merge base, measured with
-`git diff --shortstat upstream/main...<ref> -- <file>`; before is `491a5965`):
+Hook footprint (insertions/deletions measured with `git diff --shortstat <merge-base> <ref> -- <file>`).
+Before is `dbb59cd8` vs `70c68e28`; after is this branch vs `211b76579`:
 
 | Upstream file | Before | After | Hooks added here |
 | --- | --- | --- | --- |
-| `src/components/TabStrip.tsx` | +23/-8 | +52/-27 | 3 imports; grouping/layout calls, selection guards, 2 chip mounts; independent child picker |
-| `src/components/RowMenu.tsx` | +10/-3 | +19/-8 | optional trailing slot, 2 generic sibling render sites |
-| `src/lib/useTabReorder.ts` | +1/-2 | +12/-6 | optional adjacent/drop-boundary callbacks, original geometry fallback preserved |
+| `src/components/TabStrip.tsx` | +55/-26 | +59/-27 | 3 imports; grouping call, open-parent mapping (including sheet moves), "+N" mount, no pane position for an open hidden child, job items in the tab menu, More and sheet |
+| `src/components/RowMenu.tsx` | +19/-8 | +10/-3 | none left from this feature (the `trailing` slot is gone) |
+| `src/lib/useTabReorder.ts` | +12/-6 | +8/-6 | optional adjacent-boundary callback, so a parent moves past its hidden children in one step |
 | `shared/protocol.ts` | +15/-1 | +17/-2 | type import + intersection |
-| `server/herdr-core/snapshot.ts` | +3/-1 | +4/-1 | existing fork import extended + pane spread |
-| `scripts/ci-browser.sh` | +5/-2 | +6/-2 | one fork regression registration, shared by serial/parallel browser lanes |
+| `server/herdr-core/snapshot.ts` | +3/-1 | +14/-3 | existing fork import extended + pane spread; totals include hidden-workspace projection |
+| `scripts/ci-browser.sh` | +5/-2 | +7/-2 | fork regression registrations shared by serial/parallel browser lanes |
 
-Regression coverage: `src/fork/tabs/groupAgentTabs.test.ts`,
-`src/fork/tabs/TabChips.test.tsx`, `src/fork/tabs/tabGroupLayout.test.ts`,
-`server/fork/fork-pane-role.test.ts` and the added opt-in TabStrip integration cases.
-`scripts/fork-grouped-tabs-demo-regression.ts` uses synthetic demo-only parents and hc roles to
-exercise desktop/phone grouping, child selection/title, rename, phone sheet, touch targets,
-large sibling groups and the setting disabled. No real session or user state is used.
-`src/lib/useTabReorder.ts` needs generic optional boundary callbacks (another upstream
-extension-point candidate): the fork maps parent moves to the next visible root in native index
-coordinates. Without this, Move right/left can silently step across folded children without moving
-the parent on screen. Children stay pinned to their parent but can reorder among direct siblings by
-menu, Alt+Shift+Arrow keys, or mouse drag. Fork-only sibling/drop boundaries reject other groups and
-cross-generation drops. The generic drop-boundary callback shares upstream's fixed-layout, in-flight and
-acknowledgement guards; root-tab geometry remains upstream. Chips use the same pointer-drag
-controller as normal tabs, so dragging outside the strip still offers a split and opens the child
-beside the current pane. Returning to the strip clears the split target; Escape, pointer cancellation
-and lost capture cancel it. The separate HTML drag implementation and unused `moveTo` handle are gone.
-Touch keeps scrolling and long-press menus.
-Child pickers opt out of the selected-tab ellipsis lifecycle, so long presses and keyboard menus
-on inactive chips stay open without selecting them; the existing missing-tab cleanup still applies.
-A chip opened from More or the phone sheet resolves upstream's `rowMenuAnchor` before dismissing
-that surface, so the child menu stays attached to the persistent More/header button, not a removed chip.
-The demo regression covers an overflowed group's child menu and its Rename action, desktop sibling
-shortcuts and drag, and an inactive phone child's long-press menu and sibling move without selection.
-It also checks a child drag's split target, return to the strip, Escape and successful split drop;
-a TabStrip regression covers split callbacks and click suppression. Both failed before the fix.
-
-Validation: scoped fork/TabStrip/RowMenu/hc tests, conventions and changelog tests passed (276
-cases); changed-file TypeScript diagnostics passed for both configs. In `herdr-ci-runner:local`,
-`tab-menu-regression`, `tab-overflow-regression`, `mobile-tabs-regression`,
-`fork-grouped-tabs-demo-regression`, `fork-tab-alignment-demo-regression`,
-`tab-agent-mark-demo-regression`, `phone-glass-header-demo-regression` and
-`phone-safe-area-demo-regression` passed. Demo UI artifacts were built for these checks only;
-the initial implementer scope skipped project-wide checks. The required pre-push `bun run check fast`
-later passed workflow syntax, generated-file freshness, full typecheck and production build, but its
-unit lane found 14 OMP failures. `TMPDIR="$HOME/.cache/ovis-tmp/grouped-tabs-pr" bun test server/omp.test.ts`
-reproduced the same 14 failures on base `491a5965` (48 passed), chiefly `ConversationUnavailable:
-no_session_path`; no OMP code was changed. Its first complete run also caught a missing registration
-for the new browser regression. `scripts/ci-browser.sh` now registers it with one line, so the serial
-and parallel lanes both run it; the existing browser-lane assignment test caught this before the fix.
+Regression coverage: `src/fork/tabs/groupAgentTabs.test.ts`, `src/fork/tabs/jobMenu.test.tsx`,
+`server/fork/fork-pane-role.test.ts` and the opt-in cases in `src/fork/tabs/fork-TabStrip.test.tsx`
+(hidden child, "+N", job items in the tab menu and sheet, selection through them, and moves
+for the visible parent, including from the sheet while its child is selected).
+`scripts/fork-grouped-tabs-demo-regression.ts` uses synthetic demo-only parents and hc roles to check
+desktop/phone "+N", the right-click and touch-hold menus, the phone sheet, the More overflow, a
+child's selection and title, and the setting disabled. No real session or user state is used.
 
 ## Project friends and inbox clarity
 
@@ -134,10 +98,10 @@ Hooks added/changed by this task (upstream files only):
 - `src/components/InboxList.tsx`: one import, one `forkInboxRows(..., settings.agentFriends)`
   wrapper before the hold, one `forkInboxNesting` call after it, one carried nesting flag and one
   row-class suffix. Fork diff **+2/-1 → +8/-6** (first review **+7/-5**).
-- `src/App.tsx`: one import plus one `ForkInboxBack` mount in the existing inbox-only branch, `ForkSidebarFoot` wrapping the sidebar foot's `InboxFootEntry`, and `ForkInboxFoot` wrapping the wide inbox's `InboxRail` (`src/fork/inbox/SidebarFoot.tsx`): the places (workspaces, agent inbox, Pull requests) become icons at the end of the gear's row, and with Settings → Fork → Navigation → Footer, the agent inbox's column drops the rail for that same foot under its list, with the gear, plan meters and the agents that wait (alerts and the PCs menu are left out). That foot is upstream's own, extracted from `MachineSidebar.tsx` into `src/components/SidebarFooter.tsx` (a move, a candidate upstream PR; its row sizes move from `.sidebar-shell` to a shared rule in `Sidebar.css`), so both columns render the same component. `useForkInboxStatusBar` adds the open inbox thread to where `statusBarShown` holds, so under Footer that thread ends in the workspaces view's status bar too (not while Pull requests is up). CSS in `src/fork/github/GithubInbox.css`.
+- `src/App.tsx`: one import plus one `ForkInboxBack` mount in the existing inbox-only branch. The sidebar's foot is upstream's own, extracted from `MachineSidebar.tsx` into `src/components/SidebarFooter.tsx` (a move, a candidate upstream PR; its row sizes move from `.sidebar-shell` to a shared rule in `Sidebar.css`). The Footer navigation that reused it in the inbox's column was removed: a stored Footer, or the older Inbox footer switch on, reads as Rail (`withNavigation` in `src/fork/settings/settings.ts`).
   Fork diff **+43/-62 → +45/-63**.
 - Settings → Fork (`src/fork/settings/SettingsRows.tsx` `ForkPage`, `src/fork/settings/page.ts`): every fork switch on one page, grouped Places, Chat, Agents and Look, before About. Upstream hooks: `FORK_PAGE` in `PAGES`, `case "fork"` in `pageNote` and the page switch, the label in `SettingsDialog.tsx`, and the page id plus palette entry in `src/lib/paletteSettings.ts`. Follow Omarchy stays in Appearance.
-- Navigation (Settings → Fork → Places): Default (upstream: rail in the inbox with Pull requests and Notes under its inbox button, the sidebar's inbox row replaced by an inbox icon alone at the end of the gear's row), Footer (the old Inbox footer switch, carried over by `withNavigation` in `src/fork/settings/settings.ts`) or Rail. Rail (`src/fork/inbox/Rail.tsx`, `Rail.css`): `ForkWorkspaceRail` draws upstream's `InboxRail` before the workspaces sidebar too (one line in `App.tsx`, which builds the rail once as `inboxRail` for both columns), `ForkRailPlaces` wraps the rail's inbox button (`InboxRail.tsx`) to add Pull requests and Notes, and `ForkInboxBack rail` puts a Workspaces place where the Ovis mark was. A phone draws Rail as Footer (`useNavigation`).
+- Navigation (Settings → Fork → Places): Default (upstream: rail in the inbox with Pull requests and Notes under its inbox button, the sidebar's inbox row replaced by an inbox icon alone at the end of the gear's row) or Rail (also what a stored Footer and the old Inbox footer switch became). Rail (`src/fork/inbox/Rail.tsx`, `Rail.css`): `ForkWorkspaceRail` draws upstream's `InboxRail` before the workspaces sidebar too (one line in `App.tsx`, which builds the rail once as `inboxRail` for both columns), `ForkRailPlaces` wraps the rail's inbox button (`InboxRail.tsx`) to add Pull requests and Notes, and `ForkInboxBack rail` puts a Workspaces place where the Ovis mark was. A phone has no rail, its inbox, Pull requests and Notes being full-screen pages: there `useNavigation` draws Rail as Default (upstream's Inbox entry in the drawer's foot, the round Notes and Pull requests buttons in the inbox's top row). Only under Rail, the current place has a heavier glyph but no idle or hover fill; Default keeps upstream’s selection fill, and both show a press. `scripts/fork-rail-demo-regression.ts` checks the Rail treatment, the landscape inset and the phone fallback.
 - Mute sub-agents (Settings → Fork, on by default): `shared/fork/alerts.ts` `helperAlertsMuted` mutes a
   pane with a `parent_pane_id` on every channel. Hooks: `server/core/status.ts` (the push `muted` option),
   `server/push.ts` (passes the pane to `muted`), `src/lib/useAlertSignals.ts` (one `paneMuted` for its three checks)
@@ -321,9 +285,9 @@ A file can contain more than one pile. The inventory below lists every upstream-
 | Pi live voice and floating call orb | `src/fork/voice/piVoiceSession.ts`, `src/fork/voice/PiVoiceView.tsx`, `src/fork/voice/VoiceOrb.tsx`, `server/fork/pi-voice.ts` | Settings: Pi live voice. Existing Pi wire validation stays in `shared/pi-voice.ts`. Never bypass observe, origin or device-revocation checks. |
 | Computer view | `src/fork/computer/ComputerView.tsx`, `src/fork/computer/computerSettings.ts`, `server/fork/screen.ts` | Settings: Computer view. The PC's screen-relay viewer is framed as it is, edge to edge (its own toolbar has full screen and keyboard); Ovis adds no controls and no settings of its own. Bridge configuration remains `OVIS_SCREEN_*`; a browser toggle is not an authorization boundary. |
 | GitHub | `src/fork/github/GithubInbox.tsx`, `src/fork/github/GithubPull.tsx`, `src/fork/github/GithubConversation.tsx`, `src/fork/github/GithubFiles.tsx`, `src/fork/github/GithubActions.tsx`, `src/fork/github/GithubClone.tsx`, `src/fork/github/github.ts`, `src/fork/github/githubDemo.ts`, `src/fork/github/PullRequestsDialog.tsx`, `server/fork/github.ts`, `server/fork/github-clone.ts`, `server/fork/pull-requests.ts`, `shared/github.ts` | Upstream candidate. Settings: GitHub (stored `pullRequests` key, off by default; existing choices preserved). Keeps the workspace PR dialog; adds a GitHub section to the agent inbox (desktop rail, phone round button left of New workspace) with Review requested and Yours across every `gh` account signed in on the PC, and a repository filter (`ovis:fork-github-repo`). A pull request opens as a page drawn from GitHub's API in Ovis's design: beside the list on wide screens (a placeholder until one is picked), full screen on a phone with Back. Tabs (upstream `Segmented`): Overview, Conversation, Checks, Files; fork CSS reserves space for the control's touch targets and focus rings while scrolling horizontally, without vertical scrolling or clipped borders. The Files tab opens a file's diff under it in upstream `RepoDiff`, with review threads under their lines. Actions, as the account that listed the PR and hidden on read-only devices: comment, approve, request changes, and merge (confirm press, method remembered, pinned to the shown head commit). Checkout opens or creates a local worktree; a repository on no workspace gets Clone and checkout, into a folder the user confirms (suggested beside the owner's other checkouts, else the last parent, else `~/Projects`), never over something else. Fork PRs offer only Open on GitHub: branch names alone cannot verify fork provenance. Upstream hook: an optional `notes` prop in `src/components/RepoDiff.tsx` (content under a diff line, through the diff package's line annotations); outdated threads stay after the file's diff. |
-| Notes | `src/fork/notes/NotesInbox.tsx`, `src/fork/notes/NoteEditor.tsx`, `src/fork/notes/notes.ts`, `src/fork/notes/notesDemo.ts`, `src/fork/notes/Notes.css`, `src/fork/inbox/Places.tsx`, `src/fork/inbox/place.ts`, `server/fork/notes.ts`, `shared/fork/notes.ts` | Personal. Settings: Notes (stored `notes` key, off by default; on where fork settings were already stored). A place in the agent inbox beside Pull requests (footer icon on wide screens, round button on a phone): Markdown files in the server's `~/Notes` (`OVIS_NOTES_DIR`), newest first, searched by title, folder and text; a subfolder shows as a prefix. A note opens beside the list on wide screens and full screen on a phone with Back, in a TipTap editor that formats as it is typed and saves Markdown 0.8s after the last key and when the note is left; rename in its title, delete behind a confirm, all hidden on read-only devices. Dependencies: `@tiptap/*` 3.34, loaded only when a note opens. `src/fork/inbox/Places.tsx` replaced the GitHub-only hooks in `src/App.tsx` and `src/components/InboxList.tsx` with one per slot. |
+| Notes | `src/fork/notes/NotesInbox.tsx`, `src/fork/notes/NoteEditor.tsx`, `src/fork/notes/notes.ts`, `src/fork/notes/notesDemo.ts`, `src/fork/notes/Notes.css`, `src/fork/inbox/Places.tsx`, `src/fork/inbox/place.ts`, `server/fork/notes.ts`, `shared/fork/notes.ts` | Personal. Settings: Notes (stored `notes` key, off by default; on where fork settings were already stored). A place in the agent inbox beside Pull requests (a rail place on wide screens, round button on a phone): Markdown files in the server's `~/Notes` (`OVIS_NOTES_DIR`), newest first, searched by title, folder and text; a subfolder shows as a prefix. A note opens beside the list on wide screens and full screen on a phone with Back, in a TipTap editor that formats as it is typed and saves Markdown 0.8s after the last key and when the note is left; rename in its title, delete behind a confirm, all hidden on read-only devices. Dependencies: `@tiptap/*` 3.34, loaded only when a note opens. `src/fork/inbox/Places.tsx` replaced the GitHub-only hooks in `src/App.tsx` and `src/components/InboxList.tsx` with one per slot. |
 | Hidden agents | `src/fork/hidden/hiddenAgents.ts`, `shared/fork/pane.ts`, `shared/fork/core-terminals.ts` | Personal. No setting. Two `ovis.view` labels on hc terminals: `work` (the personal assistants and runner job agents) is background and unchanged: dropped from the snapshot and its events, in no list, count or alert, not even the Hidden filter. `hidden` reaches the browser in every snapshot marked `ovis_hidden`, in a workspace of its own (`ovis-hidden`), and alerts like any agent (push, sounds, exits). The browser reads the roster through one lens (`useHiddenLens`, hooked in `useRosterState`), so the sidebar, counts, badges and tab strip never list it; only the agent inbox's filter menu has a last item after a hairline, Hidden (`INBOX_FILTERS`), which lists hidden agents alone and opens one like any agent. Alerts read the full roster (`machinesRef` in `src/App.tsx`), and the selected pane, however it was picked (the filter, a push notification, a link, a saved selection on a fresh page), stays in the roster the thread view reads while it is selected (`holdSelected` in `selectTarget`, `useHiddenSelection` in `src/App.tsx`); the tab strip is not drawn for a hidden pane (`classicStripInHeader` and the pane slot in `src/App.tsx`), whose split half keeps its bar with the chat/terminal and close controls. A stored `hidden` filter falls back to All in a build without it and shows `No hidden agents` when none are left. The demo (`site/demo/transport.ts`) carries one hidden agent. Upstream hooks: `useRosterState` in `src/lib/useMachineRoster.ts`, `selectTarget` in `src/lib/useSelection.ts`, `allMachines` in `src/App.tsx` and `src/components/InboxList.tsx`, one more `INBOX_FILTERS` entry, the snapshot's hidden group in `server/herdr-core/snapshot.ts` and its workspace skips in `server/herdr-core/adapter.ts` and event filter in `server/herdr-core/core-model.ts`. |
-| Hide from menus, inbox row menu | `src/fork/hidden/hideItem.ts`, `src/fork/inbox/RowHold.tsx`, `server/fork/pane-view.ts`, `FORK_PANE_VIEW_PATH` in `shared/fork/pane.ts` | Personal (follows Hidden agents). No setting. `POST /api/fork/pane/view` sets `ovis.view=hidden` on one pane's hc terminal or takes it off (`machine_id` + `pane_id`, handed to another PC with its bridge token as the pane routes are); refused to read-only callers and on a runtime without terminal labels (herdr: `capabilities().seen`), and never touches another `ovis.view` such as `work`. `forkHideItem` is one Hide agent / Unhide agent item, offered only for an agent on a herdr-core PC and disabled on a watching device, in the Agents list row menu (`src/components/AgentSidebar.tsx`; the workspace sidebar's agent and helper rows have no menu, so none was added), the pane menu (`src/components/PaneCanvas.tsx`, also listed under the header's More), and the tab menu (`src/components/TabStrip.tsx`, which the fork tab chips open too; a tab of one pane only, its tap menu too, which drops the selected pane's own item from a split tab's (`isForkHideItem`): an agent in a split tab is hidden from its own pane menu, the Agents list or the inbox, where the pane is plain). Hiding the selected pane lets go of it (`releaseHeld`), and the selection's absence check reads the PC's session through the same lens (`shownSession` in `src/lib/useSelection.ts`), so it moves on as from a closed pane with the next snapshot. Agent inbox rows get a menu: a touch hold (450ms, 8px slop, as TabStrip's) or a right click opens Hide or Unhide (Unhide in the Hidden filter) and Close pane behind the pane close confirm, honoring view-only, offline PCs and locked panes. A held row opens nothing and reads nothing ahead: a finger's `PanePressContext` read waits for its lift. Upstream hooks: `useForkRowHold` spread on the row button and its `menu` in `src/components/InboxList.tsx`, one `forkHideItem` line in each menu above and one `isForkHideItem` condition in TabStrip's `pickerItems`, one `shownSession` call in `src/lib/useSelection.ts`, the route in `server/fork/routes.ts`, and `fork/inbox/RowHold.tsx` in the terminal part of `src/lib/i18n.test.ts` (it reuses the pane close confirm's words). |
+| Hide from menus, inbox row menu | `src/fork/hidden/hideItem.ts`, `src/fork/inbox/RowHold.tsx`, `server/fork/pane-view.ts`, `FORK_PANE_VIEW_PATH` in `shared/fork/pane.ts` | Personal (follows Hidden agents). No setting. `POST /api/fork/pane/view` sets `ovis.view=hidden` on one pane's hc terminal or takes it off (`machine_id` + `pane_id`, handed to another PC with its bridge token as the pane routes are); refused to read-only callers and on a runtime without terminal labels (herdr: `capabilities().seen`), and never touches another `ovis.view` such as `work`. `forkHideItem` is one Hide agent / Unhide agent item, offered only for an agent on a herdr-core PC and disabled on a watching device, in the Agents list row menu (`src/components/AgentSidebar.tsx`; the workspace sidebar's agent and helper rows have no menu, so none was added), the pane menu (`src/components/PaneCanvas.tsx`, also listed under the header's More), and the tab menu (`src/components/TabStrip.tsx`; a tab of one pane only, its tap menu too, which drops the selected pane's own item from a split tab's (`isForkHideItem`): an agent in a split tab is hidden from its own pane menu, the Agents list or the inbox, where the pane is plain). Hiding the selected pane lets go of it (`releaseHeld`), and the selection's absence check reads the PC's session through the same lens (`shownSession` in `src/lib/useSelection.ts`), so it moves on as from a closed pane with the next snapshot. Agent inbox rows get a menu: a touch hold (450ms, 8px slop, as TabStrip's) or a right click opens Hide or Unhide (Unhide in the Hidden filter) and Close pane behind the pane close confirm, honoring view-only, offline PCs and locked panes. A held row opens nothing and reads nothing ahead: a finger's `PanePressContext` read waits for its lift. Upstream hooks: `useForkRowHold` spread on the row button and its `menu` in `src/components/InboxList.tsx`, one `forkHideItem` line in each menu above and one `isForkHideItem` condition in TabStrip's `pickerItems`, one `shownSession` call in `src/lib/useSelection.ts`, the route in `server/fork/routes.ts`, and `fork/inbox/RowHold.tsx` in the terminal part of `src/lib/i18n.test.ts` (it reuses the pane close confirm's words). |
 | Android inbox widget | `app/android/ovis-widget/`, `server/fork/inbox-widget.ts`, `shared/fork/inbox-widget.ts`, `src/fork/inboxWidget.ts` | Optional: add the widget from the Android launcher, then open Ovis with push set up. It shows agent status and recent snippets, waiting agents first; tapping a row opens its conversation. While a widget is placed, Ovis checks only the working rows within the digest’s row budget for new snippets every 30 seconds; unchanged digests are skipped except for the 10-minute keepalive. Hooks: `server/core/status.ts` wraps the existing push service and stops the widget scheduler, `server/push.ts` sends encrypted digests through it, and `src/fork/useForkApp.tsx` reports widget placement. `app/android/settings.gradle` links the module; `OvisMessagingService` hands digests to it instead of displaying an alert. For fork APKs set `OVIS_PUSH_RELAY=https://ovis-push-relay.ricardofelixb.workers.dev` at build time; the code default is unchanged. |
 | Reply read-aloud | `src/fork/voice/SpeakButton.tsx`, `src/fork/voice/speech.ts`, `server/fork/speech.ts` | Settings: Read aloud, with the existing voice selector. No engine/model download until requested. |
 | Pi model picker | `src/fork/chat/ComposerPill.tsx`, `src/fork/chat/modelMark.ts` | Settings: Pi model picker. On a pi pane with the ovis-model extension, the composer pill opens a model and thinking menu while pi is idle; every other pane, and the pill's mark, model and ring, stay upstream's. |
@@ -331,7 +295,6 @@ A file can contain more than one pile. The inventory below lists every upstream-
 | Agent friends | `src/fork/friends/AgentFriend.tsx`, `src/fork/friends/AgentAvatar.tsx`, `src/fork/friends/TabFriends.tsx`, `src/fork/friends/friends.ts`, `src/fork/friends/worktreeMark.ts`, `server/fork/friends.ts` | Settings: Agent friends. With Agent friends on, every place that shows a running agent (inbox, sidebar, tabs, palette, header, chat) shows its friend alone, no harness logo, through `AgentAvatar`; the harness `AgentMark` stays where it names a harness (picker, settings, usage, setup) and where a pane has no friend. A linked worktree row in the sidebar shows upstream's branch icon instead of its agent's friend, so it reads as a worktree (`forkWorktreeMark`, hooked once in `rowMark` in `src/components/Sidebar.tsx`); with Agent friends off it keeps upstream's agent mark. Fork-only. |
 | Generic runtime fixes | Conversation deltas, receipt whitespace, hidden-page throttling, independent machine reconnect, source bridges, favicon discovery, terminal/IME fixes | These fix transport or data interpretation, not personal layout. Their coupled upstream integrations and tests are retained; see limits below. |
 | Copilot partial-log truncation within one timestamp tick | `server/copilot-store.ts`; existing regression in `server/copilot.test.ts` | Compare truncations against both complete-line and observed sizes. Coarse file timestamps can stay unchanged when a partial line is appended and removed. Generic upstream bug fix, no setting or test exclusion. |
-| Agent tool runs survive an Ovis restart (devswha/ovis #4628) | `server/fork/agent-tool-launch-proof.ts`; regression `server/fork/fork-agent-tool-reconcile.test.ts` | Generic upstream bug fix, no setting. pi, OmO and Claude Code set `process.title`, which rewrites `/proc/<pid>/cmdline` to their name, so `RunStore.reconcile` never found the launch argv, revoked every top-level run at startup and deleted its `-e` extension, MCP config and token (pi then fails on `/new` or `/reload`). On Linux the run is also kept when the foreground (same birth) has the exact `OVIS_AGENT_TOKEN_FILE=<dir>/tokens/<id>.token` environment entry both launch paths set; an unreadable environment proves nothing and falls back to the argv check. Hook: `server/agent-tools/runs.ts` +3/−2 vs `upstream/main` (before 0/0): one import and one `launchedWithToken(...) \|\|` alternative in the `verified` expression. Left as is to keep the hook small: the extension header in `server/agent-tools/launch.ts` says "read once at start", but pi reloads `-e` extensions from disk on `/new` and `/reload`; fix the wording with the upstream PR. |
 | This PC's runtime in the machines list | `server/machines.ts` `list()`; regression in `server/machines.test.ts` | Generic upstream bug fix, no setting. `GET /api/machines` named the runtime of every connected remote PC but none for this PC, whose entry never went through that loop, so a check on `Machine.runtime` (here `forkHideItem`'s herdr-core test) never passed for this PC's agents. `list()` now names the runtime this server serves (`capabilities().runtime`) on this PC's entry while it is connected, absent otherwise, as for a remote PC; the PC menu's Runtime note now shows for this PC too. Hook: one import and one line in `server/machines.ts`, the field's comment in `shared/machines.ts`. |
 | Portable native improvements | Android call lifecycle, notification permissions, friend pictures and multi-window handling | Native-app contribution candidates. They are not Xiaomi-only changes. Native files were not rewritten by this refactor. |
 
@@ -411,7 +374,7 @@ The browser runner uses the CI image and a `git ls-files` tar, isolated test ses
 
 ## One-line hook extraction (PR #84 follow-up)
 
-Counts compare against `upstream/main` with `git diff --shortstat upstream/main...HEAD -- <file>`; `+/-` means insertions/deletions. Before is commit `30d046a4` (PR #84). This table is updated alongside each extraction. Deleted upstream display lines still count: moving the Composer pill removes inline fork logic, but cannot make those upstream deletions disappear.
+Historical counts from the PR #84 extraction; `+/-` means insertions/deletions. Before is commit `30d046a4`. See the upstream sync below for the current counts on changed hooks. Deleted upstream display lines still count: moving the Composer pill removes inline fork logic, but cannot make those upstream deletions disappear.
 
 | Upstream file | Before +/− | After +/− | Fork hook |
 | --- | --- | --- | --- |
@@ -560,7 +523,7 @@ Total inventoried: **284 upstream-owned paths** (282 modified and 2 deleted at t
 
 Expected warm-cache wall times (not GitHub measurements): typecheck/build **1-2 minutes**, each unit shard **1-3 minutes**, normal fork-only browser **1-3 minutes**, final gate **under 15 seconds**. The target is **2-3 minutes total**, not a guarantee for large diffs or cold Chromium installs. After filtering restored upstream copies, this migration PR selects **4 scripts**: `file-viewer-regression.ts`, `fork-features-regression.ts`, `fork-preferences-regression.ts` and `inbox-mode-demo-regression.ts`. None needs the external Docker SSH fixture. Inbox previously took 294 seconds, so this PR's browser job is more likely **5-7 minutes**, still subject to the 10-minute cap. No Copilot exclusion is present.
 
-`fork-unit-shard.ts` mirrors upstream's unit file boundary and keeps each file in an isolated process/group. `--shard k/4 --list` prints a dry-run JSON list. If upstream changes its test roots or integration exceptions, update this fork-owned adapter. `fork-browser.ts --list` previews selection. The job shallow-fetches upstream main by URL and compares changed scripts byte-for-byte with that fetched commit; scripts absent upstream and all `fork-*-regression.ts` scripts run. If fetching fails, it logs a warning and runs all changed scripts. Selected scripts missing from the serial list are registered only in the disposable CI checkout and the file is restored on success or failure. No upstream workflow was edited.
+The fork unit jobs opt into upstream's `setup-ci` Rust PTY host. The private sign-in tests need it even though the unit jobs do not start a herdr session. `fork-unit-shard.ts` mirrors upstream's unit file boundary and keeps each file in an isolated process/group. `--shard k/4 --list` prints a dry-run JSON list. If upstream changes its test roots or integration exceptions, update this fork-owned adapter. `fork-browser.ts --list` previews selection. The job shallow-fetches upstream main by URL and compares changed scripts byte-for-byte with that fetched commit; scripts absent upstream and all `fork-*-regression.ts` scripts run. If fetching fails, it logs a warning and runs all changed scripts. Selected scripts missing from the serial list are registered only in the disposable CI checkout and the file is restored on success or failure. No upstream workflow was edited.
 
 **Repository settings completed by the maintainer:** all upstream workflows are disabled, and main's sole required check is **`Fork CI`**, from the GitHub Actions app. `fork-full.yml` is manual-only and calls `./.github/workflows/ci.yml` via `workflow_call`; disabled workflows still run when called. Full checks are optional, not part of the gate. This implementation did not change repository settings.
 
@@ -575,6 +538,39 @@ gh api --method PATCH repos/ricardofelixb/ovis/branches/main/protection/required
 {"checks":[{"context":"Fast checks","app_id":15368},{"context":"Integration and browser","app_id":15368},{"context":"Native Windows install","app_id":15368}]}
 JSON
 ```
+
+## Upstream sync (`211b76579`)
+
+The merge brings in 161 upstream commits since `70c68e28`. Upstream [#4865](https://github.com/devswha/ovis/pull/4865) now verifies a renamed agent process with its launch token, so the fork's launch-proof helper and duplicate regression are gone. The Notes dependencies are retained on top of upstream's lockfile.
+
+- Settings use upstream's typed readers and split settings pages. `SettingsDialog.tsx` keeps the Fork page, `paletteSettings.ts` its palette entry, and `SettingsAppearancePage.tsx` now mounts Follow Omarchy. The preferences, local migration and translations remain fork-owned.
+- `ChatView.tsx` passes the fork's live-reply presentation into upstream's split `ChatTurn.tsx` and `ChatWork.tsx`; read-aloud and compact work still render there. `server/core/terminals.ts` calls `server/fork/live-conversation.ts` to check conversation interest without touching the pending-input lease. `ComposerPill.tsx` carries upstream's plan-mode indicator.
+- `InboxList.tsx` keeps the fold, places and row-menu hooks; `PaneCanvas.tsx`, `PaneTerminal.tsx` and the Agents list retain the pane menu and friend marks. The new bring-pane menu uses the same agent friend. `App.tsx` keeps the workspace rail and the sidebar's Inbox entry follows resolved navigation; `Rail.css` covers the wide top safe-area strip. Phones still use Default even if Rail is stored.
+- Browser fixtures now use upstream's shared demo build. The demo transport keeps its synthetic Hidden workspace last even after creation, like the herdr-core projection, so it does not shift workspace reorder indices. React fixture tests use the upstream DOM fixture instead of `react-test-renderer`; the fork's tab behavior stays in its own test.
+
+Net upstream-file footprint vs `211b76579`, including deletions and existing hooks in each file:
+
+| File | Lines added/removed | Fork integration |
+| --- | --- | --- |
+| `src/App.tsx` | +84/-81 | Fork app, hidden selection, inbox and rail mounts, sidebar and drawer hooks |
+| `src/components/InboxList.tsx` | +36/-16 | Fork inbox rows, places, pictures, hold/menu hooks |
+| `src/components/InboxRail.tsx` | +5/-2 | Back and place mounts |
+| `src/components/Sidebar.tsx` | +39/-22 | Workspace tree helper rows and friend marks |
+| `src/components/AgentSidebar.tsx` | +31/-25 | Roster and helper folding, friend and pane-menu hooks |
+| `src/components/MachineSidebar.tsx` | +18/-19 | Workspace tree replaces redundant agent list; shared footer |
+| `src/components/SettingsDialog.tsx` | +8/-2 | Fork page id, label, help text and page render |
+| `src/components/SettingsAppearancePage.tsx` | +2/-0 | Omarchy row import and mount |
+| `src/lib/settings.ts` | +63/-29 | Fork defaults/scope, reads, migration and Omarchy theme |
+| `src/components/ChatView.tsx` | +54/-16 | Live turns, compact work and send presentation |
+| `src/components/ChatTurn.tsx` | +14/-3 | Live words and read-aloud slots |
+| `src/components/ChatWork.tsx` | +4/-8 | Compact work slot |
+| `src/components/Composer.tsx` | +31/-61 | Fork pill, model picker and voice integration |
+| `src/components/PaneCanvas.tsx` | +6/-3 | Hide and friend hooks |
+| `src/components/PaneTerminal.tsx` | +29/-8 | Voice, links, friend and input hooks |
+| `server/core/terminals.ts` | +8/-0 | Conversation-live delivery to interested attached clients |
+| `server/index.ts` | +13/-6 | Fork services and friend lookup |
+| `server/push.ts` | +32/-10 | Friend icon, muted helper and widget digest hooks |
+| `server/core/status.ts` | +13/-6 | Friend/mute options and widget lifecycle |
 
 ## Local validation
 

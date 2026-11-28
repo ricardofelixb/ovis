@@ -1,6 +1,4 @@
-import { createContext, useCallback } from "react";
-import { LOCAL_MACHINE, type Machine } from "../../shared/machines.ts";
-import { openExternal } from "./externalLink.ts";
+import { createContext } from "react";
 
 export const WEB_LINK_TARGETS = ["tab", "panel"] as const;
 export type WebLinkTarget = (typeof WEB_LINK_TARGETS)[number];
@@ -65,16 +63,6 @@ export function remotePcUrl(uri: string, destination: string | undefined): strin
   if (!LOOPBACK.test(url.hostname)) return null;
   url.hostname = host.includes(":") ? `[${host}]` : host;
   return url.href;
-}
-
-/** A pane's link opener: a remote PC's localhost link opens on that PC's SSH host, in a tab; the panel frames only this app's own PC. */
-export function usePaneLinkOpener(machines: readonly Pick<Machine, "id" | "target">[], openWebPage: WebPanelOpener): WebPanelOpener {
-  return useCallback<WebPanelOpener>((uri, shiftKey, machineId) => {
-    const remote = machineId === LOCAL_MACHINE ? null : remotePcUrl(uri, machines.find((item) => item.id === machineId)?.target?.destination);
-    if (remote === null) return openWebPage(uri, shiftKey, machineId);
-    openExternal(remote, "link", false);
-    return true;
-  }, [machines, openWebPage]);
 }
 
 const LOCAL_PAGE = /^(?:(https?):\/\/)?(localhost|127(?:\.\d{1,3}){3}|\[::1\])?:(\d{1,5})([/?#]\S*)?$/i;

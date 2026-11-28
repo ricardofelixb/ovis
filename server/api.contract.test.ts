@@ -3881,7 +3881,7 @@ describe("web push", () => {
     expect(pushed!.vapidValid).toBe(true);
   }, 40_000);
 
-  it("sends no device an alert while a connected page says it is in use, and alerts again once it is not (#751)", async () => {
+  it("does not alert for a question answered while a connected page is in use, then alerts once it is not (#751)", async () => {
     let created: Awaited<ReturnType<typeof workspaceCreate>> | undefined;
     let dir: string | undefined;
     let device: FakePushService | undefined;
@@ -3920,11 +3920,11 @@ describe("web push", () => {
         blocked = await report("blocked");
       }
       expect(blocked).toBe(true);
+      expect(await report("working")).toBe(true);
       await bridge.alertsSettled();
       expect(alerts()).toHaveLength(0);
 
       await tell(false);
-      expect(await report("working")).toBe(true);
       expect(await report("blocked")).toBe(true);
       const pushed = await device.waitFor((push) => push.payload.pane_id === paneId, "alert once no page is in use", 5_000);
       expect(pushed.payload.body).toBe("waiting for your input");
@@ -5328,7 +5328,7 @@ describe("POST /api/sessions/resume", () => {
 
   beforeAll(async () => {
     if (!NATIVE) return;
-    config = mkdtempSync("/tmp/hwr-");
+    config = mkdtempSync(join(tmpdir(), "hwr-"));
     root = mkdtempSync(join(tmpdir(), "ovis-claude-resume-"));
     home = join(root, "home");
     alternate = join(root, "alternate-store");
@@ -5486,10 +5486,25 @@ setInterval(() => {}, 1 << 30);
     expect(JSON.stringify(refusals)).not.toMatch(/alternate|prompt|missing-store/);
   }, 90_000);
 
+  it.skipIf(!NATIVE)("refuses wrapped Resume with a valid store key without creating a tab", async () => {
+    const store = join(root, "wrapped-store");
+    writeSession(store, ID, "wrapped store prompt");
+    const plain = await sourcePane(store, undefined, "env HERDR_AGENT=claude claude");
+    const [, original] = await list(plain.pane);
+    const key = original.sessions.find((row) => row.id === ID)!.resume!.source!.store_key;
+    const wrapped = await sourcePane(store, undefined,
+      `env HERDR_AGENT=claude bash -c 'exec -a claude "$@"' bash node ${JSON.stringify(join(root, "claude.cjs"))}`);
+    const tabs = await tabsOf(workspaceId);
+    const [status, answer] = await resume({ workspace_id: workspaceId, pane_id: wrapped.pane, agent: "claude", session_id: ID, store_key: key });
+    expect([status, answer.error?.code, await tabsOf(workspaceId)]).toEqual([409, "launch_wrapped", tabs]);
+    const [listed, history] = await list(wrapped.pane);
+    expect([listed, history.sessions.find((row) => row.id === ID)?.resume]).toEqual([200, null]);
+  }, 30_000);
+
   it.skipIf(!NATIVE)("a source shell without the override is no proof: herdr exporting one withholds Resume before any tab", async () => {
     const implicitKey = (await list((await sourcePane(null)).pane))[1].sessions[0]!.resume!.source!.store_key;
     const exportedSession = "resume-exported";
-    const exportedConfig = mkdtempSync("/tmp/hwr-");
+    const exportedConfig = mkdtempSync(join(tmpdir(), "hwr-"));
     const exportedSocket = join(exportedConfig, "herdr", "sessions", exportedSession, "herdr.sock");
     const exportedRpc = <T,>(method: string, params: Record<string, unknown>) => herdrRpc<T>(method, params, exportedSocket);
     const defaultBefore = readFileSync(transcript(join(home, ".claude"), ID), "utf8");

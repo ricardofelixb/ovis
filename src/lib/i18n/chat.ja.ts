@@ -1,6 +1,6 @@
 /**
  * Japanese for the keys only the chat files use:
- * components/ChatView.tsx, components/Markdown.tsx, components/MermaidLightbox.tsx,
+ * components/ChatView.tsx, components/ChatWork.tsx, components/ChatTurn.tsx, components/Markdown.tsx, components/MermaidLightbox.tsx,
  * components/ChatMinimap.tsx, components/ImageLightbox.tsx, components/BackgroundTasks.tsx,
  * components/BackgroundAgentDetail.tsx, components/Artifacts.tsx, components/OmpBtw.tsx, components/MarkdownLinkMenu.tsx,
  * lib/workBlocks.ts (with CATEGORY_LABEL), lib/toolVerbs.ts (with VERB_LABEL), lib/outcomeChip.ts,
@@ -242,7 +242,6 @@ export const CHAT_JA: Record<string, string> = {
   "{n} of {count}": "{count} 枚中 {n} 枚目",
   "Couldn't copy the image. Download it instead.": "画像をコピーできませんでした。代わりにダウンロードしてください。",
   "Couldn't save the image.": "画像を保存できませんでした。",
-  "Saved to Downloads.": "ダウンロードに保存しました。",
   "Conversation turns": "会話のターン",
   "Go to turn {n}": "ターン {n} へ移動",
   "Show full message": "メッセージ全体を表示",

@@ -1,54 +1,26 @@
-import { afterEach, beforeEach, expect, jest, mock, test } from "bun:test";
-import * as ReactDom from "react-dom";
-import { act, type ReactNode } from "react";
-import { create, type ReactTestInstance, type ReactTestRenderer } from "react-test-renderer";
+import { afterEach, beforeEach, expect, jest, test } from "bun:test";
+import { act } from "react";
 import { HIDDEN_WORKSPACE_ID } from "../../../shared/fork/pane.ts";
 import type { Machine } from "../../../shared/machines.ts";
 import fixture from "../../../site/demo/fixtures/machines.json";
+import { InboxList } from "../../components/InboxList.tsx";
+import { openPage, type Page } from "../../lib/page.fixture.ts";
 import { PanePressContext } from "../../lib/paneSubmitContext.ts";
 import { SettingsProvider } from "../../lib/settings.ts";
 import type { SidebarActivity } from "../../lib/sidebarActivity.tsx";
+import { newQuestionReads } from "../../lib/useInboxQuestions.ts";
+import { SummaryReads } from "../../lib/useInboxSummaries.ts";
+import { useHiddenLens } from "../hidden/hiddenAgents.ts";
 
-await mock.module("react-dom", () => ({ ...ReactDom, createPortal: (node: ReactNode) => node }));
-const rowMenu = await import("../../components/RowMenu.tsx");
-function RowMenu(_props: Parameters<typeof rowMenu.RowMenu>[0]) { return null; }
-await mock.module("../../components/RowMenu.tsx", () => ({ ...rowMenu, RowMenu }));
-const { InboxList } = await import("../../components/InboxList.tsx");
-const { useHiddenLens } = await import("../hidden/hiddenAgents.ts");
-const { newQuestionReads } = await import("../../lib/useInboxQuestions.ts");
-const { SummaryReads } = await import("../../lib/useInboxSummaries.ts");
-
-const saved = new Map<string, PropertyDescriptor | undefined>();
-let renderer: ReactTestRenderer | undefined;
+let page: Page;
 beforeEach(() => {
+  page = openPage();
+  Object.defineProperty(page.window, "matchMedia", { configurable: true, writable: true, value: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }) });
   jest.useFakeTimers();
-  for (const key of ["window", "document", "navigator", "getComputedStyle", "IS_REACT_ACT_ENVIRONMENT"]) saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-  const events = new EventTarget();
-  Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { languages: ["en"] } });
-  Object.defineProperty(globalThis, "getComputedStyle", { configurable: true, value: () => ({ getPropertyValue: () => "" }) });
-  Object.defineProperty(globalThis, "document", { configurable: true, value: {
-    body: { nodeType: 1, children: [] }, querySelector: () => null,
-    documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } },
-    addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
-  } });
-  Object.defineProperty(globalThis, "window", { configurable: true, value: {
-    matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
-    localStorage: { getItem: () => null, setItem() {} },
-    addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events),
-    requestAnimationFrame() { return 0; }, cancelAnimationFrame() {},
-    history: { state: null, pushState() {}, replaceState() {}, back() {} }, location: { href: "http://localhost/", search: "" },
-  } });
 });
 afterEach(async () => {
-  await act(async () => renderer?.unmount());
-  renderer = undefined;
   jest.useRealTimers();
-  for (const [key, descriptor] of saved) {
-    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-    else Reflect.deleteProperty(globalThis, key);
-  }
-  saved.clear();
+  await page.close();
 });
 
 function Lens({ machines }: { machines: Machine[] }) { useHiddenLens(machines); return null; }
@@ -62,37 +34,36 @@ async function draw({ runtime, hidden = false }: { runtime?: "herdr-core"; hidde
   const activity: SidebarActivity = { seqs: () => new Map(), status: () => "idle" };
   const presses: string[] = [];
   const opened: string[] = [];
-  await act(async () => {
-    renderer = create(<SettingsProvider><PanePressContext.Provider value={(_machine, pane) => presses.push(pane)}>
+  await page.render(<SettingsProvider><PanePressContext.Provider value={(_machine, pane) => presses.push(pane)}>
       <Lens machines={machines} />
       <InboxList machines={machines} activity={activity} watching={false} wide={false} filter={hidden ? "hidden" : "all"} onFilter={() => {}} query="" onQuery={() => {}}
         scroll={{ current: 0 }} focus={{ opening: 0, taken: { current: 0 } }} onOpen={(_machine, pane) => opened.push(pane)} onNew={() => {}}
         questionReads={newQuestionReads(() => () => {})} summaryReads={new SummaryReads(() => new Promise(() => {}), () => () => {})} />
     </PanePressContext.Provider></SettingsProvider>);
-  });
-  const root = renderer!.root;
-  const row = (): ReactTestInstance => root.find((node) => node.type === "li" && node.props["data-pane"] === "w1C:p1").find((node) => node.type === "button" && node.props.className === "inbox-row");
-  const menus = () => root.findAllByType(RowMenu);
-  return { row, menus, presses, opened };
+  const row = () => page.one<HTMLButtonElement>('li[data-pane="w1C:p1"] button.inbox-row');
+  const send = (type: string, detail: { button?: number; pointerType?: string; clientY?: number } = {}) => {
+    row().dispatchEvent(new window.PointerEvent(type, { bubbles: true, cancelable: true, button: 0, pointerType: "touch", clientX: 20, clientY: 20, ...detail }));
+  };
+  const menus = () => [...document.querySelectorAll(".row-menu, .row-sheet")]
+    .map((menu) => [...menu.querySelectorAll("button[data-item]")].map((item) => item.getAttribute("data-item")));
+  return { row, send, menus, presses, opened };
 }
 
-const finger = { button: 0, pointerType: "touch", clientX: 20, clientY: 20, currentTarget: { isConnected: true }, preventDefault() {} };
-
 test("a long press opens the row's menu, not its agent, and reads nothing ahead", async () => {
-  const { row, menus, presses, opened } = await draw();
-  await act(async () => { row().props.onPointerDown(finger); });
+  const { row, send, menus, presses, opened } = await draw();
+  await act(async () => { send("pointerdown"); });
   await act(async () => { jest.advanceTimersByTime(450); });
   expect(menus()).toHaveLength(1);
-  expect(menus()[0]!.props.items.map((item: { id: string }) => item.id)).toEqual(["close"]);
-  await act(async () => { row().props.onPointerUp(finger); row().props.onClick(); });
+  expect(menus()[0]).toEqual(["close"]);
+  await act(async () => { send("pointerup"); row().click(); });
   expect(opened).toEqual([]);
   expect(presses).toEqual([]);
 });
 
 test("a tap still opens the agent, and a finger that scrolls opens no menu", async () => {
-  const { row, menus, presses, opened } = await draw();
-  await act(async () => { row().props.onPointerDown(finger); row().props.onPointerUp(finger); row().props.onClick(); });
-  await act(async () => { row().props.onPointerDown(finger); row().props.onPointerMove({ ...finger, clientY: 60 }); });
+  const { row, send, menus, presses, opened } = await draw();
+  await act(async () => { send("pointerdown"); send("pointerup"); row().click(); });
+  await act(async () => { send("pointerdown"); send("pointermove", { clientY: 60 }); });
   await act(async () => { jest.advanceTimersByTime(1000); });
   expect(menus()).toHaveLength(0);
   expect(opened).toEqual(["w1C:p1"]);
@@ -101,10 +72,10 @@ test("a tap still opens the agent, and a finger that scrolls opens no menu", asy
 
 test("a right click opens the menu; herdr-core offers Hide, and Unhide in the Hidden filter", async () => {
   const ids = async (options: Parameters<typeof draw>[0]) => {
-    const { row, menus } = await draw(options);
-    await act(async () => { row().props.onContextMenu({ ...finger, button: 2 }); });
-    const shown = menus()[0]!.props.items.map((item: { id: string }) => item.id);
-    await act(async () => renderer?.unmount());
+    const { send, menus } = await draw(options);
+    await act(async () => { send("contextmenu", { button: 2, pointerType: "mouse" }); });
+    const shown = menus()[0];
+    await page.render(null);
     return shown;
   };
   expect(await ids({ runtime: "herdr-core" })).toEqual(["hide:w1C:p1", "close"]);

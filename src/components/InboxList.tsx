@@ -1,5 +1,5 @@
 import { tally, usageCounters } from "../lib/usageCounters.ts";
-import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from "react";
+import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from "react";
 import { Ellipsis, EyeOff, ListFilter, Monitor, Plus, Search, Terminal, TriangleAlert, X } from "lucide-react";
 import { ForkPlaceOpen } from "../fork/inbox/Places.tsx";
 
@@ -24,13 +24,14 @@ import type { InboxListHandle } from "../lib/useInbox.ts";
 import { questionTargets, useInboxQuestions, type QuestionReads } from "../lib/useInboxQuestions.ts";
 import { summaryTargets, useInboxSummaries, type RowSummary, type SummaryReads } from "../lib/useInboxSummaries.ts";
 import { useMediaQuery } from "../lib/useMediaQuery.ts";
+import { shownTabLabels, subscribeTabLabels } from "../lib/tabLabels.ts";
 import { AgentMark } from "./AgentMark.tsx";
 import { ForkInboxAvatar } from "../fork/inbox/InboxAvatar.tsx";
 import { forkInboxFolded, forkInboxRows } from "../fork/inbox/inboxRows.ts";
 import { useForkOpenHelpers } from "../fork/inbox/HelpersFold.tsx";
 import { useForkRowHold } from "../fork/inbox/RowHold.tsx";
 import { ForkFoldCount, ForkHelpersFace } from "../fork/inbox/HelpersFace.tsx";
-import { agentRowTitle, blockedNote, stateAge } from "./AgentSidebar.tsx";
+import { agentRowTitle, blockedNote, inboxRowTopic, stateAge } from "./AgentSidebar.tsx";
 import { MachineHeader, useMachineFold } from "./MachineHeader.tsx";
 import { machineDotState, STATE_WORD } from "./MachineSidebar.tsx";
 import { RowMenu } from "./RowMenu.tsx";
@@ -99,11 +100,13 @@ export function InboxList({ ref, machines: roster, allMachines, activity, watchi
   const searchToggle = useRef<HTMLButtonElement>(null);
   const { settings, resolvedLanguage } = useSettings();
   const popup = useMediaQuery(SHEET_QUERY) ? "dialog" : "menu";
-  const { agentGroupSort: sort, sidebarRows, statusIndicators } = settings;
+  const { agentGroupSort: sort, autoTabNames, sidebarRows, statusIndicators } = settings;
   const machines = useMemo(() => inboxMachines(filter, roster, allMachines ?? roster), [filter, roster, allMachines]);
+  const firstLines = useSyncExternalStore(subscribeTabLabels, shownTabLabels, shownTabLabels);
+  const autoLabels = autoTabNames ? firstLines : null;
   const all = useMemo(() => inboxOrder(machines, activity, { sort, name: (row) => agentRowTitle(row, sidebarRows === "one").drawn }), [machines, activity, sort, sidebarRows]);
   const questions = useInboxQuestions(questionReads, questionTargets(all, activity));
-  const summaries = useInboxSummaries(summaryReads, summaryTargets(all, activity));
+  const summaries = useInboxSummaries(summaryReads, summaryTargets(all, activity), focus.opening);
   const stamps = useAgentStateStamps();
   const [tick, setTick] = useState(0);
   const wordsOf = (row: AgentRow): string | null => {
@@ -114,7 +117,9 @@ export function InboxList({ ref, machines: roster, allMachines, activity, watchi
       question: questions.get(key) ?? null, plan: online ? row.entry.pane.plan : undefined, last: lastWords(summaries.get(key), t),
     });
   };
-  const found = forkInboxRows(inboxSearched(inboxFiltered(all, filter, activity), query, machines, t, wordsOf), settings.agentFriends);
+  // the tab title a row draws is found too, a learned one included (no snapshot label holds it)
+  const searchedWords = (row: AgentRow): string | null => [inboxRowTopic(row, autoLabels), wordsOf(row)].filter((part) => part !== null).join("\n") || null;
+  const found = forkInboxRows(inboxSearched(inboxFiltered(all, filter, activity), query, machines, t, searchedWords), settings.agentFriends);
 
   // a state change never moves a row under a finger or the keyboard's focus (AgentSidebar.tsx): while either is in
   // the list, rows keep the order last drawn; the reader's own doing (a filter, a query) draws them as they are at
@@ -179,6 +184,7 @@ export function InboxList({ ref, machines: roster, allMachines, activity, watchi
     const status = inboxStatus(row, activity);
     const group = agentGroup(status);
     const title = agentRowTitle(row, false).title;
+    const topic = inboxRowTopic(row, autoLabels);
     const tabs = machine.snapshot?.tabs.filter((candidate) => candidate.workspace_id === workspace.workspace_id) ?? [];
     const place = agentContext({
       agentLabel: null, title, markAgent: null, machineName: null,
@@ -192,7 +198,7 @@ export function InboxList({ ref, machines: roster, allMachines, activity, watchi
     const state = !online ? t("Offline") : failed ? t("Turn failed") : inboxStateWord(group, t);
     const line = inboxRowLine({ online, group, words: wordsOf(row), place, failed }, t);
     return {
-      key, machine, pane, online, status, group, title, line, failed, mark: paneMark(entry) ?? "", kind, state, forkTree, forkFold,
+      key, machine, pane, online, status, group, title, topic, line, failed, mark: paneMark(entry) ?? "", kind, state, forkTree, forkFold,
       asks: online && inboxAsks(group), since: online ? inboxSinceAt(group, summary, group === "blocked" ? stateSince(stamps, machine.id, pane.pane_id, pane.terminal_id, "blocked") : null) : null,
     };
   });
@@ -289,13 +295,13 @@ export function InboxList({ ref, machines: roster, allMachines, activity, watchi
     const words = <span className="inbox-words" dir="auto">{row.line}</span>;
     const age = row.since === null ? null : stateAge(now - row.since);
     const at = row.since === null ? null : new Date(row.since);
-    const spoken = [row.kind ? agentName(row.kind) : null, row.title, row.state, row.line === row.state ? null : row.line, age].filter((part) => part !== null).join(", ");
+    const spoken = [row.kind ? agentName(row.kind) : null, row.title, row.topic, row.state, row.line === row.state ? null : row.line, age].filter((part) => part !== null).join(", ");
     return (
       <li key={row.key} className={`inbox-item${row.online ? "" : " is-offline"}${row.asks ? " is-asking" : ""}${open ? " is-current" : ""}`} {...row.forkTree} data-machine={row.machine.id} data-pane={row.pane.pane_id} data-state={row.group}>
         {row.forkFold && <ForkHelpersFace open={row.forkFold.open} agentTitle={row.title} onToggle={() => helperFolds.toggle(row.forkFold!.key)} />}
         <button type="button" className="inbox-row" disabled={!row.online} aria-label={spoken} aria-current={open ? "true" : undefined}
           ref={(node) => { if (node) rowNodes.current.set(row.key, node); else rowNodes.current.delete(row.key); }}
-          title={wide ? [row.title, row.line, at === null ? null : `${age} · ${at.toLocaleString(resolvedLanguage)}`].filter((part) => part !== null).join("\n") : undefined}
+          title={wide ? [row.title, row.topic, row.line, at === null ? null : `${age} · ${at.toLocaleString(resolvedLanguage)}`].filter((part) => part !== null).join("\n") : undefined}
           {...forkHold.row({ machine: row.machine, pane: row.pane, title: row.title }, row.online)}
           onClick={() => { if (forkHold.held()) return; tally(() => usageCounters.paneUse("inbox_open", row.machine.id)); onOpen(row.machine.id, row.pane.pane_id); }}>
           <ForkInboxAvatar row={row} />
@@ -303,7 +309,8 @@ export function InboxList({ ref, machines: roster, allMachines, activity, watchi
             <span className="inbox-line">
               <span className="inbox-name">{row.title}</span>
               <ForkFoldCount count={row.forkFold?.hidden ?? 0} />
-              {!wide && at !== null && <time className="inbox-time" dateTime={at.toISOString()} title={at.toLocaleString(resolvedLanguage)}>{age}</time>}
+              {row.topic !== null && <span className="inbox-topic" dir="auto">{row.topic}</span>}
+              {at !== null && <time className="inbox-time" dateTime={at.toISOString()} title={at.toLocaleString(resolvedLanguage)}>{age}</time>}
             </span>
             {wide ? words : <span className="inbox-sub">{words}{stateMark(row.status, row.failed, row.state)}</span>}
           </span>

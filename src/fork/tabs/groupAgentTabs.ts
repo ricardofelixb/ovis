@@ -4,8 +4,12 @@ import { adjacentTabBoundary } from "../../lib/tabOrder.ts";
 type Tab = Pick<HerdrTab, "tab_id" | "workspace_id">;
 type Pane = Pick<HerdrPane, "pane_id" | "tab_id" | "workspace_id" | "parent_pane_id">;
 
-/** Presentation only: keep the authoritative order/IDs for menus, close and reorder. */
-export function groupAgentTabs<T extends Tab>(tabs: readonly T[], panes: readonly Pane[], enabled: boolean, renaming?: string) {
+/**
+ * Presentation only: a job agent's tab (a pane whose `parent_pane_id` is in another tab of the workspace) is hidden
+ * from the strip and counted on its visible parent, whose menu lists its panes (`folded`). Tabs, IDs and order stay
+ * authoritative.
+ */
+export function groupAgentTabs<T extends Tab, P extends Pane>(tabs: readonly T[], panes: readonly P[], enabled: boolean, renaming?: string) {
   const byId = new Map(tabs.map((tab) => [tab.tab_id, tab]));
   const byPane = new Map(panes.map((pane) => [pane.pane_id, pane]));
   const parents = new Map<string, string>();
@@ -41,16 +45,14 @@ export function groupAgentTabs<T extends Tab>(tabs: readonly T[], panes: readonl
     append(tab.tab_id, own);
     if (own.length) children.set(tab.tab_id, own);
   }
+  // every pane of the hidden tabs, the job agents and any other pane sharing their tab, so none is out of reach
+  const folded = new Map([...children].map(([parent, own]) => [parent, own.flatMap((tab) => panes.filter((pane) => pane.tab_id === tab.tab_id))]));
+  // A hidden child has no tab to move: a visible tab moves past the hidden ones to its visible neighbour.
   const adjacentBoundary = (id: string, direction: -1 | 1): number | null => {
-    const pool = parentOf.has(id) ? tabs.filter((tab) => parentOf.has(tab.tab_id) && parents.get(tab.tab_id) === parents.get(id)) : visible;
-    const boundary = adjacentTabBoundary(pool.map((tab) => tab.tab_id), id, direction);
+    const boundary = adjacentTabBoundary(visible.map((tab) => tab.tab_id), id, direction);
     if (boundary === null) return null;
-    const neighbour = pool[direction === 1 ? boundary - 1 : boundary]!;
+    const neighbour = visible[direction === 1 ? boundary - 1 : boundary]!;
     return tabs.indexOf(neighbour) + (direction === 1 ? 1 : 0);
   };
-  const dropBoundary = (id: string, target: string, after: boolean): number | null => {
-    if (id === target || !parentOf.has(id) || !parentOf.has(target) || parents.get(id) !== parents.get(target)) return null;
-    return tabs.findIndex((tab) => tab.tab_id === target) + (after ? 1 : 0);
-  };
-  return { tabs: visible, children, parentOf, adjacentBoundary, dropBoundary };
+  return { tabs: visible, children, folded, parentOf, adjacentBoundary };
 }

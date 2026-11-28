@@ -49,6 +49,8 @@
 /* the +N follows the title, as in the sidebar; the time keeps the end */
 .mode-inbox .inbox-name:has(+ .workspace-fold-count) { flex: 0 1 auto; }
 .mode-inbox .inbox-line > .workspace-fold-count { margin-inline-end: auto; }
+/* a tab's +N: the label's order, so it follows the name and stays before the end-aligned status dot and 1/2 */
+:is(.header-tabs, .browser-tabs) .tab-strip-tab > .workspace-fold-count { order: 1; }
 
 /* a helper under its agent is its title alone, after the tree's elbow: no picture (its tab chip keeps one), and a
    level steps in to where the title above it starts, as in the agent inbox */

@@ -26,11 +26,14 @@
 /* The rail runs the window's full height, as it does in the inbox, so its buttons stand where they stand there and
    nothing moves between the two: it climbs over the header's start, and the sidebar's own top row (.header-side,
    styles.css: New workspace, the palette and the sidebar's toggle) starts after it, as the inbox's top row does.
-   Not over a folded sidebar: there the header's start holds the toggle, and the peeked sidebar starts under it. */
+   Not over a folded sidebar: there the header's start holds the toggle, and the peeked sidebar starts under it.
+   The header is the top inset taller (styles.css): the rail climbs over that too and gives it back in its own
+   surface, a border, so no strip of the header's shows above it and upstream's paddings (InboxRail.css) still hold. */
 @media (min-width: 769px) {
   .app:not(.sidebar-collapsed) .sidebar:not(.inbox-column) > .inbox-rail {
     position: relative;
-    margin-top: calc(-1 * var(--header-h));
+    margin-top: calc(-1 * (var(--header-h) + env(safe-area-inset-top, 0px)));
+    border-top: env(safe-area-inset-top, 0px) solid var(--bg-nav);
   }
 
   .app:not(.sidebar-collapsed):has(.sidebar:not(.inbox-column) > .inbox-rail) .header-side {
@@ -47,10 +50,8 @@
   display: none;
 }
 
-/* The current place is marked by its heavier glyph alone (InboxRail.css keeps the stroke and the strong colour), with
-   no fill under it: the rail reads as a column of glyphs, the same in every place. A press still shows. */
-.inbox-rail .icon-button.inbox-rail-item[aria-current="page"],
-.inbox-rail .icon-button.inbox-rail-item[aria-current="page"]:hover:not(:disabled) {
+/* In Rail mode the current place has a heavier glyph alone. Default and presses keep InboxRail.css's fill. */
+:root[data-fork-navigation="rail"] .inbox-rail .icon-button.inbox-rail-item[aria-current="page"]:not(:active) {
   --rail-item-bg: transparent;
   background: var(--rail-item-bg);
 }

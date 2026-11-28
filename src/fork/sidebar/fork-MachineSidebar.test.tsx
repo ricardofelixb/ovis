@@ -1,48 +1,37 @@
 import { afterEach, beforeEach, expect, it } from "bun:test";
-import { act, createElement } from "react";
-import { create, type ReactTestRenderer } from "react-test-renderer";
+import { createElement } from "react";
 
 import type { Machine } from "../../../shared/machines.ts";
-import { AgentSidebar } from "../../components/AgentSidebar.tsx";
 import { MachineSidebar } from "../../components/MachineSidebar.tsx";
-import { SidebarSplit } from "../../components/SidebarSplit.tsx";
 import type { AppActions } from "../../lib/actions.ts";
+import { openPage, type Page } from "../../lib/page.fixture.ts";
 import { AGENT_GROUPS_STORAGE_KEY, FOLD_HELPERS_STORAGE_KEY, SettingsProvider, SIDEBAR_AGENT_TREE_STORAGE_KEY } from "../../lib/settings.ts";
 
 const actions = new Proxy({}, { get: () => () => {} }) as AppActions;
 const activity = { seqs: () => new Map<string, number>(), status: () => undefined };
-const node = (): HTMLElement => ({
-  isConnected: true, offsetWidth: 200, offsetHeight: 100, dataset: {}, style: { setProperty() {}, removeProperty() {} }, classList: { add() {}, remove() {}, contains: () => false },
-  getBoundingClientRect: () => ({ top: 0, left: 0, right: 0, bottom: 0, width: 0, height: 0 }),
-  querySelector: () => null, querySelectorAll: () => [], contains: () => false, closest: () => null,
-  focus() {}, addEventListener() {}, removeEventListener() {},
-}) as unknown as HTMLElement;
 const laptop = { id: "local", kind: "local", name: "Laptop", state: "connected", snapshot: null, error: null, action_required: null, remote_ovis: null } as unknown as Machine;
 
 const descriptors = new Map<string, PropertyDescriptor | undefined>();
-const stored = new Map<string, string>();
-let renderer: ReactTestRenderer | undefined;
+let page: Page;
 
 beforeEach(() => {
-  for (const key of ["window", "document", "navigator", "getComputedStyle", "localStorage", "HTMLElement", "ResizeObserver", "IS_REACT_ACT_ENVIRONMENT"]) descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
-  stored.clear();
-  const storage = { getItem: (key: string) => stored.get(key) ?? null, setItem: (key: string, value: string) => { stored.set(key, value); }, removeItem: (key: string) => { stored.delete(key); } };
-  const events = new EventTarget();
-  const media = { matches: false, addEventListener() {}, removeEventListener() {} };
-  const define = (key: string, value: unknown) => Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
-  define("IS_REACT_ACT_ENVIRONMENT", true);
-  define("HTMLElement", class HTMLElement {});
-  define("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-  define("localStorage", storage);
-  define("navigator", { languages: ["en-US"], platform: "Linux", userAgent: "test" });
-  define("window", { localStorage: storage, sessionStorage: storage, location: { pathname: "/", search: "", hash: "" }, matchMedia: () => media, innerWidth: 1280, innerHeight: 800, addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events), requestAnimationFrame: (run: FrameRequestCallback) => { run(0); return 1; }, cancelAnimationFrame() {}, setTimeout, clearTimeout, setInterval, clearInterval });
-  define("document", { visibilityState: "visible", activeElement: null, querySelectorAll: () => [], body: { nodeType: 1, children: [] }, documentElement: { dataset: {}, style: { setProperty() {}, removeProperty() {} } }, querySelector: () => null, getElementById: () => null, addEventListener: events.addEventListener.bind(events), removeEventListener: events.removeEventListener.bind(events) });
-  define("getComputedStyle", () => ({ getPropertyValue: () => "" }));
+  page = openPage();
+  Object.defineProperty(page.window.document, "visibilityState", { configurable: true, value: "visible" });
+  Object.defineProperty(page.window.navigator, "platform", { configurable: true, value: "Linux" });
+  Object.defineProperty(page.window, "innerWidth", { configurable: true, value: 1280 });
+  Object.defineProperty(page.window, "innerHeight", { configurable: true, value: 800 });
+  Object.defineProperty(page.window, "requestAnimationFrame", { configurable: true, value: (run: FrameRequestCallback) => { run(0); return 1; } });
+  Object.defineProperty(page.window, "cancelAnimationFrame", { configurable: true, value: () => {} });
+  Object.defineProperty(page.window.HTMLElement.prototype, "offsetWidth", { configurable: true, value: 200 });
+  Object.defineProperty(page.window.HTMLElement.prototype, "offsetHeight", { configurable: true, value: 100 });
+  for (const [key, value] of Object.entries({ localStorage: page.window.localStorage, HTMLElement: page.window.HTMLElement })) {
+    descriptors.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+  }
 });
 
 afterEach(async () => {
-  await act(async () => renderer?.unmount());
-  renderer = undefined;
+  await page.close();
   for (const [key, descriptor] of descriptors) {
     if (descriptor) Object.defineProperty(globalThis, key, descriptor);
     else Reflect.deleteProperty(globalThis, key);
@@ -50,19 +39,16 @@ afterEach(async () => {
 });
 
 async function draw(settings: { foldHelpers: boolean; agentTree: boolean; agentGroups: boolean }) {
-  stored.set(FOLD_HELPERS_STORAGE_KEY, String(settings.foldHelpers));
-  stored.set(SIDEBAR_AGENT_TREE_STORAGE_KEY, String(settings.agentTree));
-  stored.set(AGENT_GROUPS_STORAGE_KEY, String(settings.agentGroups));
-  await act(async () => {
-    renderer = create(createElement(SettingsProvider, null, createElement(MachineSidebar, {
-      machines: [laptop], selectedMachineId: "local", selectedPaneId: null, activity, actions,
-      onSelect: () => {}, onNew: () => {}, onSetup: () => {}, onUsageLogin: () => {}, inbox: { waiting: 0, open: () => {} },
-    })), { createNodeMock: node });
-  });
-  const has = (className: string) => renderer!.root.findAll((found) => typeof found.type === "string" && String(found.props.className).split(" ").includes(className)).length > 0;
-  const drawn = { agents: renderer!.root.findAllByType(AgentSidebar).length, splits: renderer!.root.findAllByType(SidebarSplit).length, pcs: has("pcs-sidebar"), inbox: has("sidebar-footer-inbox"), settings: has("sidebar-footer-settings") };
-  await act(async () => renderer!.unmount());
-  renderer = undefined;
+  localStorage.setItem(FOLD_HELPERS_STORAGE_KEY, String(settings.foldHelpers));
+  localStorage.setItem(SIDEBAR_AGENT_TREE_STORAGE_KEY, String(settings.agentTree));
+  localStorage.setItem(AGENT_GROUPS_STORAGE_KEY, String(settings.agentGroups));
+  await page.render(createElement(SettingsProvider, null, createElement(MachineSidebar, {
+    machines: [laptop], selectedMachineId: "local", selectedPaneId: null, screenMachineId: null, onScreen: () => {}, activity, actions,
+    onSelect: () => {}, onNew: () => {}, onSetup: () => {}, onUsageLogin: () => {}, inbox: { waiting: 0, open: () => {} },
+  })));
+  const count = (selector: string) => page.container.querySelectorAll(selector).length;
+  const drawn = { agents: count("section.agents-sidebar"), splits: count(".sidebar-split"), pcs: count(".pcs-sidebar") > 0, inbox: count(".sidebar-footer-inbox") > 0, settings: count(".sidebar-footer-settings") > 0 };
+  await page.render(null);
   return drawn;
 }
 

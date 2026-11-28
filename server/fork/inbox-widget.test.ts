@@ -38,8 +38,6 @@ function setup(lastWords?: LastWords, friendOf?: ConstructorParameters<typeof In
   return { dir, push, sent, widget, tick: (ms: number) => { now += ms; }, goneFor: (endpoint: string) => { gone = new Set([endpoint]); } };
 }
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-
 describe("inbox widget", () => {
   test("waiting on you first, the longest wait on top; then the latest finished, working and idle", () => {
     const order = inboxOrder([row("idle", "i", 50), row("work", "w", 40), row("done-old", "d", 10), row("wait-new", "b", 30), row("done-new", "d", 20), row("wait-old", "b", 5)]);
@@ -74,7 +72,7 @@ describe("inbox widget", () => {
     const { sent, widget } = setup(undefined, store.friendOf.bind(store));
     widget.panes([pane("p1", "blocked"), pane("p2", "working"), pane("p3", "idle", { workspace_id: "w2" } as Partial<HerdrPane>)]);
     widget.place("https://relay.example/v1/push/a", true);
-    await flush();
+    await widget.delivered();
     const machines = [{ id: "local", snapshot: { panes: [{ pane_id: "p1", workspace_id: "w1" }, { pane_id: "p2", workspace_id: "w1" }, { pane_id: "p3", workspace_id: "w2" }] } }];
     const inbox = store.see(["local:p1", "local:p2", "local:p3"], ["local"], machines).friends;
     const shown = Object.fromEntries(sent.at(-1)!.message.inbox!.rows.map((item) => [item.p, item.f]));
@@ -85,10 +83,10 @@ describe("inbox widget", () => {
   test("sends only to a placed widget, at once when placed, with helpers left out", async () => {
     const { sent, widget } = setup();
     widget.panes([pane("p1", "blocked"), pane("p2", "working"), pane("h1", "working", { parent_pane_id: "p2" } as Partial<HerdrPane>)]);
-    await flush();
+    await widget.delivered();
     expect(sent).toHaveLength(0);
     widget.place("https://relay.example/v1/push/a", true);
-    await flush();
+    await widget.delivered();
     expect(sent).toHaveLength(1);
     expect(sent[0]!.topic).toBe("ovis-inbox");
     expect(sent[0]!.message.inbox!.rows.map((item) => [item.p, item.s])).toEqual([["p1", "b"], ["p2", "w"]]);
@@ -98,18 +96,17 @@ describe("inbox widget", () => {
   test("a placed widget is remembered across restarts, and one the push service calls gone is forgotten", async () => {
     const { dir, push, sent, widget, goneFor } = setup();
     widget.place("https://relay.example/v1/push/a", true);
-    await flush();
+    await widget.delivered();
     const again = new InboxWidget(push, { stateDir: dir });
     widgets.push(again);
     goneFor("https://relay.example/v1/push/a");
     again.place("https://relay.example/v1/push/a", true);
-    await flush();
-    await flush();
+    await again.delivered();
     const third = new InboxWidget(push, { stateDir: dir });
     widgets.push(third);
     const before = sent.length;
     third.panes([pane("p1", "blocked")]);
-    await flush();
+    await third.delivered();
     expect(sent.length).toBe(before);
   });
 
@@ -131,10 +128,10 @@ describe("inbox widget", () => {
     const { sent, widget } = setup(words);
     widget.panes([pane("p1", "blocked"), pane("p2", "done"), pane("p3", "working")]);
     widget.place("https://relay.example/v1/push/a", true);
-    await flush(); await flush();
+    await widget.delivered();
     expect(sent[0]!.message.inbox!.rows.map((row) => row.d)).toEqual(["said by p1", undefined, "said by p3"]);
     widget.place("https://relay.example/v1/push/a", true);
-    await flush();
+    await widget.delivered();
     expect(sent).toHaveLength(1);
   });
 
@@ -146,10 +143,10 @@ describe("inbox widget", () => {
       asked.push([...paneIds]);
       return Object.fromEntries(paneIds.map((id) => [id, id === "work" ? workingWords : "done"]));
     });
-    const advance = async (ms: number) => {
+    const advance = (ms: number) => {
       tick(ms);
       jest.advanceTimersByTime(ms);
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      return widget.delivered();
     };
     const endpoint = "https://relay.example/v1/push/a";
     try {
@@ -181,10 +178,10 @@ describe("inbox widget", () => {
     const b = "https://relay.example/v1/push/b";
     const states = () => sent.map(({ endpoint, message }) => [endpoint, message.inbox!.rows[0]!.s]);
     jest.useFakeTimers();
-    const advance = async (ms: number) => {
+    const advance = (ms: number) => {
       tick(ms);
       jest.advanceTimersByTime(ms);
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      return widget.delivered();
     };
     try {
       widget.panes([pane("p1", "working")]);
@@ -216,13 +213,13 @@ describe("inbox widget", () => {
       tick(2_000);
       jest.advanceTimersByTime(2_000);
       first.resolve({ p1: "still working" });
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await widget.delivered();
       tick(29_999);
       jest.advanceTimersByTime(29_999);
       expect(sent.map(({ message }) => message.inbox!.rows[0]!.s)).toEqual(["w"]);
       tick(1);
       jest.advanceTimersByTime(1);
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      await widget.delivered();
       expect(sent.map(({ message }) => message.inbox!.rows[0]!.s)).toEqual(["w", "b"]);
     } finally {
       widget.stop();

@@ -21,7 +21,7 @@ import type { RelayOffer } from "../../../shared/relay-offer.ts";
 import type { KnownPc } from "../account/knownPcs.ts";
 import type { MyPc } from "../account/myPcs.ts";
 import { ACCOUNT_PROVIDERS, type AccountProvider, type AccountSession, type SignInKey } from "../account/store.ts";
-import { inNativeApp } from "../nativeApp.ts";
+import { inNativeApp, onIos } from "../nativeApp.ts";
 import { serverIdOfPath } from "../shellMode.ts";
 import { RelayAdmissionTimeoutError, RelayNewSessionsRefusedError, RelayRefusedError, RelayUnreachableError, UnsafeRelayDestinationError } from "./channel.ts";
 import { ServerIdentityChangedError } from "./device.ts";
@@ -92,7 +92,7 @@ export type PcUpdate =
   | { phase: "failed"; detail: string | null };
 
 export type AccountView =
-  | { kind: "signed-out"; error: string | null; provider?: AccountProvider; notice?: string }
+  | { kind: "signed-out"; error: string | null; provider?: AccountProvider; notice?: string; hint?: import("../account/accountHint.ts").AccountHint }
   | { kind: "signing-in"; provider?: AccountProvider }
   /** `known`: the read failed, and these are the account's PCs this device listed at its last read that answered (knownPcs) */
   | {
@@ -240,8 +240,7 @@ export function forgetsDevice(failure: RelayFailure): boolean {
 
 /** An iPhone or iPad browser tab, where the page's storage may be cleared after a week unvisited; the installed app's is kept. */
 export function iosBrowserTab(env: { userAgent: string; maxTouchPoints: number; standalone: boolean | undefined }): boolean {
-  const ios = /iPhone|iPad|iPod/.test(env.userAgent) || (/Macintosh/.test(env.userAgent) && env.maxTouchPoints > 1);
-  return ios && env.standalone !== true && !inNativeApp();
+  return onIos(env) && env.standalone !== true && !inNativeApp();
 }
 
 export interface RelayShellMount {

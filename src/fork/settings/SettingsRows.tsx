@@ -17,9 +17,9 @@ export function ForkPage({ assistantMachines }: { assistantMachines?: readonly M
   </SettingsRow>;
   return <>
     <SettingsGroup title={t("Places|fork")} section="fork-places">
-      <SettingsRow icon={PanelLeft} label={t("Navigation|fork")} description={t("How a wide screen moves between the workspaces, the agent inbox, Pull requests and Notes: the rail in the inbox only, one footer in both, or the rail in both. A phone keeps them in its drawer's footer.")} wide reset={["navigation"]}>
+      <SettingsRow icon={PanelLeft} label={t("Navigation|fork")} description={t("How a wide screen moves between the workspaces, the agent inbox, Pull requests and Notes: the rail in the inbox only, or the rail in both. A phone keeps the Default layout.")} wide reset={["navigation"]}>
         <Segmented label={t("Navigation|fork")} value={settings.navigation} onChange={(navigation) => update({ navigation })}
-          options={NAVIGATIONS.map((navigation) => ({ value: navigation, label: t(navigation === "upstream" ? "Default|fork" : navigation === "footer" ? "Footer|fork" : "Rail|fork") }))} />
+          options={NAVIGATIONS.map((navigation) => ({ value: navigation, label: t(navigation === "upstream" ? "Default|fork" : "Rail|fork") }))} />
       </SettingsRow>
       {toggle("pullRequests", t("Pull requests"), GitPullRequest, t("Your pull requests and the ones waiting for your review, from every GitHub account gh is signed in to on this PC."))}
       {toggle("notes", t("Notes"), Notebook, t("Markdown notes in ~/Notes on this PC, for you and your agents."))}

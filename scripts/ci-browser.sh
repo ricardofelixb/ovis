@@ -61,7 +61,6 @@ run_script scripts/machine-events-browser-regression.ts
 run_script scripts/workspace-rows-regression.ts
 run_script scripts/pending-pane-switch-regression.ts
 run_script scripts/lan-exposure-notice-regression.ts
-run_script scripts/terminal-dispose-browser-qa.ts
 run_script scripts/herdr-restart-regression.ts
 run_script scripts/sticky-modifiers-regression.ts
 run_script scripts/terminal-switch-regression.ts
@@ -188,6 +187,7 @@ run_script scripts/fork-preferences-regression.ts
 run_script scripts/fork-features-regression.ts
 run_script scripts/fork-tab-alignment-demo-regression.ts
 run_script scripts/fork-grouped-tabs-demo-regression.ts
+run_script scripts/fork-rail-demo-regression.ts
 run_script scripts/split-view-regression.ts
 run_script scripts/chat-size-regression.ts
 run_script scripts/phone-safe-area-demo-regression.ts
@@ -272,6 +272,7 @@ run_script scripts/machine-dialog-regression.ts
 run_script scripts/machine-conflict-regression.ts
 run_script scripts/relay-pairing-prompt-regression.ts
 run_script scripts/relay-account-pcs-regression.ts
+run_script scripts/unconfirmed-pc-notice-regression.ts
 run_script scripts/relay-first-link-regression.ts
 run_script scripts/relay-second-device-join-regression.ts
 run_script scripts/relay-new-pc-press-regression.ts

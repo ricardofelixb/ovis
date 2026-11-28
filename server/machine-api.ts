@@ -2,14 +2,14 @@ import { subscribeMachineEvents } from "./machine-events.ts";
 import { wireMachine, wireMachineEvent, type WireMachine } from "../shared/compact-agents.ts";
 import { isIP } from "node:net";
 import { networkInterfaces } from "node:os";
-import { LOCAL_MACHINE, type DevicePairedEvent, type DevicePairedSeenEvent, type DeviceRemovedEvent, type Machine, type MachineRoster, type PcInstallJob, type PcInstallRequest, type PcUpdateAll, type PcUpdateStarted, type PendingRedemptionsEvent, type RelayPairingsEvent, type RemotePairingsEvent, type SetupAction, type SetupRequest, type MachineEvent, type OpenRequest, type ReadFinish } from "../shared/machines.ts";
+import { isForwardBind, LOCAL_MACHINE, type DevicePairedEvent, type DevicePairedSeenEvent, type DeviceRemovedEvent, type Machine, type MachineForwardRequest, type MachineForwardResponse, type MachineRoster, type PcInstallJob, type PcInstallRequest, type PcUpdateAll, type PcUpdateStarted, type PendingRedemptionsEvent, type RelayPairingsEvent, type RemotePairingsEvent, type SetupAction, type SetupRequest, type MachineEvent, type OpenRequest, type ReadFinish } from "../shared/machines.ts";
 import type { AgentRowTokens } from "../shared/pane-tokens.ts";
 import { MAX_OMARCHY_THEME_BYTES, omarchyTheme } from "../shared/omarchy-theme.ts";
 import type { SharedPreferences } from "../shared/preferences.ts";
 import type { PanePromptResponse, SessionSnapshot } from "../shared/protocol.ts";
 import type { SeenFinish } from "../shared/seen.ts";
 import type { DeviceStore } from "./devices.ts";
-import { AccountPcError, MachineActionRequired, MachineManager, PcUpdateRefused, type AccountPcFailure } from "./machines.ts";
+import { AccountPcError, MachineActionRequired, MachineForwardError, MachineManager, PcUpdateRefused, type AccountPcFailure } from "./machines.ts";
 import { TypedCodeError, type TypedCodeFailure } from "../shared/relay-code-offer.ts";
 import type { OmarchyThemeStore } from "./omarchy-themes.ts";
 import { TargetAccountPcError } from "../shared/relay-channel.ts";
@@ -165,7 +165,7 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
   /** OVIS_ACCOUNT_OPENS_ALL is on here: only then does the roster carry a block to another PC's account records */
   accountOpensAll = false, source?: Pick<DeviceStore, "accountPolicyActive" | "accountError">,
   /** an account-joined device (DeviceStore.isAccountRow): its roster is accountRoster, and no PC's boot is proved for it */
-  accountRow = false,
+  accountRow = false, ovisPort?: number,
   /** the device-keyed Omarchy themes; left out over a relay, whose peer has no address to key by */
   omarchyThemes?: Pick<OmarchyThemeStore, "get" | "set" | "subscribe">): Promise<Response> {
   const url = new URL(request.url);
@@ -518,6 +518,32 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       return jsonResponse(await moveAll(manager, plans), 202);
     }
     const id = parts[0]!;
+    if (parts.length === 2 && path === "forward") {
+      setRequestRoute("/api/machines/:machine_id/forward");
+      if (request.method !== "POST") return fail("method_not_allowed", "Use POST", 405);
+      if (readOnly) return fail("read_only", "this device can only watch", 403);
+      const revoke = new AbortController();
+      const unwatch = onRevoke?.(() => revoke.abort());
+      const signal = AbortSignal.any([request.signal, revoke.signal]);
+      try {
+        const body: unknown = await request.json().catch(() => null);
+        if (signal.aborted) return fail("forward_cancelled", "Opening this SSH port forward was cancelled", 499);
+        if (!isJsonObject(body) || Object.keys(body).some((key) => key !== "port" && key !== "bind")
+          || typeof body.port !== "number" || !Number.isInteger(body.port) || body.port < 1 || body.port > 65535
+          || (body.bind !== undefined && (typeof body.bind !== "string" || !isForwardBind(body.bind)))) {
+          return fail("invalid_body", "Expected an integer port from 1 to 65535 and, optionally, a loopback address", 400);
+        }
+        const input: MachineForwardRequest = { port: body.port, bind: body.bind };
+        const bind = input.bind ?? "127.0.0.1";
+        const port = await manager.forwardWebPort(id, input.port, bind, ovisPort ?? Number(url.port || (url.protocol === "https:" ? 443 : 80)), signal);
+        if (signal.aborted) return fail("forward_cancelled", "Opening this SSH port forward was cancelled", 499);
+        return jsonResponse({ url: `http://${bind}:${port}` } satisfies MachineForwardResponse);
+      } catch (error) {
+        if (!(error instanceof MachineForwardError)) throw error;
+        const status = { machine_not_found: 404, forward_failed: 502, machine_offline: 503, forward_not_ssh: 409, forward_busy: 409, forward_cancelled: 499 }[error.code];
+        return fail(error.code, error.message, status);
+      } finally { unwatch?.(); }
+    }
     if (parts.length === 2 && parts[1] === "update") {
       setRequestRoute("/api/machines/:machine_id/update");
       if (request.method === "DELETE") return jsonResponse({ cancelled: manager.cancelUpdate(id) });
@@ -630,7 +656,10 @@ export async function handleMachineRequest(request: Request, manager: MachineMan
       const target = new URL(`${endpoint.url}/api/${path}${url.search}`);
       if (watchedPrompt) target.searchParams.set("plan", "0");
       // nor has it the PC run its shell profile again: the PC sees this server's full token, not the watch
-      if (readOnly && path === "agent-catalog") target.searchParams.delete("recheck");
+      if (readOnly && (path === "agent-catalog" || path === "agents")) {
+        target.searchParams.delete("recheck");
+        target.searchParams.set("profile-recheck", "0");
+      }
       const untrack = manager.trackTerminal(id, () => abort.abort());
       const moved = path === "workspace/move" && request.method === "POST" ? manager.refreshAfterMove(id) : null;
       try {

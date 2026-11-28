@@ -17,9 +17,9 @@
  * pane after, so another session or process of the same kind gets none.
  */
 import type { AcpChildren } from "../acp/children.ts";
-import type { CodexServers } from "../approvals/codex.ts";
-import { codexDisagrees } from "../command-data-send.ts";
-import { AGENT_PICKER_MESSAGE, closeBackslash, closeMention, type createSubmitText, freeAgentInput, freeClaudeBox, freeHermesInput, InputDraftError, modelSwitchText, OMP_REPORT_POLL_MS, OMP_STARTUP_MS, ompStartingUntil, pendingFault, pendingIdentity, pendingText, refusedFirstWrite, submitFraming, untilOmpReported } from "./composer.ts";
+import { servedStatus, type CodexServers } from "../approvals/codex.ts";
+import { codexDisagrees, sendCodexTextAsData } from "../command-data-send.ts";
+import { AGENT_PICKER_MESSAGE, closeBackslash, closeMention, codexTakesAsData, type createSubmitText, freeAgentInput, freeClaudeBox, freeHermesInput, InputDraftError, modelSwitchText, OMP_REPORT_POLL_MS, OMP_STARTUP_MS, ompStartingUntil, pendingFault, pendingIdentity, pendingText, refusedFirstWrite, submitFraming, untilOmpReported } from "./composer.ts";
 import { grokEcho, grokQueue, sendGrokQueuedNow } from "./grok-queue.ts";
 import { type Client, connectionOf, send } from "./connections.ts";
 import { ATTACH_HELD_MESSAGE } from "./terminal-process.ts";
@@ -66,7 +66,7 @@ const withoutEscapes = (screen: string): string => screen.replace(/\u001b\[[0-?]
 /** a first message's lease is the delivering connection's, taken at each attempt: none is kept on the record */
 type PendingItem = PendingRecord<PendingOwner, PendingLease | null>;
 type SubmitReply = { ok: boolean; pending?: PendingMessage; sending_at?: string; code?: string; message?: string; refusal?: { draft: string | null; box: string | null; identity: PendingIdentity };
-  unannounced?: true };
+  unannounced?: true; keepTurnGate?: true };
 /**
  * `agent_blocked` for one of Codex's own screens (dialogs/codex.ts codexOwnScreenOpen). herdr reports Codex at rest
  * under it and says nothing when it closes. So a queued message refused for it is held with this reason, for its
@@ -218,6 +218,14 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
       const path = await codexOpenRollout(paneId, pane?.cwd, home);
       return path === null ? null : captureCodexDelivery(path);
     } catch { return null; }
+  };
+  /**
+   * The pane's queue goes behind a turn Codex's own server tells the end of (PendingInputs.awaitTurn), and on again once
+   * that end is told or can no longer be.
+   */
+  const behindCodexTurn = (paneId: string, over: Promise<boolean>): void => {
+    const wait = pending.awaitTurn(paneId);
+    void over.then((told) => { pending.turnOver(paneId, wait, told); drainPending(paneId); });
   };
   async function reconcileCodexDeliveries(paneId: string): Promise<void> {
     if (codexTyped.values(paneId).length === 0) return;
@@ -824,6 +832,42 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
         pending.observe(paneId, "working", mark);
         throw new HerdrError("pending_wait", "The agent is working again; this message still waits for its next turn");
       }
+      // a Codex on the server Ovis started for it takes plain text at rest as a turn of its thread (sendCodexTextAsData):
+      // nothing joins what is typed in its own box, and the pane's next message waits for that turn's own end
+      if (context.identity.agent === "codex" && !context.working && context.agentInFront && !context.collapsed && codexTakesAsData(text, sent)) {
+        // the rollout this send's receipt is read from, should Codex not answer (reconcileCodexDeliveries)
+        const anchor = nativeItem ? await prepareCodexReceipt(paneId, context.identity) : null;
+        // the Codex this message was bound to, by its start: one that took its PID meanwhile gets nothing
+        await sameStart(identity);
+        const clientId = crypto.randomUUID(), at = Date.now();
+        let stopped: HerdrError | undefined;
+        const viaData = await sendCodexTextAsData(context.pane, text, () => {
+          authorizePending(owner, paneId, lease);
+          if (row.withdrawn?.()) stopped = new HerdrError("pending_discarded", "This message was discarded before it went; nothing was sent");
+          else if (Date.now() - arrivedAt > (options.submitDeadlineMs ?? SUBMIT_DEADLINE_MS)) stopped = new HerdrError("submit_timeout", "The pending message waited too long; nothing was sent");
+          if (stopped !== undefined) return false;
+          committing(false, false, pending.mark(paneId));
+          wrote = true;
+          return true;
+        }, clientId).catch((error: unknown) => {
+          const threadId = servedStatus(paneId)?.threadId;
+          if (wrote && nativeItem && anchor !== null && anchor.session === threadId) codexTyped.add(paneId, text, anchor, at, { identity: context.identity, item: nativeItem }, clientId);
+          throw error;
+        });
+        if (viaData?.turn === "started") {
+          behindCodexTurn(paneId, viaData.over);
+          noteSubmitted(paneId, text, undefined, viaData.at);
+          return { ok: true };
+        }
+        // withdrawn or late while the server was asked: it is not typed instead
+        if (stopped !== undefined) throw stopped;
+        // nor does the queue type into a turn the server says the thread runs, whatever herdr reads of the pane: the
+        // message waits for that turn's end. A Send now is the user's own, and is typed as before
+        if (viaData && (automatic || queued)) {
+          behindCodexTurn(paneId, viaData.over);
+          throw new HerdrError("pending_wait", "The agent is working again; this message still waits for its next turn");
+        }
+      }
       // a draft typed in the terminal is the user's: the paste would join it and the Enter send both (#609).
       // The box is the live screen's; only the viewport read tells Claude's grey text from a draft.
       if (context.identity.agent === "claude") await freeClaudeBox(paneId, context.working, () => authorizePending(owner, paneId, lease), arrivedAt + (options.submitDeadlineMs ?? SUBMIT_DEADLINE_MS), automatic || queued)
@@ -840,13 +884,15 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
       let prompt: PromptPiece[] = [{ pasted: closeMention(sent) }];
       watch = startOpenCodeWatch(context.pane, command, options.openCodeStateDir);
       if (interruptWorkingCodex && nativeItem && context.working && context.agentInFront && context.identity.agent === "codex"
-        && !context.collapsed && !command && !/(?:^|\s)[!/@$]\S*/u.test(text) && sent === text && closeMention(sent) === text) {
+        && !context.collapsed && !command && codexTakesAsData(text, sent)) {
         const argv = context.processes?.foreground_processes?.find((p) => p.pid === context.identity.processPid)?.argv ?? [];
         const target = options.codexServers?.steerTarget(paneId, argv);
         if (target && !codexDisagrees(context.pane, target.threadId)) {
           const anchor = await prepareCodexReceipt(paneId, context.identity);
           const clientId = crypto.randomUUID(), at = Date.now();
+          let steerMark = mark;
           const reply = await target.send(text, clientId, async () => {
+            steerMark = pending.mark(paneId);
             const current = await pendingContext(owner, paneId, lease, identity, false, true);
             if (!current.working || current.collapsed || codexDisagrees(current.pane, target.threadId))
               throw new HerdrError(TARGET_CHANGED.code, TARGET_CHANGED.message);
@@ -855,7 +901,7 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
             authorizePending(owner, paneId, lease);
             if (row.withdrawn?.() || Date.now() - arrivedAt > (options.submitDeadlineMs ?? SUBMIT_DEADLINE_MS))
               throw new HerdrError("submit_timeout", "The message expired before delivery");
-            committing(true, false, pending.mark(paneId));
+            committing(true, false, steerMark);
             wrote = true;
           });
           if (reply === "accepted") { noteSubmitted(paneId, text, command, at); return { ok: true }; }
@@ -1008,7 +1054,7 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
         try { recordPiTyped(owner, paneId, requestId, receiptText, beforeEnter.identity, piAnchor, piReservation, piTemplate); } catch {}
       }
       let statusAtRead = pending.current(paneId);
-      await interruptCodexSteering(interruptWorkingCodex, closeMention(text), { agent: beforeEnter.identity.agent, working: beforeEnter.working, screen: beforeEnter.screen }, {
+      const steeringOutcome = await interruptCodexSteering(interruptWorkingCodex, closeMention(text), { agent: beforeEnter.identity.agent, working: beforeEnter.working, screen: beforeEnter.screen }, {
         read: async () => {
           const status = pending.current(paneId);
           const current = await pendingContext(owner, paneId, lease, identity, true);
@@ -1022,6 +1068,10 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
         // write is refused when the lease, the deadline or the pane's status moved meanwhile
         press: (key, fresh) => paneSendKeys(paneId, [key], undefined, () => allowed() && fresh() && pending.current(paneId) === statusAtRead),
       });
+      if (steeringOutcome === "unconfirmed") {
+        watch?.cancel();
+        return { ok: false, code: "submit_changed", message: "Pending-message delivery could not be confirmed. Check the terminal before sending again.", keepTurnGate: true };
+      }
       noteSubmitted(paneId, sent, command, sentAt);
       if (command) watch?.commit(command, prompt, attached);
       return { ok: true };
@@ -1062,12 +1112,13 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
     const fault = reply.ok ? undefined : left ?? (unattended && retryable ? FIRST_MESSAGE_UNATTENDED : { code: reply.code!, message: reply.message! });
     // a paste left in the input line (#511) is uncertain like a delivery not confirmed: the pane's queue stops behind it, and
     // only the user copies or discards it
-    pending.settle(item, fault, reply.code === "submit_changed" || reply.code === "pasted_not_sent", retry && left === undefined);
+    const { keepTurnGate, ...result } = reply;
+    pending.settle(item, fault, keepTurnGate ? "preserve-turn" : reply.code === "submit_changed" || reply.code === "pasted_not_sent", retry && left === undefined);
     // The messages queued behind one held for a screen of Codex's own are held with it, in the same step: tried one
     // by one, a later one would be typed ahead of it if the screen closed between two tries.
     if (automatic && reply.unannounced === true && fault !== undefined) pending.holdPane(item.paneId, fault);
     void reconcileCodexDeliveries(item.paneId);
-    return reply;
+    return result;
   }
   function drainPending(paneId: string): void {
     const learning = launchBoundIn(paneId).length > 0;
@@ -1617,6 +1668,9 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
             if (!waited) pending.observe(message.pane_id, held && !context.working ? "working" : context.pane.agent_status, mark);
             // hold: kept for the owner's Send now, never sent by the turn's end
             const item = pending.enqueue(client, message.pane_id, message.id, text, lease!, context.identity, message.delivery === "hold", agentOnly, noPiSession);
+            // the lease was last checked before the awaits above (pinPiSession, a send put off): a page that left the pane
+            // meanwhile was held by holdPending before this row existed, so it is held now as that would have held it
+            try { authorizePending(client, message.pane_id, lease!); } catch { pending.hold(client, message.pane_id); }
             if (typedWhileOmpStarted(message.pane_id)) pending.holdQueued(message.pane_id, TYPED_WHILE_WAITING);
             return { ok: true, pending: item.message };
           }).catch((error): SubmitReply => ({ ok: false, ...pendingFault(error, options.herdrFailure) })));
@@ -1685,8 +1739,10 @@ export function createPendingDelivery({ options, clients, attachments, sight, se
             const receiptText = identity === null ? undefined : piReceiptText(identity, framed.text);
             const piAnchor = identity === null ? null : await preparePiReceipt(message.pane_id, identity).catch(() => null);
             sendingAt = new Date().toISOString();
-            await submitText(message.pane_id, framed.text, framed.payload, arrivedAt, message.typed === true, () => authorizeSocket(client), message.clear_draft,
+            const turn = await submitText(message.pane_id, framed.text, framed.payload, arrivedAt, message.typed === true, () => authorizeSocket(client), message.clear_draft,
               draftConfirmations.get(client)?.get(message.pane_id), message.send_anyway === true, agentOnly, message.resend_id !== undefined, afterWriteFailure);
+            // sent at once as a turn of Codex's thread: what is queued from here on waits for that turn's own end
+            if (turn) behindCodexTurn(message.pane_id, turn.over);
             if (identity !== null && receiptText !== undefined) {
               try { recordPiTyped(client, message.pane_id, message.id, receiptText, identity, piAnchor, reservation, current !== null && piListsTemplate(current.pane, framed.text)); } catch { /* The send succeeded; receipt tracking cannot make it retryable. */ }
             }

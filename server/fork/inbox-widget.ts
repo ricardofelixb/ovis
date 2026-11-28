@@ -110,6 +110,7 @@ export class InboxWidget {
   private readonly startedAt: number;
   private lastChecked: number;
   private sending = false;
+  private delivery = Promise.resolve();
   private stopped = false;
   private lastRows = "[]";
   private snapshot: { rows: InboxWidgetRow[]; rendered: string } = { rows: [], rendered: "[]" };
@@ -166,9 +167,12 @@ export class InboxWidget {
       }
       this.save();
     }
-    if (placed && !this.deliveries.has(endpoint)) void this.sendTo([endpoint]);
+    if (placed && !this.deliveries.has(endpoint)) this.sendTo([endpoint]);
     else this.changed();
   }
+
+  /** Finishes deliveries already in flight, without waiting for a future refresh. */
+  delivered(): Promise<void> { return this.delivery; }
 
   rows(): InboxWidgetRow[] {
     return inboxOrder([...this.agents.values()].map(({ row, at }) => ({ ...row, t: Math.floor(at / 1000) })));
@@ -205,7 +209,7 @@ export class InboxWidget {
     }
     if (this.timer?.at === at) return;
     this.clearTimer();
-    const id = setTimeout(() => { this.timer = undefined; void this.sendTo([...this.endpoints]); }, Math.max(0, at - now));
+    const id = setTimeout(() => { this.timer = undefined; this.sendTo([...this.endpoints]); }, Math.max(0, at - now));
     this.timer = { id, at };
     id.unref?.();
   }
@@ -235,12 +239,16 @@ export class InboxWidget {
     });
   }
 
-  private async sendTo(endpoints: readonly string[]): Promise<void> {
+  private sendTo(endpoints: readonly string[]): void {
     if (this.stopped) return;
     for (const endpoint of endpoints) this.pending.add(endpoint);
     if (this.sending) return;
     this.clearTimer();
     this.sending = true;
+    this.delivery = this.deliverPending();
+  }
+
+  private async deliverPending(): Promise<void> {
     try {
       // Read and deliver one snapshot at a time so a slow read can't publish older status last.
       while (this.pending.size > 0) {

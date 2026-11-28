@@ -13,7 +13,7 @@ import { SHARED_SETTING_KEYS } from "../../shared/preferences.ts";
 import { TELEMETRY_SETTINGS_KEYS, TELEMETRY_THEME_SIDE_KEYS, telemetrySettings } from "../../shared/telemetry.ts";
 import { NOTICE_VERSION } from "../../shared/telemetry-notice.ts";
 import { SETTING_SCOPE, telemetrySettingsSnapshot, alertPrefs, CHAT_FONT_MAX, CHAT_FONT_MIN, CHAT_LANE_MAX_REM, CHAT_LANE_MIN, CHAT_WIDTHS, chatFontSize, chatLaneLength, chatLaneWidth, DEFAULT_SETTINGS, QUICK_REPLIES_MAX, QUICK_REPLY_MAX_CHARS, quickReplyButtons, sanitizeSettings, terminalTheme, forgetPaneViews, DICTATION_LANGUAGES, VOICE_BUTTONS, VOICE_ENGINES, wantsVoiceInput } from "./settings.ts";
-import { applyToDocument, loadSettings, pcLoadOn, PHONE_INBOX_STORAGE_KEY, phoneInboxOn, saveBootRows, saveSettings, ENTER_SENDS_STORAGE_KEY, enterSendsOn } from "./settings.ts";
+import { applyToDocument, loadSettings, pcLoadOn, PHONE_INBOX_STORAGE_KEY, phoneInboxOn, saveBootRows, saveSettings, secretFieldOn, TERMINAL_SECRET_FIELD_STORAGE_KEY, ENTER_SENDS_STORAGE_KEY, enterSendsOn } from "./settings.ts";
 import { customRow, NO_CUSTOM_THEMES, readThemeFile, withTheme } from "./customThemes.ts";
 import { CUSTOM_ROWS_STORAGE_KEY, CUSTOM_THEMES_STORAGE_KEY } from "./themeBoot.ts";
 import { sanitizeSettings as oldSanitizeSettings, saveSettings as oldSaveSettings } from "./settings.legacy-fixture.ts";
@@ -189,6 +189,20 @@ describe("saved theme migration", () => {
     expect(loadSettings().phoneTabs).toBe("row");
   });
 
+  it("keeps Chat Markdown style in its own key, out of an old tab's whole-record save", () => {
+    expect(loadSettings().markdownStyle).toBe("editorial");
+    saveSettings(sanitizeSettings({ markdownStyle: "tinted" }));
+    expect(JSON.parse(records.get(main) ?? "{}")).not.toHaveProperty("markdownStyle");
+    expect(records.get("ovis:markdown-style")).toBe(JSON.stringify("tinted"));
+    oldSaveSettings({ ...readOld(), terminalFontSize: 18 });
+    expect(loadSettings().markdownStyle).toBe("tinted");
+    expect(loadSettings().terminalFontSize).toBe(18);
+    saveSettings({ ...loadSettings(), markdownStyle: "plain" });
+    expect(loadSettings().markdownStyle).toBe("plain");
+    records.set("ovis:markdown-style", "not json");
+    expect(loadSettings().markdownStyle).toBe("editorial");
+  });
+
   it("keeps Wrap to screen / Original width in its own key, out of an old tab's whole-record save", () => {
     saveSettings(sanitizeSettings({ terminalMirrorWrap: false }));
     expect(JSON.parse(records.get(main) ?? "{}")).not.toHaveProperty("terminalMirrorWrap");
@@ -252,6 +266,22 @@ describe("saved theme migration", () => {
     expect(loadSettings().phoneInbox).toBeNull();
   });
 
+  it("keeps the password field choice in its own key, unchosen until chosen: on with touch, off with a mouse", () => {
+    expect(loadSettings().terminalSecretField).toBeNull();
+    expect([secretFieldOn(loadSettings(), true), secretFieldOn(loadSettings(), false)]).toEqual([true, false]);
+    for (const terminalSecretField of [true, false]) {
+      saveSettings(sanitizeSettings({ terminalSecretField }));
+      expect(records.get(TERMINAL_SECRET_FIELD_STORAGE_KEY)).toBe(JSON.stringify(terminalSecretField));
+      expect(JSON.parse(records.get(main) ?? "{}")).not.toHaveProperty("terminalSecretField");
+      oldSaveSettings({ ...readOld(), terminalFontSize: 18 });
+      expect(loadSettings().terminalSecretField).toBe(terminalSecretField);
+      expect([secretFieldOn(loadSettings(), true), secretFieldOn(loadSettings(), false)]).toEqual([terminalSecretField, terminalSecretField]);
+    }
+    expect(sanitizeSettings({ terminalSecretField: "on" }).terminalSecretField).toBeNull();
+    records.set(TERMINAL_SECRET_FIELD_STORAGE_KEY, "\"true\"");
+    expect(loadSettings().terminalSecretField).toBeNull();
+  });
+
   it("keeps the agent groups off until chosen, in keys of their own, out of an old tab's whole-record save", () => {
     expect(loadSettings()).toMatchObject({ agentGroups: false, agentGroupSort: "wait" });
     saveSettings(sanitizeSettings({ agentGroups: true, agentGroupSort: "name" }));
@@ -271,6 +301,17 @@ describe("saved theme migration", () => {
     expect(loadSettings().terminalFontSize).toBe(18);
     records.set("ovis:voice-engine", "not json");
     expect(loadSettings().voiceEngine).toBe("auto");
+  });
+
+  it("keeps Latin American Spanish after an old tab saves an unrelated preference", () => {
+    putOld({ voiceLanguage: "es-ES" });
+    expect(loadSettings().voiceLanguage).toBe("es-ES");
+    const olderTab = readOld();
+    saveSettings({ ...loadSettings(), voiceLanguage: "es-419" });
+    oldSaveSettings({ ...olderTab, terminalFontSize: 18 });
+    expect(loadSettings()).toMatchObject({ voiceLanguage: "es-419", terminalFontSize: 18 });
+    saveSettings({ ...loadSettings(), voiceLanguage: "auto" });
+    expect(loadSettings().voiceLanguage).toBe("auto");
   });
 
   it("keeps the file text size in its own key, out of an old tab's whole-record save", () => {
@@ -722,6 +763,11 @@ it("draws agent logos in their brand colors unless Mono was chosen", () => {
 });
 
 describe("telemetry settings snapshot", () => {
+  it("does not send the new dictation locale to older PCs and collectors", () => {
+    const snapshot = telemetrySettingsSnapshot(sanitizeSettings({ voiceLanguage: "es-419" }));
+    expect(telemetrySettings(snapshot)?.voiceLanguage).toBe("auto");
+  });
+
   it("reports current enum, boolean and bounded scalar values", () => {
     const settings = sanitizeSettings({
       terminalInputMode: "direct",
@@ -1208,6 +1254,7 @@ describe("microphone button", () => {
     expect(DEFAULT_SETTINGS.voiceLanguage).toBe("auto");
     expect(sanitizeSettings({}).voiceLanguage).toBe("auto");
     for (const voiceLanguage of DICTATION_LANGUAGES) expect(sanitizeSettings({ voiceLanguage }).voiceLanguage).toBe(voiceLanguage);
+    expect(sanitizeSettings({ voiceLanguage: "es-419" }).voiceLanguage).toBe("es-419");
     for (const voiceLanguage of [null, 1, "", "hu", "hu-hu", "xx-XX", "auto "]) expect(sanitizeSettings({ voiceLanguage }).voiceLanguage).toBe("auto");
   });
 
@@ -1606,6 +1653,17 @@ describe("shared settings", () => {
     for (const key of ["agentNamedGroups", "agentGroupNames", "agentGroupOf"] as const) expect(SETTING_SCOPE[key]).toBe("shared");
     const kept = sanitizeSettings({ agentNamedGroups: true, agentGroupNames: ["Tasks", "", "Tasks"], agentGroupOf: { "local:p1": "Tasks", "local:p2": 1 } });
     expect([kept.agentNamedGroups, kept.agentGroupNames, kept.agentGroupOf]).toEqual([true, ["Tasks"], { "local:p1": "Tasks" }]);
+  });
+
+  it("defaults Chat Markdown style to editorial, sanitizes unknown values, and shares it across browsers", () => {
+    expect(DEFAULT_SETTINGS.markdownStyle).toBe("editorial");
+    expect(SETTING_SCOPE.markdownStyle).toBe("shared");
+    for (const style of ["editorial", "tinted", "colorful", "plain"] as const) {
+      expect(sanitizeSettings({ markdownStyle: style }).markdownStyle).toBe(style);
+    }
+    for (const bad of [null, "", "Editorial", "classic", 1]) {
+      expect(sanitizeSettings({ markdownStyle: bad }).markdownStyle).toBe("editorial");
+    }
   });
 });
 

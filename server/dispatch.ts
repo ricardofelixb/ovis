@@ -42,6 +42,8 @@ import { type AgentInstaller, INSTALL_PATH, SIGN_IN_PATH } from "./agent-catalog
 import { forgetPageMedia } from "./file-view.ts";
 import { textEditAllowed } from "./file-edit.ts";
 import { handleFileRequest } from "./file-routes.ts";
+import { handleMachineFileRequest } from "./herdr-core/machine-files.ts";
+import { paneContext } from "./pane-context.ts";
 import { BACKGROUND_AGENT_PATH, handleBackgroundAgentRequest } from "./background-agent.ts";
 import { paneGet, ping } from "./herdr/client.ts";
 import { version } from "../package.json";
@@ -67,6 +69,7 @@ import type { lockRoutes } from "./account/lock-routes.ts";
 import { lockBoundary, untilLockFrom, type LockSignal } from "./lock-boundary.ts";
 import { handleAccountRequest } from "./account/routes.ts";
 import type { AccountMailbox } from "./account/mailbox.ts";
+import type { AccountMove } from "./account/account-move.ts";
 import type { AccountHolds } from "./account/holds.ts";
 import type { SafetyLog } from "./account/safety-log.ts";
 import type { CatchUpGate } from "./account/catch-up-gate.ts";
@@ -123,6 +126,7 @@ export interface RequestServices extends ForkServices {
   /** the joins no window of this PC has seen yet (server/join-notices.ts) */
   readonly joins: JoinNotices;
   readonly accountMailbox: AccountMailbox;
+  readonly accountMove: AccountMove | null;
   readonly accountIntroductions: AccountIntroductions;
   readonly accountHolds: AccountHolds;
   /** the account safety log; null while OVIS_ACCOUNT_OPENS_ALL is off */
@@ -151,7 +155,7 @@ export interface RequestServices extends ForkServices {
   readonly portalGuards: () => { tokenSet: boolean; serveOnly: boolean };
   readonly shellAgents: ShellAgentLocator;
   readonly agentDetector: AgentDetector;
-  readonly agentOffered: (kind: string) => Promise<boolean>;
+  readonly agentOffered: (kind: string, checkProfile?: boolean) => Promise<boolean>;
   readonly agentInstaller: AgentInstaller;
   readonly openCodeState: OpenCodePromptState;
   readonly approvals: ApprovalHub;
@@ -515,6 +519,10 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     setRequestRoute("owner-refusal");
     return jsonResponse({ error: { code: "owner_only", message: "Add this PC to your account on this PC itself." } }, 403);
   }
+  if (pathname === "/api/account/move" && (!ownWindow || funnel)) {
+    setRequestRoute("owner-refusal");
+    return jsonResponse({ error: { code: "owner_only", message: "Move this PC from its own window." } }, 403);
+  }
   // how this PC follows its account's signed list is for this PC's own window and CLI to read, and only a person at
   // this PC names the list it pins, by its id, by the number it compares with the phone that adds it, or by the line of an invite
   if ((pathname === "/api/account/list" || pathname === "/api/account/list/pin" || pathname === "/api/account/list/add" || pathname.startsWith("/api/account/list/add/")
@@ -579,10 +587,16 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
 
   const forkScreen = routeForkScreen(request, url, ctx, readOnly);
   if (forkScreen !== null) return forkScreen;
-  // the panes' files are on another machine: this disk's would be shown, listed, diffed or written as theirs
+  // the panes' files are on another machine: this disk's would be shown, listed, diffed or written as theirs,
+  // so what is read there is read there (herdr-core/machine-files.ts), and the rest is refused
   if (options.localFiles === false && OTHER_MACHINE_FILES.test(pathname)) {
     setRequestRoute(pathname);
-    return jsonResponse({ error: { code: "unsupported", message: "Files on another machine of herdr-core are not reachable from Ovis yet" } }, 501);
+    const paneCwd = (paneId: string) => paneContext(paneId).then((context) => context.cwd, () => null);
+    try {
+      const served = options.machineFiles ? await handleMachineFileRequest(request, url, pathname, options.machineFiles(), paneCwd) : null;
+      if (served !== null) return served;
+    } catch (error) { return errorResponse(error); }
+    return jsonResponse({ error: { code: "unsupported", message: "Diffs, git, edits and searches of another machine of herdr-core are not reachable from Ovis yet" } }, 501);
   }
 
   if (pathname === "/api/bridge") {
@@ -631,7 +645,7 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
       const endsWith = deviceId ? (close: () => void) => devices.onRevoke(deviceId, close) : openAccess ? (close: () => void) => devices.endWithGate(close) : portalRecheckMs !== undefined ? (close: () => void) => { const timer = setTimeout(close, portalRecheckMs); return () => clearTimeout(timer); } : undefined;
       // and with a lock, when what let it in is a grant the lock refuses, or with a block of the tailnet node it came from
       const ends = untilRefused === undefined ? endsWith : (close: () => void) => { const stops = [untilRefused(close), endsWith?.(close)]; return () => { for (const stop of stops) stop?.(); }; };
-      const response = await handleMachineRequest(request, machines, ends, preferences, readOnly, herdrSidebar, seen, pairings, ctx.relayBodyBudget, ownerAccess(access), ctx.services.safetyLog !== null, devices, relayPeer !== undefined && devices.isAccountRow(relayPeer.id), ctx.peer.kind === "relay" ? undefined : omarchyThemes);
+      const response = await handleMachineRequest(request, machines, ends, preferences, readOnly, herdrSidebar, seen, pairings, ctx.relayBodyBudget, ownerAccess(access), ctx.services.safetyLog !== null, devices, relayPeer !== undefined && devices.isAccountRow(relayPeer.id), ctx.port, ctx.peer.kind === "relay" ? undefined : omarchyThemes);
       response.headers.set("cache-control", "no-store");
       if (issuedKey !== null && response.ok) response.headers.append("set-cookie", streamCookie(issuedKey, isSecureRequest(request)));
       return response;
@@ -1045,12 +1059,14 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
     }
   }
 
-  const agentsResponse = await handleAgentsRequest(request, pathname, shellAgents, agentOffered);
+  // A PC proxy sends its full token for watchers too, with an opt-out from profile refresh.
+  const checkAgentProfile = !readOnly && url.searchParams.get("profile-recheck") !== "0";
+  const agentsResponse = await handleAgentsRequest(request, pathname, shellAgents, (kind) => agentOffered(kind, checkAgentProfile));
   if (agentsResponse) return agentsResponse;
 
   const installResponse = await agentInstaller.handle(request, pathname);
   if (installResponse) return installResponse;
-  const catalogResponse = await handleAgentCatalogRequest(request, pathname, agentDetector, undefined, readOnly);
+  const catalogResponse = await handleAgentCatalogRequest(request, pathname, agentDetector, undefined, readOnly, checkAgentProfile);
   if (catalogResponse) return catalogResponse;
 
   const integrationsResponse = await handleIntegrationsRequest(request, pathname);
@@ -1069,7 +1085,7 @@ export async function handleRequest(request: Request, ctx: ServerContext): Promi
   const pluginResponse = await handlePluginRequest(request, url, pathname, options);
   if (pluginResponse) return pluginResponse;
 
-  const paneResponse = await handlePaneRequest(request, url, pathname, options);
+  const paneResponse = await handlePaneRequest(request, url, pathname, { ...options, approvals });
   if (paneResponse) return paneResponse;
 
   const tasksResponse = await handleTasksRequest(request, url, pathname, { omo, claudeAgents, opencodeAgents });

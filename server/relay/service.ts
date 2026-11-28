@@ -3,10 +3,11 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import type { DeviceConnection } from "../../shared/access.ts";
-import { encodeOffer } from "../../shared/relay-offer.ts";
+import { isSignInMethod, type SignInMethod } from "../../shared/account-devices-api.ts";
+import { encodeOffer, relayEndpoint } from "../../shared/relay-offer.ts";
 import type { RelayOffer } from "../../shared/relay-offer.ts";
 import { parseRelayPass, relayPassAdmitsNewSessions } from "../../shared/relay-pass.ts";
-import { GLOBAL_RELAY, REGIONAL_RELAYS } from "../../shared/relay-regions.ts";
+import { GLOBAL_APP, GLOBAL_RELAY, REGIONAL_APPS, REGIONAL_RELAYS } from "../../shared/relay-regions.ts";
 import type { AccountPairing, RelayErrorCode, RelayStatus } from "../../shared/protocol.ts";
 import { PcInAccountError } from "../devices.ts";
 import type { RequestServices } from "../dispatch.ts";
@@ -85,8 +86,9 @@ export interface RelayServiceOptions {
   readonly regionalRelays?: readonly string[];
   readonly probe?: (relay: string, signal: AbortSignal) => Promise<number | null>;
   /**
-   * The relay typed pairing codes meet on (server/relay/pair-code.ts): Ovis's global one, where the
-   * hosted app looks for them, when this PC is on it; none on a relay of its own. Tests name theirs.
+   * The relay typed pairing codes meet on (server/relay/pair-code.ts): Ovis's global one, where
+   * app.ovis.sh looks for them, when this PC is on it; a relay of its own when this PC also names an
+   * app of its own, built to look there (`ovis-relay` in scripts/shell-build.ts); else none. Tests name theirs.
    */
   readonly pairCodeRelay?: string;
   /**
@@ -144,13 +146,8 @@ function offerName(): { name?: string } {
   return name ? { name } : {};
 }
 
-/** Only secure origins, without credentials, paths, query, fragments or host lists. */
-export function relayEndpoint(input: string, protocol: "wss:" | "https:"): string {
-  const url = new URL(input);
-  if (url.protocol !== protocol || url.username || url.password || url.search || url.hash
-    || url.pathname !== "/" || !/^[a-z0-9.-]+$/i.test(url.hostname)) throw new Error(`Invalid ${protocol} relay origin`);
-  return url.origin;
-}
+/** Ovis's hosted app and its regional copies, which look typed codes up on Ovis's relay. */
+const OVIS_APPS: readonly string[] = [GLOBAL_APP, ...Object.values(REGIONAL_APPS)];
 
 export class RelayService {
   private phase: RelayStatus["phase"] = "off";
@@ -310,17 +307,31 @@ export class RelayService {
    * tab's QR code is made only once one is named (offer).
    */
   savedRelayAccount(): string | null {
+    return this.savedRelayNaming()?.account ?? null;
+  }
+
+  /**
+   * The account named for this PC (savedRelayAccount) read once with how the owner who named it signed in to it (GitHub,
+   * Google or Apple; null when no naming said so): the relay tab tells a person signed in to another account which way
+   * leads to this PC's.
+   */
+  savedRelayNaming(): { readonly account: string; readonly provider: SignInMethod | null } | null {
     try {
       const saved: unknown = JSON.parse(readFileSync(this.relayAccountPath(), "utf8"));
-      return isJsonObject(saved) && typeof saved.account === "string" && ACCOUNT_ID.test(saved.account) ? saved.account : null;
+      if (!isJsonObject(saved) || typeof saved.account !== "string" || !ACCOUNT_ID.test(saved.account)) return null;
+      return { account: saved.account, provider: isSignInMethod(saved.provider) ? saved.provider : null };
     } catch { return null; }
   }
 
-  /** The account a signed-in owner listed this PC under: a relay pass is asked for under it while the PC has no members. */
-  setRelayAccount(account: string): boolean {
+  /**
+   * The account a signed-in owner listed this PC under: a relay pass is asked for under it while the PC has no members.
+   * `provider`: how that owner signed in; an omitted method keeps the one for the same account. A move resets it.
+   */
+  setRelayAccount(account: string, provider?: SignInMethod | null): boolean {
     if (!ACCOUNT_ID.test(account)) return false;
-    const before = this.passAccount(), named = this.savedRelayAccount();
-    writePrivateState(this.relayAccountPath(), { account });
+    const before = this.passAccount(), saved = this.savedRelayNaming(), named = saved?.account ?? null;
+    const method = provider === undefined ? (named === account ? saved?.provider ?? null : null) : provider;
+    writePrivateState(this.relayAccountPath(), method === null ? { account } : { account, provider: method });
     // a device that waits under the relay tab's QR code is taken only into the account named when that code was made,
     // and only while that account is the one named (records.ts look); naming another in place of the one read here also
     // ends that code and its rows at once
@@ -328,6 +339,21 @@ export class RelayService {
     const unlisted = this.passKeeper?.current() === null && this.passKeeper.refusal === "not_listed";
     if (before !== this.passAccount() || unlisted) void this.passKeeper?.refresh();
     return true;
+  }
+
+  /** The account a pass taken outside the keeper was asked under (adoptPass): the next binding change to it asks for none. */
+  private adopted: string | null = null;
+
+  /** A pass a PC move asked for under `account` before switching to it: the keeper keeps it, and the switch asks no second. */
+  adoptPass(answer: unknown, account: string): void {
+    if (this.passKeeper?.adopt(answer)) this.adopted = account;
+  }
+
+  /** The binding changed, so the next pass must name its account even if the last pass still works. */
+  accountChanged(): void {
+    const adopted = this.adopted;
+    this.adopted = null;
+    if (adopted === null || adopted !== this.passAccount()) void this.passKeeper?.refresh();
   }
 
   /**
@@ -603,22 +629,23 @@ export class RelayService {
   }
 
   /**
-   * A code to type on the device being paired (server/relay/pair-code.ts), replacing any showing; null
-   * when this PC's relay has none (it is not Ovis's own). `account`: the code is made for it (DeviceStore.startAccountPairing),
+   * A code to type on the device being paired (server/relay/pair-code.ts), replacing any showing, with the
+   * app to type it in and the relay it waits on; null when no app looks for codes on this PC's relay (its own
+   * relay, Ovis's app). `account`: the code is made for it (DeviceStore.startAccountPairing),
    * and a PC in an account refuses that before the relay is asked (PcInAccountError). The machine profile makes no
    * code without it (MachineCodeForAccountError), whoever calls; routes.ts answers that before the relay's state.
    */
-  async pairCode(by: string | null = null, account?: string): Promise<({ code: string; expires_at: string; server_id: string } & Partial<AccountPairing>) | null> {
+  async pairCode(by: string | null = null, account?: string): Promise<({ code: string; expires_at: string; server_id: string; app: string; relay: string } & Partial<AccountPairing>) | null> {
     if (!this.enabled || !this.identity || !this.services || this.blocked) throw new Error("Start the relay before pairing.");
     if (account === undefined && this.services.options.profile === "machine") throw new MachineCodeForAccountError();
     if (account !== undefined && this.services.devices.account() !== null) throw new PcInAccountError();
     if (account !== undefined && this.services.accountMailbox.serviceOff()) throw new AccountServiceOffError();
-    const relay = this.options.pairCodeRelay ?? (this.relay === GLOBAL_RELAY ? GLOBAL_RELAY : null);
+    const relay = this.options.pairCodeRelay ?? (this.relay === GLOBAL_RELAY || !OVIS_APPS.includes(this.app) ? this.relay : null);
     if (relay === null) return null;
     // the typed code's host carries a pass as the links do: only one its own service's passes go to this relay
     this.pairCodes ??= new RelayPairCodes({ relay, devices: this.services.devices, offer: (code) => this.offerFor(code), identity: () => this.identity!, connect: this.options.connect,
       pass: () => this.passFor(relay) });
-    return { ...await this.pairCodes.mint(by, account), server_id: this.identity.server_id };
+    return { ...await this.pairCodes.mint(by, account), server_id: this.identity.server_id, app: this.app, relay };
   }
 
   cancelPairCode(): void {

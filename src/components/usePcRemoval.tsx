@@ -9,7 +9,8 @@ import { pageAccountList } from "../lib/account/pageList.ts";
 import { forgetSeenPc } from "../lib/account/seenPcs.ts";
 import { AccountServiceError, listingChanged, type AccountService } from "../lib/account/service.ts";
 import type { AccountSession } from "../lib/account/store.ts";
-import { useT } from "../lib/i18n.ts";
+import { currentLocale, useT } from "../lib/i18n.ts";
+import { availableFrom } from "../lib/account/methodSettling.ts";
 import { ExternalLink } from "../lib/externalLink.ts";
 import { useSignInAgainHere } from "./AccountSection.tsx";
 
@@ -27,8 +28,12 @@ export class ListPcRemovalError extends Error {
   }
 }
 
-/** What to say of a removal that failed: what the list said where that tells the person more, the surface's own words otherwise. */
+/**
+ * What to say of a removal that failed: when a sign-in still settling may remove it, what the list said where that tells
+ * the person more, the surface's own words otherwise.
+ */
 export function pcRemovalFailure(error: unknown, t: ReturnType<typeof useT>, otherwise: string): string {
+  if (error instanceof AccountServiceError && error.code === "method_settling" && error.until !== null) return availableFrom(t, currentLocale(), error.until);
   if (!(error instanceof ListPcRemovalError)) return otherwise;
   if (error.why === "stopped") return t("The account service cannot change the list right now.");
   // a request signed for an earlier change still waits: that one is tried again or cancelled first, on its own card
@@ -101,7 +106,10 @@ export function usePcRemoval(service: Pick<AccountService, "forSignIn">, removed
     if (pageListUnread(session.account)) throw new ListPcRemovalError("blocked");
     const list = pageAccountList();
     // the row the question was asked for; where the page had not read its list then, the row as that read shows it
-    const bound = held ?? heldRemoval(session.account, serverId);
+    // A listing named by its ID (account#67) is one no one added: never the list's, whatever the list holds for that
+    // PC by now (another device may have added it meanwhile), so it leaves by the directory alone, which refuses it once
+    // that listing is no longer the one waiting
+    const bound = listingId !== undefined ? null : held ?? heldRemoval(session.account, serverId);
     if (list !== null && bound !== null) {
       // For the account, the list, the member key and the relay key of the row the person pressed: another tab's
       // sign-in changes none of them under it, and a PC that another member put out meanwhile is found out already.

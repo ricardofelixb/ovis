@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { accountLabel } from "../../shared/account-asker.ts";
 import type { PairedDevice } from "../../shared/protocol.ts";
 import { removeFromAccount } from "../lib/account/leave.ts";
 import { postedPcs } from "../lib/account/listAdd.ts";
@@ -49,12 +50,13 @@ export function offlinePc(pc: { readonly last_seen_at: string | null; readonly a
  * throw keeps its confirm up with the error. `pcHere` false: no PC is open on this page (the hosted app's start screen),
  * so no other device is read or offered, only this one's own row.
  */
-export function AccountManageLists({ account, watching, pcHere = true, onLeave }: { readonly account: string; readonly watching: boolean; readonly pcHere?: boolean; readonly onLeave?: (shown: Shown) => Promise<void> }) {
+/** `settling`: this sign-in's own way in was just added by its email, and the service removes none of the account's PCs for it yet. */
+export function AccountManageLists({ account, watching, pcHere = true, settling = false, onLeave }: { readonly account: string; readonly watching: boolean; readonly pcHere?: boolean; readonly settling?: boolean; readonly onLeave?: (shown: Shown) => Promise<void> }) {
   return (
     <>
       <ListAlarmNotice account={account} />
       <AccountDevices account={account} pcHere={pcHere} {...(onLeave ? { onLeave } : {})} />
-      <AccountPcs account={account} watching={watching} />
+      <AccountPcs account={account} watching={watching} settling={settling} />
     </>
   );
 }
@@ -145,13 +147,21 @@ function PairedAccountDevices({ account, pcHere, onLeave }: { readonly account: 
   );
 }
 
-function AccountPcs({ account, watching }: { readonly account: string; readonly watching: boolean }) {
+function AccountPcs({ account, watching, settling }: { readonly account: string; readonly watching: boolean; readonly settling: boolean }) {
   const t = useT();
   const service = useMemo(() => new AccountService({ store: indexedAccountStore }), []);
   const [pcs, setPcs] = useState<readonly DirectoryPc[] | "failed" | null>(null);
   // the PC the question is asked for, with the row of this device's list it was pressed on (null: no list holds it)
   const [asked, setAsked] = useState<(DirectoryPc & { readonly held: HeldRemoval | null }) | null>(null);
+  // PCL-1: the PCs a sign-in code listed that no one added, for an app's own sign-in (a device code's removes none):
+  // their card may be closed on this device, and this row still removes one
+  const [unconfirmed, setUnconfirmed] = useState<readonly DirectoryPc[]>([]);
+  // the PCs whose Remove was confirmed on such a row, kept from the press (a Sign in again finishes it later, after
+  // reads that may no longer list the PC as waiting)
+  const listingRemovals = useRef(new Set<string>());
   const removal = usePcRemoval(service, async (serverId, how) => {
+    // a PC that was never added leaves the account only: a pairing made with it itself stays
+    if (listingRemovals.current.delete(serverId)) { window.dispatchEvent(new Event(ACCOUNT_PCS_CHANGED_EVENT)); return; }
     // On an account with no list, this device's own pairing with the gone PC goes too, so no list here offers it
     // again. A device that goes by its account's signed list forgets no pairing here, whichever way the PC left: a
     // pairing made with the PC itself still opens it, as the question says, and only Forget takes that key away
@@ -173,13 +183,19 @@ function AccountPcs({ account, watching }: { readonly account: string; readonly 
   const read = useCallback(async () => {
     const mine = ++reads.current;
     let shown: readonly DirectoryPc[];
+    let waiting: readonly DirectoryPc[];
     try {
-      const listed = await service.listPcs();
+      const [listed, asking] = await Promise.all([service.listPcs(), service.ownSignIn().then((own) => own ? service.listUnconfirmedPcs() : []).catch((error: unknown) => {
+        console.warn("Ovis: the account's unconfirmed PCs could not be read", error instanceof Error ? error.name : error);
+        return [];
+      })]);
       await readPageList(account);
       shown = pagePcs(account, listed);
+      waiting = asking;
     } catch { if (mine === reads.current) setPcs("failed"); return; }
     if (mine !== reads.current) return;
     setPcs(shown);
+    setUnconfirmed(waiting);
     const list = pageAccountList();
     // only a device that may write the list adds a PC to it
     if (list === null || pageListReading(account) !== "in" || list.writer() === null || !shown.some((pc) => pc.not_in_list === true || pc.by_list === true)) { setPosts(null); return; }
@@ -225,10 +241,18 @@ function AccountPcs({ account, watching }: { readonly account: string; readonly 
                 {post !== undefined && <button type="button" className="btn account-head-btn" data-action="add-pc" onClick={() => setAdding({ pc, post })}>{t("Add|account pc")}</button>}
                 {/* On an account with no list, a PC in use lists itself again on its next pull: only an offline one is
                     offered, whatever its age. A PC the account's list holds comes back only as a new PC: on or off */}
-                {(off || pc.by_list === true) && !watching && <button type="button" className="btn account-head-btn" data-action="remove-pc" onClick={() => setAsked({ ...pc, held: heldRemoval(account, pc.server_id) })}>{t("Remove")}</button>}
+                {(off || pc.by_list === true) && !watching && !settling && <button type="button" className="btn account-head-btn" data-action="remove-pc" onClick={() => setAsked({ ...pc, held: heldRemoval(account, pc.server_id) })}>{t("Remove")}</button>}
               </li>
             );
           })}
+        {Array.isArray(pcs) && unconfirmed.map((pc) => (
+          <li key={pc.server_id} className="account-manage-row" data-pc-id={pc.server_id} data-unconfirmed-pc-row="">
+            <StatusDot state="needs-you" />
+            <span className="account-manage-name">{accountLabel(pc.label)}<span className="settings-hint" data-pc-note=""> · {t("Not added: listed with a sign-in code")}</span></span>
+            {/* removed by its listing's ID only, so a listing replaced or added meanwhile is never the one removed */}
+            {!watching && typeof pc.listing_id === "string" && <button type="button" className="btn account-head-btn" data-action="remove-pc" onClick={() => setAsked({ ...pc, held: null })}>{t("Remove")}</button>}
+          </li>
+        ))}
       </ul>
       {removal.prompt !== null && <p className="settings-condition">{removal.prompt}</p>}
       {adding !== null && pageAccountList() !== null && (
@@ -236,13 +260,18 @@ function AccountPcs({ account, watching }: { readonly account: string; readonly 
       )}
       {asked !== null && (
         <ConfirmDialog title={t("Remove {name} from your account?", { name: asked.label })}
-          body={asked.by_list === true
+          body={asked.unconfirmed === true
+            ? t("{name} was listed in your account with a sign-in code and never added. It leaves your account; to add it later, start again on {name}.", { name: accountLabel(asked.label) })
+            : asked.by_list === true
             ? t("{name} leaves your account's list on every device, and your account's devices no longer open it; a device paired with {name} itself still does. It comes back to your account only as a new PC, added again on {name}.", { name: asked.label })
             : t("{name} leaves your account's PCs on every device. Once {name} is online again it leaves your account too: your account's devices no longer open it, and a device paired with {name} itself still does. To use it with your account again, add it on {name}.", { name: asked.label })}
           confirmLabel={t("Remove")} onClose={() => setAsked(null)}
           onConfirm={async () => {
             // a removal that wants a fresh sign-in first closes the question: its Sign in again, below the list, removes it
-            try { await removal.remove(await signInOfAccount(service, account), asked.server_id, undefined, asked.held, asked.by_list === true); } catch (error) {
+            // a listing that was never added is removed by its ID (account#67), as its card's No removes it
+            const listing = asked.unconfirmed === true && typeof asked.listing_id === "string" ? asked.listing_id : undefined;
+            if (listing !== undefined) listingRemovals.current.add(asked.server_id);
+            try { await removal.remove(await signInOfAccount(service, account), asked.server_id, listing, asked.unconfirmed === true ? undefined : asked.held, asked.by_list === true); } catch (error) {
               console.warn("Ovis: the PC was not removed from the account", error instanceof Error ? error.name : error);
               throw new Error(pcRemovalFailure(error, t, t("{name} could not be removed. Try again.", { name: asked.label })));
             }

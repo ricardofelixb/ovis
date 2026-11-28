@@ -1,9 +1,11 @@
 import { expect, it } from "bun:test";
+import { act, createElement } from "react";
 import { HIDDEN_WORKSPACE_ID } from "../../../shared/fork/pane.ts";
 import type { Machine } from "../../../shared/machines.ts";
 import type { AgentStatus } from "../../../shared/protocol.ts";
 import machinesFixture from "../../../site/demo/fixtures/machines.json";
 import { inboxFiltered, inboxOrder } from "../../lib/agentInbox.ts";
+import { openPage } from "../../lib/page.fixture.ts";
 import type { SidebarActivity } from "../../lib/sidebarActivity.tsx";
 import { holdSelected, inboxMachines, shownMachines, useHiddenLens, useHiddenSelection } from "./hiddenAgents.ts";
 
@@ -42,37 +44,29 @@ it("keeps the roster the app reads free of a hidden agent unless it is the one o
 });
 
 it("admits a hidden agent to the roster the thread view reads once any selection picks it, and drops it when another is picked", async () => {
-  const { createElement } = await import("react");
-  const { act, create } = await import("react-test-renderer");
-  Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
+  const page = openPage();
   const all = hide("w1E:p1");
   let read: Machine[] = [];
   const Probe = () => { read = useHiddenLens(all); return null; };
   const panes = (): string[] => read[0]!.snapshot!.panes.map((pane) => pane.pane_id);
-  let renderer!: ReturnType<typeof create>;
-  await act(async () => { renderer = create(createElement(Probe)); });
+  await page.render(createElement(Probe));
   expect(panes()).not.toContain("w1E:p1");
   await act(async () => { holdSelected(all[0]!.id, "w1E:p1"); });
   expect(panes()).toContain("w1E:p1");
   await act(async () => { holdSelected(all[0]!.id, "w1E:p2"); });
   expect(panes()).not.toContain("w1E:p1");
-  await act(async () => { renderer.unmount(); });
-  Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  await page.close();
 });
 
 it("admits the hidden agent a fresh page starts on (a saved selection, a link, a notification) without any selecting", async () => {
-  const { createElement } = await import("react");
-  const { act, create } = await import("react-test-renderer");
-  Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { configurable: true, value: true });
+  const page = openPage();
   const all = hide("w1E:p1");
   let read: Machine[] = [];
   const Probe = ({ pane }: { pane: string | null }) => { read = useHiddenLens(all); useHiddenSelection(all[0]!.id, pane); return null; };
   const panes = (): string[] => read[0]!.snapshot!.panes.map((pane) => pane.pane_id);
-  let renderer!: ReturnType<typeof create>;
-  await act(async () => { renderer = create(createElement(Probe, { pane: "w1E:p1" })); });
+  await page.render(createElement(Probe, { pane: "w1E:p1" }));
   expect(panes()).toContain("w1E:p1");
-  await act(async () => { renderer.update(createElement(Probe, { pane: "w1E:p2" })); });
+  await page.render(createElement(Probe, { pane: "w1E:p2" }));
   expect(panes()).not.toContain("w1E:p1");
-  await act(async () => { renderer.unmount(); });
-  Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  await page.close();
 });

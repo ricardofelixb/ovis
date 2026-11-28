@@ -18,8 +18,6 @@ export interface RowMenuItem {
   title?: string;
   icon: LucideIcon;
   glyph?: ReactNode;
-  /** Sibling controls after the main button, never interactive content inside it. */
-  trailing?: ReactNode;
   divider?: boolean;
   danger?: boolean;
   current?: boolean;
@@ -28,6 +26,8 @@ export interface RowMenuItem {
   switch?: boolean;
   /** shown with its state but not runnable here (a watching device and a shared switch): it keeps its place in the keyboard order, and a press on it leaves the menu open */
   disabled?: boolean;
+  /** runs and leaves the menu open (a "Show more" that adds items): the item that then stands in its place takes the focus */
+  keepOpen?: boolean;
   run: () => void;
   aside?: { label: string; icon: LucideIcon; run: () => void };
 }
@@ -53,7 +53,6 @@ interface Props {
 const TYPE_AHEAD_MS = 500;
 const POPOVER_ITEMS = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
 const SHEET_ITEMS = '.row-sheet-item, .row-sheet-aside, .row-sheet-cancel';
-const menuLine = (button: ReactNode, trailing: ReactNode): ReactNode => trailing ? <div className="row-menu-line">{button}{trailing}</div> : button;
 const CHOSEN = '.row-sheet-item[aria-checked="true"]';
 
 const anchors = new WeakMap<Element, HTMLElement>();
@@ -74,6 +73,7 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, alert,
   // The press keeps the focus in the sheet: its blur would close it on the mousedown, and the mouseup
   // after it would land on what lies behind
   const pressedScrim = useRef(false);
+  const handOff = useRef<number | null>(null);
 
   useLayoutEffect(() => {
     const node = surface.current;
@@ -97,6 +97,14 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, alert,
     if (!sheet || !node || (document.activeElement !== null && document.activeElement !== document.body)) return;
     node.querySelector<HTMLElement>(SHEET_ITEMS)?.focus({ preventScroll: true });
   });
+
+  useLayoutEffect(() => {
+    const index = handOff.current;
+    handOff.current = null;
+    const next = index === null ? undefined : items[Math.min(index, items.length - 1)];
+    if (next === undefined) return;
+    [...(surface.current?.querySelectorAll<HTMLElement>("[data-item]") ?? [])].find((button) => button.getAttribute("data-item") === next.id)?.focus();
+  }, [items]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
@@ -171,7 +179,8 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, alert,
 
   const run = (item: RowMenuItem): void => {
     if (item.disabled) return;
-    onClose();
+    if (item.keepOpen) handOff.current = items.indexOf(item);
+    else onClose();
     item.run();
   };
   const runAside = (aside: NonNullable<RowMenuItem["aside"]>): void => {
@@ -202,15 +211,14 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, alert,
                   {item.switch ? <span className="row-menu-switch-track" data-checked={item.checked} aria-hidden="true"><span /></span> : item.checked && <Check className="row-sheet-check" aria-hidden="true" />}
                 </button>
               );
-              if (!item.aside && !item.trailing) return button;
+              if (!item.aside) return button;
               const { aside } = item;
               return (
                 <div key={item.id} className={`row-sheet-line${item.divider ? " has-divider" : ""}${item.current ? " is-current" : ""}`}>
                   {button}
-                  {item.trailing}
-                  {aside && <button type="button" className="row-sheet-aside" aria-label={aside.label} title={aside.label} onMouseDown={keepFocus} onClick={() => runAside(aside)}>
+                  <button type="button" className="row-sheet-aside" aria-label={aside.label} title={aside.label} onMouseDown={keepFocus} onClick={() => runAside(aside)}>
                     <aside.icon aria-hidden="true" />
-                  </button>}
+                  </button>
                 </div>
               );
             })}
@@ -230,12 +238,12 @@ export function RowMenu({ anchor, point, restoreFocusTo, title, subtitle, alert,
       {items.map((item) => (
         <Fragment key={item.id}>
           {item.divider && <span className="row-menu-divider" role="separator" />}
-          {menuLine(<button type="button" data-item={item.id} role={choice ? "menuitemradio" : item.checked === undefined ? "menuitem" : "menuitemcheckbox"} aria-checked={choice ? item.checked === true : item.checked} className={`menu-item${item.danger ? " is-danger" : ""}${item.disabled ? " is-disabled" : ""}`} aria-current={item.current ? "true" : undefined} aria-disabled={item.disabled || undefined} title={item.title} onMouseDown={keepFocus} onMouseEnter={point ? (event) => event.currentTarget.focus({ preventScroll: true }) : undefined} onClick={() => run(item)}>
+          <button type="button" data-item={item.id} role={choice ? "menuitemradio" : item.checked === undefined ? "menuitem" : "menuitemcheckbox"} aria-checked={choice ? item.checked === true : item.checked} className={`menu-item${item.danger ? " is-danger" : ""}${item.disabled ? " is-disabled" : ""}`} aria-current={item.current ? "true" : undefined} aria-disabled={item.disabled || undefined} title={item.title} onMouseDown={keepFocus} onMouseEnter={point ? (event) => event.currentTarget.focus({ preventScroll: true }) : undefined} onClick={() => run(item)}>
             {item.glyph ?? <item.icon aria-hidden="true" />}
             <span className="menu-item-main">{item.label}</span>
             {item.hint && <span className="menu-item-hint">{item.hint}</span>}
             {item.switch ? <span className="row-menu-switch-track" data-checked={item.checked} aria-hidden="true"><span /></span> : item.checked && <Check className="menu-item-check" aria-hidden="true" />}
-          </button>, item.trailing)}
+          </button>
           {item.aside && <button type="button" role="menuitem" className="menu-item row-menu-aside" aria-label={item.aside.label} title={item.aside.label} onMouseDown={keepFocus} onClick={() => runAside(item.aside!)}>
             <item.aside.icon aria-hidden="true" />
             <span className="menu-item-main">{item.aside.label}</span>

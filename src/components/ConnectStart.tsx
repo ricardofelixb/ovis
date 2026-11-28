@@ -7,13 +7,14 @@ import { indexedAccountService } from "../lib/account/service.ts";
 import { pageAccountList } from "../lib/account/pageList.ts";
 import { callNative, hasNativeMethod, hasNativePlugin } from "../lib/nativeApp.ts";
 import { isLoopbackHost, tailnetHost } from "../lib/phone.ts";
+import { endPairCodeComposition, typePairCode } from "../lib/pairCodeInput.ts";
 import type { KnownPc } from "../lib/account/knownPcs.ts";
 import type { MyPc } from "../lib/account/myPcs.ts";
 import { serverIdOfPath, serverScopePath } from "../lib/shellMode.ts";
 import { markRemovedPc, removedPcs, type RemovedPcMark } from "../lib/relay/shellState.ts";
 import { StartScreenAccountMenu } from "./AccountHead.tsx";
 import { AddPcByNumber } from "./AddPcByNumber.tsx";
-import { deviceOffline, useOffline } from "../lib/useOffline.ts";
+import { followUnlessOffline, useOffline } from "../lib/useOffline.ts";
 import { AddressForm, atDots, canScanQr, clearOutcome, offlineOpenText, OpenError, OpenStatus, OtherWayButton, scanQr, sshHandoff, TailscaleOff, tailscaleOn, useAddressOpen, Way, type AddressOpen, type SavedPc } from "./RelayAddPc.tsx";
 import { codeFailureText, type TypedCodeFailure } from "./codeFailureText.ts";
 import { InvitePc } from "./InvitePc.tsx";
@@ -464,7 +465,6 @@ export function MyPcs({ devices, accountPcs = null, knownPcs, accountUnread = fa
       setListAdds(next);
       const post = postIn(next, pc);
       if (post !== undefined) setAdding({ name: pc.name ?? t("Unnamed PC"), post });
-      else if (deviceOffline()) open.setError(offlineOpenText(t));
       else window.location.assign(serverScopePath(pc.server_id));
     }, (error: unknown) => {
       console.warn("Ovis: the account's list could not be read for its PCs", error instanceof Error ? error.name : error);
@@ -476,7 +476,7 @@ export function MyPcs({ devices, accountPcs = null, knownPcs, accountUnread = fa
     const post = postOf(pc);
     if (post !== undefined) return { open: addByNumber(pc, post) };
     if (!pc.saved && listAdds === "unread") return { open: settleThenOpen(pc) };
-    return { href: serverScopePath(pc.server_id), onLink: offlineLink };
+    return { href: serverScopePath(pc.server_id), onLink: offlineLink(serverScopePath(pc.server_id)) };
   };
   // Forget PCs: the rows this phone can forget have Forget, and the PC in use's asks once more first (`asking`, its key)
   const [editing, setEditing] = useState(false);
@@ -492,8 +492,8 @@ export function MyPcs({ devices, accountPcs = null, knownPcs, accountUnread = fa
     ? () => { open.setError(null); callNative(SHELL, "backToCurrent").catch(open.failed); } : undefined;
   // the PC in use is open already: its row goes back to it as Back does, rather than opening it again
   const goBack = onBack ?? backToCurrent;
-  // a relay PC's page opens nothing with no network on this device: the row says so instead of going there
-  const offlineLink = (event: { preventDefault(): void }): void => { if (deviceOffline()) { event.preventDefault(); open.setError(offlineOpenText(t)); } };
+  // a relay PC's row says so when the device has no network (followUnlessOffline), instead of going there
+  const offlineLink = (href: string) => followUnlessOffline(href, () => open.setError(offlineOpenText(t)));
   const forgetSaved = (pc: PhoneSavedPc) => () => { open.setError(null); callNative(SHELL, "forget", { url: pc.origin }).then(phone.reread, open.failed); };
   // a saved Tailscale PC asks the app first whether Tailscale is on: off, Open Tailscale takes over (TailscaleOff)
   // `other`: a saved way the open offers by name when this one fails or is refused (a row of several)
@@ -625,7 +625,7 @@ function CodeLine({ code, disabled }: { readonly code: CodeWays; readonly disabl
       {shown && (
         <form className="relay-shell-code-form" data-code-form="" onSubmit={submit}>
           <label className="relay-shell-field-label" htmlFor={`${id}-code`}>{t("Code from the PC")}</label>
-          <input id={`${id}-code`} name="code" className="input relay-shell-code-input" placeholder="XXXXX-XXXXX" disabled={disabled} readOnly={code.state.looking} autoComplete="off" autoCapitalize="characters" autoCorrect="off" spellCheck={false} maxLength={32} required autoFocus />
+          <input id={`${id}-code`} name="code" className="input relay-shell-code-input" placeholder="XXXXX-XXXXX" disabled={disabled} readOnly={code.state.looking} autoComplete="off" autoCapitalize="characters" autoCorrect="off" spellCheck={false} maxLength={32} required autoFocus onInput={typePairCode} onCompositionEnd={endPairCodeComposition} />
           {code.state.failure !== null && <p className="account-error" role="alert">{codeFailureText(t, code.state.failure)}</p>}
           <div className="relay-shell-actions">
             <button type="submit" className="btn btn-primary" disabled={disabled || code.state.looking} aria-busy={code.state.looking || undefined}>{code.state.looking ? t("Looking for the PC…") : t("Pair")}</button>
@@ -669,13 +669,13 @@ function QrOrCode({ code, disabled = false }: { readonly code: CodeWays; readonl
  * The relay tab signed out: what an account gives, the sign-in (`signIn`, AccountSignIn), then the PC's QR code or its
  * code, for a PC in no account, and that the other tabs need no sign-in.
  */
-export function SignedOutRelayPanel({ signIn, signingIn, code }: { readonly signIn: ReactNode; readonly signingIn: boolean; readonly code: CodeWays }) {
+export function SignedOutRelayPanel({ signIn, signingIn, decidingAccount, code }: { readonly signIn: ReactNode; readonly signingIn: boolean; readonly decidingAccount: boolean; readonly code: CodeWays }) {
   const t = useT();
   return (
     <>
       <p className="relay-shell-copy">{t("Reach your PCs from anywhere with your Ovis account")}</p>
       {signIn}
-      <p className="relay-shell-first-time">{t("First time? Your account is made right away.")}</p>
+      {!decidingAccount && <p className="relay-shell-first-time">{t("First time? Your account is made right away.")}</p>}
       <QrOrCode code={code} disabled={signingIn} />
       <p className="relay-shell-detail">{t("Tailscale and SSH need no sign-in.")}</p>
     </>
