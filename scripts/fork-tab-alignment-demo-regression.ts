@@ -1,37 +1,22 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { chromium, type Browser } from "playwright-core";
 import panes from "../site/demo/fixtures/panes.json";
 import { appFaces } from "./app-faces.ts";
-import { buildDemoApp } from "./demo-build.ts";
-import { serveDemo } from "./demo-server.ts";
-import { chromePath } from "./chrome-path.ts";
+import { withDemoBrowser, type DemoBrowserSession } from "./demo-browser.ts";
 
 // With Square corners on, the fork's header tabs stand on the strip's bottom edge. The + (and More)
 // kept upstream's centring, so the + floated a few pixels above the tab it belongs to. On the demo
 // app at a desktop's width, the active tab and the + share one vertical middle with the setting off
 // and on. All files and HTTP traffic stay in this disposable, loopback-only app.
-const app = mkdtempSync(join(tmpdir(), "herdr-fork-tab-alignment-demo-"));
 const PANE = panes.api;
 
-async function prepareDemo(): Promise<void> {
-  await buildDemoApp(app);
-  const index = join(app, "index.html");
-  const html = readFileSync(index, "utf8");
-  assert.match(html, /<script type="module"/);
-  writeFileSync(index, html.replace(/<script type="module"/, () => `<script src="./demo-transport.js"></script>\n    <script type="module"`));
-}
-
-async function check(browser: Browser, origin: string, squareCorners: boolean): Promise<void> {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, locale: "en-US" });
+async function check({ newContext, baseUrl }: DemoBrowserSession, squareCorners: boolean): Promise<void> {
+  const context = await newContext({ viewport: { width: 1280, height: 900 } });
   try {
     await context.addInitScript((square) => localStorage.setItem("ovis:settings", JSON.stringify({ language: "en", alertsOn: false, squareCorners: square })), squareCorners);
     const page = await context.newPage();
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.goto(`${origin}/herdr-web-ui/demo/app/?pane=${encodeURIComponent(PANE)}`);
+    await page.goto(`${baseUrl}?pane=${encodeURIComponent(PANE)}`);
     await page.locator(".conn-live").waitFor({ state: "attached" });
     await page.locator(".header-tabs .tab-strip-item").first().waitFor();
     await appFaces(page);
@@ -48,15 +33,6 @@ async function check(browser: Browser, origin: string, squareCorners: boolean): 
   } finally { await context.close(); }
 }
 
-try {
-  await prepareDemo();
-  const server = serveDemo(app);
-  try {
-    const browser = await chromium.launch({ executablePath: chromePath(), headless: true, args: ["--no-sandbox"] });
-    try {
-      for (const squareCorners of [false, true]) await check(browser, `http://127.0.0.1:${server.port}`, squareCorners);
-    } finally { await browser.close(); }
-  } finally { await server.stop(true); }
-} finally {
-  rmSync(app, { recursive: true, force: true });
-}
+await withDemoBrowser({ tempPrefix: "herdr-fork-tab-alignment-demo-" }, async (session) => {
+  for (const squareCorners of [false, true]) await check(session, squareCorners);
+});
