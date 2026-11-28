@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { Machine } from "../../shared/machines.ts";
 import { tabPaneTitle } from "../components/Sidebar.tsx";
-import { usePaneLinkOpener } from "../lib/webPanel.ts";
+import { usePaneLinkOpener } from "./usePaneLinkOpener.ts";
 import { useNotificationState } from "../lib/useNotifications.ts";
 import { useForkNotificationState } from "./friends/notifications.ts";
 import { ComputerView } from "./computer/ComputerView.tsx";

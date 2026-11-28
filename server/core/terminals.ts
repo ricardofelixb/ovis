@@ -2,6 +2,7 @@ import { checkedHerdrSocket, type HerdrFailureView } from "../herdr/client.ts";
 import type { ClientMessage, ServerMessage } from "../../shared/protocol.ts";
 import { RECEIPT_RESUME_ID } from "../../shared/receipt-resume.ts";
 import { ConversationMonitor } from "../conversation-monitor.ts";
+import { wantsLiveConversation } from "../fork/live-conversation.ts";
 import { CoreAttachSession } from "../herdr-core/attach-session.ts";
 import { type SightingFacts, sightingFacts } from "../input-guard.ts";
 import { OUTPUT_HARD_BYTES, OUTPUT_HIGH_BYTES, OUTPUT_STALL_MS, OutputWindow, ReplayBuffer, wireBytes } from "../output-window.ts";
@@ -78,7 +79,7 @@ export function createTerminalRegistry({ options, clients, stopped, terminalAtta
   }, options.codexHome, options.devinDbPath, options.opencodeDb, options.hermesHome, options.grokHome, options.museData);
   conversations.liveChanged = (paneId, turn) => {
     for (const client of clients) {
-      if (!connectionOf(client).closing && client.readyState === WebSocket.OPEN && client.data.attached.has(paneId) && client.data.conversationInterests.has(paneId)) {
+      if (!connectionOf(client).closing && client.readyState === WebSocket.OPEN && wantsLiveConversation(paneId, client.data.attached, client.data.conversationInterests)) {
         send(client, { type: "conversation-live", pane_id: paneId, turn });
       }
     }
