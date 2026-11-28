@@ -1,6 +1,6 @@
 # Fork boundaries
 
-This fork is `ricardofelixb/ovis`; upstream is `devswha/ovis`. This inventory compares the starting commit `da5afc54` with its upstream merge base, `2decd453d6a28eb6cf21647c6f928150d1196c5c`. It includes inherited fork changes, not just this refactor.
+This fork is `ricardofelixb/ovis`; upstream is `devswha/ovis`. The current upstream merge base is `211b7657914422d1209dd17f13e62b142db56653`. The starting-file inventory and older verification entries below are historical: they compare `da5afc54` with its then-base `2decd453d6a28eb6cf21647c6f928150d1196c5c`.
 
 ## Grouped sub-agent tabs
 
@@ -26,8 +26,8 @@ in `shared/fork/pane.ts` and `shared/fork/core-terminals.ts`: only hc labels `ro
 Upstream hooks: `server/herdr-core/snapshot.ts` adds `forkPaneFields` to the existing fork import
 and one spread in `paneOf`; `shared/protocol.ts` adds one type import and one intersection.
 
-Hook footprint (insertions/deletions vs the upstream merge base `70c68e28`, measured with
-`git diff --shortstat <merge-base> <ref> -- <file>`; before is `dbb59cd8`):
+Hook footprint (insertions/deletions measured with `git diff --shortstat <merge-base> <ref> -- <file>`).
+Before is `dbb59cd8` vs `70c68e28`; after is this branch vs `211b76579`:
 
 | Upstream file | Before | After | Hooks added here |
 | --- | --- | --- | --- |
@@ -35,11 +35,11 @@ Hook footprint (insertions/deletions vs the upstream merge base `70c68e28`, meas
 | `src/components/RowMenu.tsx` | +19/-8 | +10/-3 | none left from this feature (the `trailing` slot is gone) |
 | `src/lib/useTabReorder.ts` | +12/-6 | +8/-6 | optional adjacent-boundary callback, so a parent moves past its hidden children in one step |
 | `shared/protocol.ts` | +15/-1 | +17/-2 | type import + intersection |
-| `server/herdr-core/snapshot.ts` | +3/-1 | +4/-1 | existing fork import extended + pane spread |
-| `scripts/ci-browser.sh` | +5/-2 | +6/-2 | one fork regression registration, shared by serial/parallel browser lanes |
+| `server/herdr-core/snapshot.ts` | +3/-1 | +14/-3 | existing fork import extended + pane spread; totals include hidden-workspace projection |
+| `scripts/ci-browser.sh` | +5/-2 | +7/-2 | fork regression registrations shared by serial/parallel browser lanes |
 
 Regression coverage: `src/fork/tabs/groupAgentTabs.test.ts`, `src/fork/tabs/jobMenu.test.tsx`,
-`server/fork/fork-pane-role.test.ts` and the opt-in cases in `src/components/TabStrip.appLayout.test.tsx`
+`server/fork/fork-pane-role.test.ts` and the opt-in cases in `src/fork/tabs/fork-TabStrip.test.tsx`
 (hidden child, "+N", the job items in the tab menu and sheet, selection through them, a parent's
 moves past its hidden child). `scripts/fork-grouped-tabs-demo-regression.ts` uses synthetic
 demo-only parents and hc roles to check desktop/phone "+N", the right-click and touch-hold menus,
@@ -294,7 +294,6 @@ A file can contain more than one pile. The inventory below lists every upstream-
 | Agent friends | `src/fork/friends/AgentFriend.tsx`, `src/fork/friends/AgentAvatar.tsx`, `src/fork/friends/TabFriends.tsx`, `src/fork/friends/friends.ts`, `src/fork/friends/worktreeMark.ts`, `server/fork/friends.ts` | Settings: Agent friends. With Agent friends on, every place that shows a running agent (inbox, sidebar, tabs, palette, header, chat) shows its friend alone, no harness logo, through `AgentAvatar`; the harness `AgentMark` stays where it names a harness (picker, settings, usage, setup) and where a pane has no friend. A linked worktree row in the sidebar shows upstream's branch icon instead of its agent's friend, so it reads as a worktree (`forkWorktreeMark`, hooked once in `rowMark` in `src/components/Sidebar.tsx`); with Agent friends off it keeps upstream's agent mark. Fork-only. |
 | Generic runtime fixes | Conversation deltas, receipt whitespace, hidden-page throttling, independent machine reconnect, source bridges, favicon discovery, terminal/IME fixes | These fix transport or data interpretation, not personal layout. Their coupled upstream integrations and tests are retained; see limits below. |
 | Copilot partial-log truncation within one timestamp tick | `server/copilot-store.ts`; existing regression in `server/copilot.test.ts` | Compare truncations against both complete-line and observed sizes. Coarse file timestamps can stay unchanged when a partial line is appended and removed. Generic upstream bug fix, no setting or test exclusion. |
-| Agent tool runs survive an Ovis restart (devswha/ovis #4628) | `server/fork/agent-tool-launch-proof.ts`; regression `server/fork/fork-agent-tool-reconcile.test.ts` | Generic upstream bug fix, no setting. pi, OmO and Claude Code set `process.title`, which rewrites `/proc/<pid>/cmdline` to their name, so `RunStore.reconcile` never found the launch argv, revoked every top-level run at startup and deleted its `-e` extension, MCP config and token (pi then fails on `/new` or `/reload`). On Linux the run is also kept when the foreground (same birth) has the exact `OVIS_AGENT_TOKEN_FILE=<dir>/tokens/<id>.token` environment entry both launch paths set; an unreadable environment proves nothing and falls back to the argv check. Hook: `server/agent-tools/runs.ts` +3/−2 vs `upstream/main` (before 0/0): one import and one `launchedWithToken(...) \|\|` alternative in the `verified` expression. Left as is to keep the hook small: the extension header in `server/agent-tools/launch.ts` says "read once at start", but pi reloads `-e` extensions from disk on `/new` and `/reload`; fix the wording with the upstream PR. |
 | This PC's runtime in the machines list | `server/machines.ts` `list()`; regression in `server/machines.test.ts` | Generic upstream bug fix, no setting. `GET /api/machines` named the runtime of every connected remote PC but none for this PC, whose entry never went through that loop, so a check on `Machine.runtime` (here `forkHideItem`'s herdr-core test) never passed for this PC's agents. `list()` now names the runtime this server serves (`capabilities().runtime`) on this PC's entry while it is connected, absent otherwise, as for a remote PC; the PC menu's Runtime note now shows for this PC too. Hook: one import and one line in `server/machines.ts`, the field's comment in `shared/machines.ts`. |
 | Portable native improvements | Android call lifecycle, notification permissions, friend pictures and multi-window handling | Native-app contribution candidates. They are not Xiaomi-only changes. Native files were not rewritten by this refactor. |
 
@@ -374,7 +373,7 @@ The browser runner uses the CI image and a `git ls-files` tar, isolated test ses
 
 ## One-line hook extraction (PR #84 follow-up)
 
-Counts compare against `upstream/main` with `git diff --shortstat upstream/main...HEAD -- <file>`; `+/-` means insertions/deletions. Before is commit `30d046a4` (PR #84). This table is updated alongside each extraction. Deleted upstream display lines still count: moving the Composer pill removes inline fork logic, but cannot make those upstream deletions disappear.
+Historical counts from the PR #84 extraction; `+/-` means insertions/deletions. Before is commit `30d046a4`. See the upstream sync below for the current counts on changed hooks. Deleted upstream display lines still count: moving the Composer pill removes inline fork logic, but cannot make those upstream deletions disappear.
 
 | Upstream file | Before +/− | After +/− | Fork hook |
 | --- | --- | --- | --- |
@@ -538,6 +537,39 @@ gh api --method PATCH repos/ricardofelixb/ovis/branches/main/protection/required
 {"checks":[{"context":"Fast checks","app_id":15368},{"context":"Integration and browser","app_id":15368},{"context":"Native Windows install","app_id":15368}]}
 JSON
 ```
+
+## Upstream sync (`211b76579`)
+
+The merge brings in 161 upstream commits since `70c68e28`. Upstream [#4865](https://github.com/devswha/ovis/pull/4865) now verifies a renamed agent process with its launch token, so the fork's launch-proof helper and duplicate regression are gone. The Notes dependencies are retained on top of upstream's lockfile.
+
+- Settings use upstream's typed readers and split settings pages. `SettingsDialog.tsx` keeps the Fork page, `paletteSettings.ts` its palette entry, and `SettingsAppearancePage.tsx` now mounts Follow Omarchy. The preferences, local migration and translations remain fork-owned.
+- `ChatView.tsx` passes the fork's live-reply presentation into upstream's split `ChatTurn.tsx` and `ChatWork.tsx`; read-aloud and compact work still render there. `server/core/terminals.ts` calls `server/fork/live-conversation.ts` to check conversation interest without touching the pending-input lease. `ComposerPill.tsx` carries upstream's plan-mode indicator.
+- `InboxList.tsx` keeps the fold, places and row-menu hooks; `PaneCanvas.tsx`, `PaneTerminal.tsx` and the Agents list retain the pane menu and friend marks. The new bring-pane menu uses the same agent friend. `App.tsx` keeps the workspace rail and the sidebar's Inbox entry follows resolved navigation; `Rail.css` covers the wide top safe-area strip. Phones still use Default even if Rail is stored.
+- Browser fixtures now use upstream's shared demo build; React fixture tests use the upstream DOM fixture instead of `react-test-renderer`. The fork's tab behavior stays in its own test rather than changing the upstream tab fixture.
+
+Net upstream-file footprint vs `211b76579`, including deletions and existing hooks in each file:
+
+| File | Lines added/removed | Fork integration |
+| --- | --- | --- |
+| `src/App.tsx` | +84/-81 | Fork app, hidden selection, inbox and rail mounts, sidebar and drawer hooks |
+| `src/components/InboxList.tsx` | +36/-16 | Fork inbox rows, places, pictures, hold/menu hooks |
+| `src/components/InboxRail.tsx` | +5/-2 | Back and place mounts |
+| `src/components/Sidebar.tsx` | +39/-22 | Workspace tree helper rows and friend marks |
+| `src/components/AgentSidebar.tsx` | +31/-25 | Roster and helper folding, friend and pane-menu hooks |
+| `src/components/MachineSidebar.tsx` | +18/-19 | Workspace tree replaces redundant agent list; shared footer |
+| `src/components/SettingsDialog.tsx` | +8/-2 | Fork page id, label, help text and page render |
+| `src/components/SettingsAppearancePage.tsx` | +2/-0 | Omarchy row import and mount |
+| `src/lib/settings.ts` | +63/-29 | Fork defaults/scope, reads, migration and Omarchy theme |
+| `src/components/ChatView.tsx` | +54/-16 | Live turns, compact work and send presentation |
+| `src/components/ChatTurn.tsx` | +14/-3 | Live words and read-aloud slots |
+| `src/components/ChatWork.tsx` | +4/-8 | Compact work slot |
+| `src/components/Composer.tsx` | +31/-61 | Fork pill, model picker and voice integration |
+| `src/components/PaneCanvas.tsx` | +6/-3 | Hide and friend hooks |
+| `src/components/PaneTerminal.tsx` | +29/-8 | Voice, links, friend and input hooks |
+| `server/core/terminals.ts` | +8/-0 | Conversation-live delivery to interested attached clients |
+| `server/index.ts` | +13/-6 | Fork services and friend lookup |
+| `server/push.ts` | +32/-10 | Friend icon, muted helper and widget digest hooks |
+| `server/core/status.ts` | +13/-6 | Friend/mute options and widget lifecycle |
 
 ## Local validation
 
