@@ -11,7 +11,14 @@ import type { PushService } from "./push.ts";
 const cleanups: (() => void)[] = [];
 afterEach(() => { for (const cleanup of cleanups.splice(0).reverse()) cleanup(); });
 
-const settled = () => new Promise((resolve) => setImmediate(resolve));
+function connected(manager: MachineManager, name: string): Promise<void> {
+  const ready = () => manager.list().some((pc) => pc.name === name && pc.state === "connected");
+  if (ready()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const stop = manager.subscribe(() => { if (ready()) { stop(); resolve(); } });
+    cleanups.push(stop);
+  });
+}
 
 async function fixture(drain: Promise<void> = Promise.resolve()) {
   const dir = mkdtempSync(join(tmpdir(), "ovis-hc-machines-"));
@@ -22,8 +29,9 @@ async function fixture(drain: Promise<void> = Promise.resolve()) {
     events.push(`start ${machine.name}`);
     return { endpoint: { url: "http://127.0.0.1:1", token: "t" }, exited: new Promise(() => {}), stop: async () => { events.push(`stop ${machine.name}`); await drain; } };
   };
-  manager.watchHcMachines(async () => [], start, 3_600_000);
-  await settled();
+  const initial = Promise.resolve<HcMachine[]>([]);
+  manager.watchHcMachines(() => initial, start, 3_600_000);
+  await initial;
   cleanups.push(() => { manager.stop(); observe.mockRestore(); rmSync(dir, { recursive: true, force: true }); });
   return { manager, events, dir };
 }
@@ -33,20 +41,25 @@ const lab: HcMachine = { id: "a32c7763ba582b75", name: "lab", target: "ricardo@l
 describe("herdr-core's machines as PCs (#2497)", () => {
   it("waits for a connected machine bridge to drain on shutdown", async () => {
     const drain = Promise.withResolvers<void>();
-    const { manager, events } = await fixture(drain.promise);
+    const finish = Promise.withResolvers<void>();
+    const drained = drain.promise.then(async () => {
+      await finish.promise;
+      return "bridge";
+    });
+    const { manager, events } = await fixture(drained.then(() => undefined));
     try {
       manager.syncHcMachines([lab]);
-      await settled();
-      let stopped = false;
-      const stopping = manager.stop().then(() => { stopped = true; });
-      await settled();
+      await connected(manager, "lab");
+      const stopping = manager.stop().then(() => "manager");
       expect(events).toEqual(["start lab", "stop lab"]);
-      expect(stopped).toBe(false);
+      const first = Promise.race([drained, stopping]);
       drain.resolve();
+      finish.resolve();
+      expect(await first).toBe("bridge");
       await stopping;
-      expect(stopped).toBe(true);
     } finally {
       drain.resolve();
+      finish.resolve();
       await manager.stop();
     }
   });
@@ -57,11 +70,12 @@ describe("herdr-core's machines as PCs (#2497)", () => {
     const manager = new MachineManager(dir, {} as PushService, {} as CompletionTracker, async () => { throw new Error("isolated local offline"); });
     const starting = Promise.withResolvers<void>();
     // a bridge that never reports ready: only the stop's abort ends its start
-    manager.watchHcMachines(async () => [], (_machine, signal) => {
+    const initial = Promise.resolve<HcMachine[]>([]);
+    manager.watchHcMachines(() => initial, (_machine, signal) => {
       starting.resolve();
       return new Promise<MachineBridge>((_resolve, reject) => { signal?.addEventListener("abort", () => reject(new Error("stopped")), { once: true }); });
     }, 3_600_000);
-    await settled();
+    await initial;
     manager.syncHcMachines([lab]);
     await starting.promise;
     await manager.stop();
@@ -72,12 +86,11 @@ describe("herdr-core's machines as PCs (#2497)", () => {
     const { manager, events } = await fixture(drain.promise);
     try {
       manager.syncHcMachines([lab]);
-      await settled();
+      await connected(manager, "lab");
       manager.syncHcMachines([{ ...lab, name: "renamed" }]);
-      await settled();
       expect(events).toEqual(["start lab", "stop lab"]);
       drain.resolve();
-      await settled();
+      await connected(manager, "renamed");
       expect(events).toEqual(["start lab", "stop lab", "start renamed"]);
     } finally {
       drain.resolve();
@@ -88,7 +101,7 @@ describe("herdr-core's machines as PCs (#2497)", () => {
   it("shows each machine of the core as a PC of its own, which starts its server and is never saved here", async () => {
     const { manager, events, dir } = await fixture();
     manager.syncHcMachines([lab]);
-    await settled();
+    await connected(manager, "lab");
     expect(manager.list()[1]).toMatchObject({ id: "hc-a32c7763ba582b75", name: "lab", kind: "hc", state: "connected" });
     expect(events).toEqual(["start lab"]);
     expect(() => manager.patch("hc-a32c7763ba582b75", { name: "x" })).toThrow("hc machine");
@@ -101,13 +114,13 @@ describe("herdr-core's machines as PCs (#2497)", () => {
   it("follows the machine: away, back, renamed (its terminals' addresses change) and removed", async () => {
     const { manager, events } = await fixture();
     manager.syncHcMachines([lab]);
-    await settled();
+    await connected(manager, "lab");
     manager.syncHcMachines([{ ...lab, connected: false, why: "unreachable" }]);
     expect(manager.list()[1]).toMatchObject({ state: "disconnected", error: "herdr-core cannot reach this machine (unreachable)" });
     manager.syncHcMachines([lab]);
-    await settled();
+    await connected(manager, "lab");
     manager.syncHcMachines([{ ...lab, name: "lab2" }]);
-    await settled();
+    await connected(manager, "lab2");
     expect(manager.list()[1]).toMatchObject({ id: "hc-a32c7763ba582b75", name: "lab2", state: "connected" });
     manager.syncHcMachines([]);
     expect(manager.list()).toHaveLength(1);
@@ -127,11 +140,11 @@ describe("a core machine that is also an SSH or relay PC is shown once", () => {
     const { manager, events } = await fixture();
     addSsh(manager, "ssh-1", "Lab Omarchy", "ricardo@lab");
     manager.syncHcMachines([lab, { ...lab, id: "other", name: "other", target: "ricardo@elsewhere", host: "elsewhere" }]);
-    await settled();
+    await connected(manager, "other");
     expect(shown(manager)).toEqual(["ssh-1", "hc-other"]);
     expect(events).toEqual(["start other"]);
     manager.remove("ssh-1");
-    await settled();
+    await connected(manager, "lab");
     expect(shown(manager).sort()).toEqual(["hc-a32c7763ba582b75", "hc-other"]);
     expect(events).toContain("start lab");
   });
@@ -139,7 +152,7 @@ describe("a core machine that is also an SSH or relay PC is shown once", () => {
   it("drops a twin already shown when the SSH PC is added afterwards, at once", async () => {
     const { manager, events } = await fixture();
     manager.syncHcMachines([lab]);
-    await settled();
+    await connected(manager, "lab");
     expect(shown(manager)).toEqual(["hc-a32c7763ba582b75"]);
     addSsh(manager, "ssh-1", "omarchy", "ricardo@lab.tail1e211e.ts.net");
     (manager as unknown as { emit(): void }).emit();

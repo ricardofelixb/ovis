@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { playVoiceChime, primeVoiceChime } from "./voiceChime.ts";
 
-type Source = { buffer: unknown; onended: (() => void) | null; connect(): void; start(): void };
+type Source = { buffer: unknown; onended: (() => void) | null; connect(): void; start(): void; started: Promise<void> };
 
 let suspends = 0;
 let sources: Source[] = [];
@@ -11,7 +11,8 @@ class FakeAudioContext {
   async suspend() { suspends += 1; }
   createBuffer() { return { copyToChannel() {} }; }
   createBufferSource(): Source {
-    const source: Source = { buffer: null, onended: null, connect() {}, start() {} };
+    const started = Promise.withResolvers<void>();
+    const source: Source = { buffer: null, onended: null, connect() {}, start: started.resolve, started: started.promise };
     sources.push(source);
     return source;
   }
@@ -26,7 +27,7 @@ function stub(name: string, value: unknown): void {
 
 let visibility: "visible" | "hidden" = "visible";
 let onVisibility: (() => void) | undefined;
-const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+const chimesStarted = () => Promise.all(sources.map((source) => source.started));
 
 beforeEach(() => {
   suspends = 0;
@@ -47,7 +48,7 @@ describe("voice chime audio", () => {
     primeVoiceChime();
     visibility = "hidden";
     playVoiceChime("open");
-    await settle();
+    await chimesStarted();
     expect(suspends).toBe(0);
     sources[0]!.onended!();
     expect(suspends).toBe(1);
@@ -57,7 +58,7 @@ describe("voice chime audio", () => {
     visibility = "visible";
     playVoiceChime("close");
     playVoiceChime("open");
-    await settle();
+    await chimesStarted();
     sources[0]!.onended!();
     expect(suspends).toBe(0);
     visibility = "hidden";
@@ -70,7 +71,7 @@ describe("voice chime audio", () => {
   it("lets it go when the page is hidden with nothing playing", async () => {
     visibility = "visible";
     playVoiceChime("close");
-    await settle();
+    await chimesStarted();
     sources[0]!.onended!();
     visibility = "hidden";
     onVisibility!();

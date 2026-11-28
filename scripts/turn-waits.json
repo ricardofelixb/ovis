@@ -20,7 +20,6 @@
   "server/core/pending-omp-start.test.ts": 1,
   "server/core/pending-turn-gate.test.ts": 1,
   "server/files.test.ts": 1,
-  "server/hc-machines.test.ts": 11,
   "server/herdr-core/adapter.test.ts": 4,
   "server/herdr-core/core.fake.test.ts": 1,
   "server/herdr-core/layout-ops.test.ts": 2,

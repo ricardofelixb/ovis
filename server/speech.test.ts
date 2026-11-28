@@ -9,15 +9,25 @@ describe("read aloud", () => {
   test("nothing loads until a reply is read, requests take turns, and a failed load is tried again", async () => {
     const order: string[] = [];
     let loads = 0;
+    const started = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
     const engine: SpeechEngine = {
-      wav: async (text) => { order.push(`start ${text}`); await new Promise((resolve) => setTimeout(resolve, 0)); // yields so the next request queues behind this one
-       order.push(`end ${text}`); return new TextEncoder().encode(text).buffer as ArrayBuffer; },
+      wav: async (text) => {
+        order.push(`start ${text}`);
+        if (text === "One.") { started.resolve(); await finish.promise; }
+        order.push(`end ${text}`);
+        return new TextEncoder().encode(text).buffer;
+      },
       dispose: async () => {},
     };
     const service = new SpeechService({ stateDir: "/nonexistent", load: async () => { loads += 1; if (loads === 1) throw new Error("offline"); return engine; } });
     expect(loads).toBe(0);
     expect((await handleSpeechRequest(post({ text: "Hi.", voice: "af_bella" }), service)).status).toBe(500);
-    const [a, b] = await Promise.all([handleSpeechRequest(post({ text: "One.", voice: "af_bella" }), service), handleSpeechRequest(post({ text: "Two.", voice: "am_michael" }), service)]);
+    const first = handleSpeechRequest(post({ text: "One.", voice: "af_bella" }), service);
+    await started.promise;
+    const second = handleSpeechRequest(post({ text: "Two.", voice: "am_michael" }), service);
+    finish.resolve();
+    const [a, b] = await Promise.all([first, second]);
     expect([a.status, b.status, a.headers.get("content-type")]).toEqual([200, 200, "audio/wav"]);
     expect(await a.text()).toBe("One.");
     expect(order).toEqual(["start One.", "end One.", "start Two.", "end Two."]);

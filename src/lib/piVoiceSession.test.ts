@@ -29,8 +29,8 @@ function stub(name: string, value: unknown): void {
 }
 
 let tracks: { stopped: boolean; enabled: boolean; stop(): void }[] = [];
-let grant: (() => void) | undefined;
-let deny: (() => void) | undefined;
+let grant: () => Promise<unknown>;
+let deny: () => Promise<unknown>;
 
 beforeEach(() => {
   FakeSocket.all = [];
@@ -46,14 +46,19 @@ beforeEach(() => {
   stub("document", { visibilityState: "hidden", addEventListener() {}, removeEventListener() {} });
   stub("navigator", {
     mediaDevices: {
-      getUserMedia: () =>
-        new Promise((resolve, reject) => {
-          grant = () => {
-            tracks.push({ stopped: false, enabled: true, stop() { this.stopped = true; } });
-            resolve(stream);
-          };
-          deny = () => reject(new DOMException("Permission denied", "NotAllowedError"));
-        }),
+      getUserMedia: () => {
+        const permission = Promise.withResolvers<typeof stream>();
+        grant = () => {
+          tracks.push({ stopped: false, enabled: true, stop() { this.stopped = true; } });
+          permission.resolve(stream);
+          return permission.promise;
+        };
+        deny = () => {
+          permission.reject(new DOMException("Permission denied", "NotAllowedError"));
+          return permission.promise.catch(() => undefined);
+        };
+        return permission.promise;
+      },
     },
   });
 });
@@ -67,8 +72,6 @@ afterEach(() => {
   originals.clear();
 });
 
-const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-
 function openAssistantPage(muted = false): (action: string) => void {
   const host = { postMessage() {}, onmessage: null as ((event: { data: string }) => void) | null };
   Object.assign(window, { OvisAssistantHost: host });
@@ -81,8 +84,7 @@ it.each([true, false])("keeps the assistant mic muted through startup (before th
   const command = openAssistantPage(beforeReady);
   if (!beforeReady) command("mute");
   try {
-    grant?.();
-    await flush();
+    await grant();
     const socket = FakeSocket.all[0]!;
     expect(tracks[0]?.enabled).toBe(false);
     socket.open();
@@ -102,8 +104,7 @@ it.each([true, false])("keeps the assistant mic muted through startup (before th
 it("never opens the assistant mic on delayed replies to rapid mute changes", async () => {
   const command = openAssistantPage();
   try {
-    grant?.();
-    await flush();
+    await grant();
     const socket = FakeSocket.all[0]!;
     socket.open();
     socket.receive({ type: "activate" });
@@ -134,8 +135,7 @@ describe("starting a call from the phone", () => {
     startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
     // the permission prompt can stay open for as long as the user likes: Pi may give up meanwhile
     expect(FakeSocket.all).toHaveLength(0);
-    grant?.();
-    await flush();
+    await grant();
     expect(FakeSocket.all).toHaveLength(1);
     expect(FakeSocket.all[0]!.url).toBe("wss://ovis.test/ws/pi-voice?pane_id=w1%3Ap1");
     const socket = FakeSocket.all[0]!;
@@ -157,16 +157,14 @@ describe("starting a call from the phone", () => {
 
   it("names the PC of a pane on another one, so this server calls through to it", async () => {
     startPiVoice({ machineId: "mac mini", paneId: "w1:p1", label: "cwd", voice: "vale" });
-    grant?.();
-    await flush();
+    await grant();
     expect(FakeSocket.all[0]!.url).toBe("wss://ovis.test/ws/pi-voice?pane_id=w1%3Ap1&machine_id=mac%20mini&voice=vale");
     expect(piVoiceState()).toMatchObject({ machineId: "mac mini", paneId: "w1:p1" });
   });
 
   it("opens nothing when the microphone is refused", async () => {
     startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
-    deny?.();
-    await flush();
+    await deny();
     expect(piVoiceState()).toMatchObject({ status: "ended", end: { kind: "denied" } });
     expect(FakeSocket.all).toHaveLength(0);
     // End puts the orb away
@@ -177,8 +175,7 @@ describe("starting a call from the phone", () => {
   it("lets go of a microphone that is allowed after the call was ended", async () => {
     startPiVoice({ machineId: "local", paneId: "w1:p1", label: "cwd" });
     endPiVoice();
-    grant?.();
-    await flush();
+    await grant();
     expect(piVoiceState().status).toBe("idle");
     expect(tracks.every((track) => track.stopped)).toBe(true);
     expect(FakeSocket.all).toHaveLength(0);
@@ -192,8 +189,7 @@ it.each(["listening", "working"] as const)("keeps the last %s phase when muted a
   jest.useFakeTimers();
   try {
     openAssistantPage();
-    grant?.();
-    await Promise.resolve();
+    await grant();
     const socket = FakeSocket.all[0]!;
     socket.open();
     socket.receive({ type: "phase", phase });
@@ -225,8 +221,7 @@ it.each(["listening", "working"] as const)("keeps the last %s phase when muted a
 
 async function liveOn(paneId: string): Promise<FakeSocket> {
   startPiVoice({ machineId: "local", paneId, label: "cwd" });
-  grant?.();
-  await flush();
+  await grant();
   const socket = FakeSocket.all.at(-1)!;
   socket.open();
   socket.receive({ type: "phase", phase: "listening" });
